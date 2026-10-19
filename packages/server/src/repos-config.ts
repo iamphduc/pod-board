@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { normalizeRepoPath, sameRepoPath } from './guard.ts'
+import { ignoresCase, normalizeRepoPath, sameRepoPath } from './guard.ts'
 
 /**
  * The board's own config file: `{ "version": 1, "repos": [{ "path": "…" }] }`.
@@ -12,6 +12,9 @@ export type AddRepoError = 'not absolute' | 'not a directory' | 'already registe
 
 type Loaded = { config: ConfigFile } | { error: 'config unreadable' }
 
+/** What `addRepo` asks the file system; tests swap it. */
+export type AddRepoDeps = { ignoresCase: (dir: string) => Promise<boolean> }
+
 /** The registered repo paths. A missing file is an empty list; anything else unreadable is an error. */
 export async function loadRepos(file: string): Promise<{ repos: string[] } | { error: 'config unreadable' }> {
   const loaded = await readConfig(file)
@@ -20,8 +23,8 @@ export async function loadRepos(file: string): Promise<{ repos: string[] } | { e
 
 /**
  * Registers a repo folder and returns its normalized path. Refuses a relative
- * path, a path that isn't a folder, a repo already listed (by Repo identity),
- * and a config file it can't read, which it never overwrites. Writes through a
+ * path, a path that isn't a folder, a repo already listed (by Repo identity,
+ * with case following the new folder's file system), and a config file it can't read, which it never overwrites. Writes through a
  * temp file and a rename, so a crash leaves the old file or the new one. Adds
  * to the same file run one at a time, so none is lost.
  */
@@ -29,9 +32,10 @@ export function addRepo(
   file: string,
   repoPath: string,
   platform: NodeJS.Platform,
+  deps: AddRepoDeps = { ignoresCase },
 ): Promise<{ path: string } | { error: AddRepoError }> {
   const key = path.resolve(file)
-  const run = (queues.get(key) ?? Promise.resolve()).then(() => addRepoNow(file, repoPath, platform))
+  const run = (queues.get(key) ?? Promise.resolve()).then(() => addRepoNow(file, repoPath, platform, deps))
   const tail = run.then(
     () => {},
     () => {},
@@ -49,6 +53,7 @@ async function addRepoNow(
   file: string,
   repoPath: string,
   platform: NodeJS.Platform,
+  deps: AddRepoDeps,
 ): Promise<{ path: string } | { error: AddRepoError }> {
   if (!isAbsolute(repoPath, platform)) return { error: 'not absolute' }
   const normalized = normalizeRepoPath(repoPath, platform)
@@ -56,7 +61,8 @@ async function addRepoNow(
 
   const loaded = await readConfig(file)
   if ('error' in loaded) return loaded
-  if (loaded.config.repos.some((r) => sameRepoPath(r.path, normalized, platform))) {
+  const caseless = await deps.ignoresCase(normalized)
+  if (loaded.config.repos.some((r) => sameRepoPath(r.path, normalized, platform, caseless))) {
     return { error: 'already registered' }
   }
 
