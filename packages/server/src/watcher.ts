@@ -22,6 +22,8 @@ export type BoardWatcherOptions = {
   poll?: boolean
   debounceMs?: number
   tickMs?: number
+  /** Opens one folder watch; chokidar's `watch` unless a test passes a fake. */
+  watch?: typeof watch
   onError?: (err: unknown) => void
 }
 
@@ -42,19 +44,23 @@ type Target = { dir: string; depth: number; keep: (p: string, isDir: boolean | u
 
 /**
  * Board JSON without the fields that change on every build or gh check, so a
- * rebuild that finds nothing new sends nothing.
+ * rebuild that finds nothing new sends nothing. While gh isn't `ok`, the gh
+ * check time counts, so the banner's "Last checked" is the latest check.
  */
 export function boardSignature(board: Board): string {
+  const ghTimeCounts = board.gh !== 'ok'
   return JSON.stringify(board, (key, value) =>
-    key === 'generatedAt' || key === 'ghCheckedAt' || key === 'checkedAt' ? undefined : value,
+    key === 'generatedAt' || key === 'checkedAt' || (key === 'ghCheckedAt' && !ghTimeCounts) ? undefined : value,
   )
 }
 
 /** What to watch for a Board: the config file, the claims, and each repo's pod docs and transcripts. */
 export function watchTargets(board: Board, o: Pick<BoardWatcherOptions, 'configFile' | 'portsDir' | 'claudeDir'>): Target[] {
   const configFile = path.resolve(o.configFile)
+  const configDir = path.dirname(configFile)
   const targets: Target[] = [
-    { dir: path.dirname(configFile), depth: 0, keep: (p) => p === configFile },
+    // chokidar runs `ignored` on the watched folder too, so the folder must be kept.
+    { dir: configDir, depth: 0, keep: (p) => p === configDir || p === configFile },
     { dir: path.resolve(o.portsDir), depth: 0, keep: () => true },
   ]
   for (const repo of board.repos) {
@@ -76,8 +82,11 @@ function keepTranscriptPath(project: string, p: string, isDir: boolean | undefin
 }
 
 export function createBoardWatcher(o: BoardWatcherOptions): BoardWatcher {
-  const debounceMs = o.debounceMs ?? DEBOUNCE_MS
+  // A poller sees a quick burst of writes on up to two ticks, one interval
+  // apart; a longer quiet spell keeps that burst to one rebuild.
+  const debounceMs = (o.debounceMs ?? DEBOUNCE_MS) + (o.poll === true ? POLL_INTERVAL_MS : 0)
   const tickMs = o.tickMs ?? TICK_MS
+  const openWatch = o.watch ?? watch
   const onError = o.onError ?? ((err: unknown) => console.error('pod-board watcher:', err))
   const subscribers = new Set<(b: Board) => void>()
   // Key → open watcher. A key names the folder and whether it is watched itself or through its nearest existing parent.
@@ -150,7 +159,7 @@ export function createBoardWatcher(o: BoardWatcherOptions): BoardWatcher {
     const opened: Promise<void>[] = []
     for (const [key, target] of wanted) {
       if (watchers.has(key)) continue
-      const w = watch(target.dir, {
+      const w = openWatch(target.dir, {
         ignoreInitial: true,
         depth: target.depth,
         ignored: (p, stats) => !target.keep(path.resolve(p), stats ? stats.isDirectory() : undefined),
