@@ -203,6 +203,43 @@ describe('shell summaries', () => {
     expect(bash(`echo 'hello world' "a && b"`)).toBe('Bash: echo · command')
   })
 
+  it('only programs that take subcommands show one', () => {
+    expect(bash('echo test')).toBe('Bash: echo')
+    expect(bash('grep -r test src')).toBe('Bash: grep')
+    expect(bash('ls test')).toBe('Bash: ls')
+    expect(bash('cat test.md')).toBe('Bash: cat')
+    expect(bash('mkdir -p build')).toBe('Bash: mkdir')
+    expect(bash('node scripts/run.js test')).toBe('Bash: node')
+  })
+
+  it('each program shows only its own subcommands', () => {
+    expect(bash('git -C test status')).toBe('Bash: git status')
+    expect(bash('gh run view 12')).toBe('Bash: gh run')
+    expect(bash('agent-browser --session pod-x open http://x')).toBe('Bash: agent-browser open')
+    expect(bash('cargo test --release')).toBe('Bash: cargo test')
+    expect(bash('go test ./...')).toBe('Bash: go test')
+    expect(bash('corepack enable pnpm')).toBe('Bash: corepack enable')
+  })
+
+  it('names the test runner after exec, dlx, npx, and bunx', () => {
+    expect(bash('pnpm exec vitest run')).toBe('Bash: pnpm exec vitest')
+    expect(bash('pnpm --filter x exec vitest')).toBe('Bash: pnpm exec vitest')
+    expect(bash('pnpm dlx jest')).toBe('Bash: pnpm dlx jest')
+    expect(bash('npx --yes jest --ci')).toBe('Bash: npx jest')
+    expect(bash('npx ./node_modules/.bin/vitest')).toBe('Bash: npx vitest')
+    expect(bash('bunx vitest')).toBe('Bash: bunx vitest')
+    expect(bash('npx tsc --noEmit')).toBe('Bash: npx tsc')
+    expect(bash('npx cowsay test')).toBe('Bash: npx')
+    expect(bash('pnpm exec')).toBe('Bash: pnpm exec')
+  })
+
+  it('names a known script after run', () => {
+    expect(bash('npm run test')).toBe('Bash: npm run test')
+    expect(bash('pnpm --filter x run build')).toBe('Bash: pnpm run build')
+    expect(bash('npm run -s typecheck')).toBe('Bash: npm run typecheck')
+    expect(bash('npm run my-script test')).toBe('Bash: npm run')
+  })
+
   it('a command that is not a string gives the name alone', () => {
     expect(bash(undefined)).toBe('Bash')
     expect(bash(['pnpm', 'test'])).toBe('Bash')
@@ -222,6 +259,7 @@ describe('never keeps transcript text', () => {
         use('Bash', { command: `TOKEN=${secret} pnpm test` }, 'b2'),
         use('Bash', { command: `${secret} --run` }, 'b3'),
         use('PowerShell', { command: `$env:K='${secret}'; ${secret}.exe test` }, 'b4'),
+        use('Bash', { command: `npx ${secret} && pnpm exec ${secret} && npm run ${secret}` }, 'b5'),
         use('Edit', { file_path: `${ROOT}\\a.ts`, old_string: secret, new_string: secret }, 'e1'),
         use('MultiEdit', { file_path: `${ROOT}\\a.ts`, edits: [{ old_string: secret, new_string: secret }] }, 'e2'),
         use('Write', { file_path: `${ROOT}\\b.ts`, content: secret }, 'w1'),
@@ -237,7 +275,7 @@ describe('never keeps transcript text', () => {
       { type: 'system', timestamp: at(3), content: secret },
     )
     const t = parse(text)
-    expect(t.total).toBe(14)
+    expect(t.total).toBe(15)
     expect(JSON.stringify(t)).not.toContain(secret)
     expect(JSON.stringify(t)).not.toContain('plantedzz')
   })
@@ -263,6 +301,40 @@ describe('test progress', () => {
       ['PowerShell', { command: 'jest --ci' }, false],
     )
     expect(t.tests).toEqual({ testFiles: 3, runs: 3, failedRuns: 1, last: 'pass', testFirst: true })
+  })
+
+  it('counts only real test runs, not commands that merely say test', () => {
+    const t = runs(
+      ['Bash', { command: 'pnpm test' }, false],
+      ['Bash', { command: 'echo test' }, false],
+      ['Bash', { command: 'grep -r test src' }, false],
+      ['Bash', { command: 'ls test' }, false],
+    )
+    expect(t.tests.runs).toBe(1)
+    const more = runs(
+      ['Bash', { command: 'cat test.md' }, false],
+      ['Bash', { command: 'git -C test status' }, false],
+      ['Bash', { command: 'git checkout test' }, false],
+      ['Bash', { command: 'gh pr view test' }, false],
+      ['Bash', { command: 'npx cowsay test' }, false],
+      ['Bash', { command: 'pnpm run build' }, false],
+      ['Bash', { command: 'pnpm exec tsc' }, false],
+    )
+    expect(more.tests.runs).toBe(0)
+  })
+
+  it('counts a test runner after exec, dlx, npx, bunx, or a test script after run', () => {
+    const t = runs(
+      ['Bash', { command: 'pnpm exec vitest run' }, false],
+      ['Bash', { command: 'npx jest' }, true],
+      ['Bash', { command: 'pnpm dlx vitest' }, false],
+      ['Bash', { command: 'bunx vitest' }, false],
+      ['Bash', { command: 'npm run test' }, false],
+      ['Bash', { command: 'yarn run verify' }, false],
+      ['Bash', { command: 'cargo test' }, false],
+      ['Bash', { command: 'go test ./...' }, false],
+    )
+    expect(t.tests).toMatchObject({ runs: 8, failedRuns: 1, last: 'pass' })
   })
 
   it('last is fail when the latest finished run failed', () => {
