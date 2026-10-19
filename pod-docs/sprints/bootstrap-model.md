@@ -1,13 +1,13 @@
 # Sprint: Bootstrap and run model
 
 _From plan: pod-docs/plans/board-read.md · Slug: bootstrap-model · Status: active · Generated: 2026-10-18_
-<!-- autopilot-run: started=2026-10-18T21:42:12-07:00 sprints=0 waves=1 -->
+<!-- autopilot-run: started=2026-10-18T21:42:12-07:00 sprints=0 waves=2 -->
 
 ## Status board
 
 | Wave | Slice | Title | Branch | PR | Status | Confidence | Depends on |
 |------|-------|-------|--------|----|--------|------------|------------|
-| 1 | B1 | Bootstrap: pnpm workspace, Vitest, health route, smoke recipe, three-OS CI | bootstrap-model-B1 | — | pending | — | — |
+| 1 | B1 | Bootstrap: pnpm workspace, Vitest, health route, smoke recipe, three-OS CI | bootstrap-model-B1 | [#1](https://github.com/iamphduc/pod-board/pull/1) merged | done | medium | — |
 | 2 | P1 | Port the pod-flow parsers and their tests into `model` | bootstrap-model-P1 | — | pending | — | B1 |
 | 2 | F1 | Scrubbed real-run fixtures, fixture loader, and the scrub check | bootstrap-model-F1 | — | pending | — | B1 |
 | 2 | X1 | Format readers: docs version, PR cell, depends-on cell, needs-you, plan extras | bootstrap-model-X1 | — | pending | — | B1 |
