@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import type { LogGroup } from '@pod-board/model'
 import { Chip } from './Chip.tsx'
+import { DocTitle } from './DocTitle.tsx'
 import { groupChip, rowFigures } from './view.ts'
 
 export function SliceLog({ log }: { log: LogGroup[] }) {
@@ -20,7 +21,7 @@ export function SliceLog({ log }: { log: LogGroup[] }) {
               {g.rows.map((row) => (
                 <tr key={row.code}>
                   <td>
-                    <span className="code">{row.code}</span> · {row.title}
+                    <span className="code">{row.code}</span> · <DocTitle text={row.title} />
                     {row.model && <span className="muted"> · {row.model}</span>}
                   </td>
                   <td>

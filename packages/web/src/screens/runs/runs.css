@@ -379,6 +379,15 @@
   font: 500 var(--size-small) / 1 var(--mono);
 }
 
+/* A backticked span in a doc title. */
+.doc-code {
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  font: var(--size-small) / 1 var(--mono);
+  overflow-wrap: anywhere;
+}
+
 /* Narrow: the runs list stacks above the main view. */
 
 @media (max-width: 820px) {
