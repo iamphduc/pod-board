@@ -1,7 +1,6 @@
 # Sprint: Bootstrap and run model
 
-_From plan: pod-docs/plans/board-read.md · Slug: bootstrap-model · Status: active · Generated: 2026-10-18_
-<!-- autopilot-run: started=2026-10-18T21:42:12-07:00 sprints=0 waves=3 -->
+_From plan: pod-docs/plans/board-read.md · Slug: bootstrap-model · Status: archived · Generated: 2026-10-18_
 
 ## Status board
 
@@ -11,7 +10,7 @@ _From plan: pod-docs/plans/board-read.md · Slug: bootstrap-model · Status: act
 | 2 | P1 | Port the pod-flow parsers and their tests into `model` | bootstrap-model-P1 | [#2](https://github.com/iamphduc/pod-board/pull/2) merged | done | medium | B1 |
 | 2 | F1 | Scrubbed real-run fixtures, fixture loader, and the scrub check | bootstrap-model-F1 | [#2](https://github.com/iamphduc/pod-board/pull/2) merged | done | medium | B1 |
 | 2 | X1 | Format readers: docs version, PR cell, depends-on cell, needs-you, plan extras | bootstrap-model-X1 | [#2](https://github.com/iamphduc/pod-board/pull/2) merged | done | high | B1 |
-| 3 | R1 | Run model: repo → plans → sprints → waves → slices, queue, PRs | bootstrap-model-R1 | — | pending | — | P1, F1, X1 |
+| 3 | R1 | Run model: repo → plans → sprints → waves → slices, queue, PRs | bootstrap-model-R1 | [#3](https://github.com/iamphduc/pod-board/pull/3) merged | done | high | P1, F1, X1 |
 
 ## Shared contract
 
@@ -153,3 +152,17 @@ Rules R1 owns (edges in R1's Scope): an unsupported docs version parses nothing 
 - **Depends on:** P1, F1, X1
 - **One-way door:** none
 - **Model:** opus
+
+## Sprint summary
+
+- **Synced with merge-target:** up to date (first sprint)
+- **Slices shipped:** B1, P1, F1, X1, R1
+- **Queue entries:** resolved 0, deferred 2 — [F1: speak-out fixture size before going public](../../handoff-queue.md), [R1: `currentWave` on a `done` sprint](../../handoff-queue.md)
+- **Slice log:**
+  - B1: opus · medium · test-first yes · runtime `pnpm dev` from a fresh clone, health route direct and through the proxy, 404, bind address, page in agent-browser, API-down state · 8 NOTEs · time lost ~4 min (agent-browser hangs from Git Bash; now a known issue)
+  - P1: opus · medium · test-first partly — a faithful copy has no code to write first, so the first red was an import error; the new test was proven by breaking the code · runtime `pnpm verify` · 3 NOTEs · time lost none
+  - F1: opus · medium · test-first yes · runtime fixture build over the 4 repos (read-only), `pnpm verify` · 5 NOTEs (the chess-web snapshot choice re-judged from PENDING to NOTE) · time lost none
+  - X1: opus · high · test-first yes · runtime readers over the 4 real repos and pod-board's own docs · 3 NOTEs · time lost none
+  - R1: opus · high · test-first yes · runtime `buildRepoModel` over pod-board, chess-web, and speak-out live docs · 5 NOTEs · time lost none
+  - No wave fixes and no stalls. Orchestrator check per wave: `pnpm verify`, the smoke recipe, and (wave 3) `buildRepoModel` over this repo's live docs.
+- **Agent context at hand-back:** 549,939 tokens (sprint-planner 79,080; B1 87,838; P1 72,350; F1 116,753; X1 80,981; R1 112,937) — *each agent's final context size, not tokens billed*
