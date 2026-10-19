@@ -413,10 +413,114 @@ describe('buildRepoModel', () => {
     expect(buildRepoModel(backslash)).toEqual(expected)
   })
 
+  it('per-slice detail fields', () => {
+    const detail = [
+      '## Per-slice detail',
+      '',
+      '### A1: Title A1',
+      '- **Scope:** Build it. **Model:** inline mentions are not the field.',
+      '- **Files owned:** `src/a.ts` (new), `src/a.test.ts` (new), `pod-docs/x.md`',
+      '- **Success criteria:**',
+      '  - `[test] something — src/a.test.ts › works`',
+      '- **Depends on:** —',
+      '- **One-way door:** none. It only reads files.',
+      '- **Model:** Opus',
+      '',
+      '### A10: A longer code that starts with A1',
+      '- **Model:** haiku',
+      '- **Files owned:** `src/ten.ts`',
+      '',
+      '### B1: Title B1',
+      '- **Files owned:** src/b.ts (new), src/b.test.ts ,  docs/b.md',
+      '- **One-way door:** drops the old table; undo: restore from backup',
+      '- **Model:** sonnet 4.5',
+      '',
+      '### B2: Title B2',
+      '- **Files owned:**',
+      '  - **Code:** `src/c.ts`, `src/d.ts` (new)',
+      '  - **Tests:** `src/c.test.ts` (new)',
+      '- **One-way door:** None',
+      '',
+      '### C1: Title C1',
+      '- **Files owned:** —',
+      '- **One-way door:** ',
+      '- **Model:**',
+      '',
+      '## Sprint summary',
+      '- **Model:** sonnet',
+    ].join('\n')
+    const doc = sprint('one', [
+      [1, 'A1', '—', 'pending'],
+      [1, 'B1', '—', 'pending'],
+      [1, 'B2', '—', 'pending'],
+      [2, 'C1', '—', 'pending'],
+      [2, 'D1', '—', 'pending'],
+    ], { from: 'alpha' }) + '\n\n' + detail
+    const files: RepoFiles = {
+      'pod-docs/README.md': README,
+      'pod-docs/plans/alpha.md': plan('Alpha', [['one', 'g', 'active', '—']]),
+      'pod-docs/sprints/one.md': doc,
+    }
+    const slices = Object.fromEntries((sprintOf(files, 'alpha', 'one')?.waves ?? []).flatMap((w) => w.slices).map((s) => [s.code, s]))
+    expect(slices.A1).toMatchObject({ model: 'opus', filesOwned: ['src/a.ts', 'src/a.test.ts', 'pod-docs/x.md'] })
+    expect(slices.A1).not.toHaveProperty('oneWayDoor')
+    expect(slices.B1).toMatchObject({
+      model: 'sonnet',
+      filesOwned: ['src/b.ts', 'src/b.test.ts', 'docs/b.md'],
+      oneWayDoor: 'drops the old table; undo: restore from backup',
+    })
+    expect(slices.B2).toMatchObject({ filesOwned: ['src/c.ts', 'src/d.ts', 'src/c.test.ts'] })
+    expect(slices.B2).not.toHaveProperty('model')
+    expect(slices.B2).not.toHaveProperty('oneWayDoor')
+    // Empty fields read as absent; a dash names no file; the summary's lines belong to no slice.
+    expect(slices.C1?.filesOwned).toEqual([])
+    expect(slices.C1).not.toHaveProperty('model')
+    expect(slices.C1).not.toHaveProperty('oneWayDoor')
+    // No section → absent or [].
+    expect(slices.D1?.filesOwned).toEqual([])
+    expect(slices.D1).not.toHaveProperty('model')
+    expect(slices.D1).not.toHaveProperty('oneWayDoor')
+
+    // A doc with no detail at all still gives [] for every slice.
+    const bare: RepoFiles = { ...files, 'pod-docs/sprints/one.md': sprint('one', [[1, 'A1', '—', 'pending']], { from: 'alpha' }) }
+    expect(sprintOf(bare, 'alpha', 'one')?.waves[0]?.slices[0]?.filesOwned).toEqual([])
+  })
+
+  it('currentWave on a done sprint', () => {
+    const board: Board = [
+      [1, 'A1', '#1 merged', 'merged'],
+      [2, 'B1', '—', 'blocked'],
+      [2, 'B2', '—', 'skipped'],
+    ]
+    const files: RepoFiles = {
+      'pod-docs/README.md': README,
+      'pod-docs/plans/alpha.md': plan('Alpha', [
+        ['archived-one', 'g', 'active', '—'],
+        ['row-done', 'g', 'done', '—'],
+        ['live', 'g', 'active', '—'],
+      ]),
+      // Archived doc → done, even with a blocked slice and an active row.
+      'pod-docs/sprints/archive/archived-one.md': sprint('archived-one', board, { from: 'alpha' }),
+      // Row done with a live doc → done.
+      'pod-docs/sprints/row-done.md': sprint('row-done', board, { from: 'alpha' }),
+      'pod-docs/sprints/live.md': sprint('live', board, { from: 'alpha' }),
+    }
+    const sprints = Object.fromEntries((buildRepoModel(files).plans[0]?.sprints ?? []).map((s) => [s.slug, s]))
+    expect(sprints['archived-one']).toMatchObject({ status: 'done' })
+    expect(sprints['archived-one']).not.toHaveProperty('currentWave')
+    expect(sprints['row-done']).toMatchObject({ status: 'done' })
+    expect(sprints['row-done']).not.toHaveProperty('currentWave')
+    expect(sprints.live).toMatchObject({ status: 'active', currentWave: 2 })
+  })
+
   it('public exports', () => {
     for (const name of ['buildRepoModel', 'docsVersion', 'prRef', 'sliceDeps', 'needsYou', 'planExtras', 'parsePlan', 'parseSprint', 'parseQueue', 'readTable', 'isDone']) {
       expect(typeof (model as Record<string, unknown>)[name], name).toBe('function')
     }
+    for (const name of ['parseAgentTranscript', 'agentState']) {
+      expect(typeof (model as Record<string, unknown>)[name], name).toBe('function')
+    }
+    expect(model.STALE_MS).toBe(30 * 60_000)
     expect(model.SUPPORTED_DOCS_VERSION).toBe(2)
   })
 })
