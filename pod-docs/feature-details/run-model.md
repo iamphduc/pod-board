@@ -36,7 +36,7 @@ It builds on the ported pod-flow parsers (`packages/model/src/pod-flow/`, kept a
 
 ## Watch out
 
-- The chess-web fixture kept only `## ` headings, so its sprint docs have no `### ` slice sections. Until it's refreshed, its slices read with no `model` and `filesOwned: []`.
+- Of the fixtures, only chess-web's `ladder.md` keeps its `### ` slice sections. Other fixture sprint docs read with no `model` and `filesOwned: []`.
 
 - The ported `parseSprint` reads `Slug:` with `[\w-]+`, which takes `_`. A header that ends right after the slug (`· Slug: ladder_`) reads as `ladder_`. Real docs always have `· Status:` after it, so it hasn't bitten yet.
 - `parsePlan` defaults a missing plan status to `active` and a missing sprint-row status to `planned`.
