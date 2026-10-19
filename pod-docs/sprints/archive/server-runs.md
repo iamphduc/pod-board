@@ -1,8 +1,7 @@
 # Sprint: Server, live updates, and screen 1
 
-_From plan: pod-docs/plans/board-read.md · Slug: server-runs · Status: active · Generated: 2026-10-18_
+_From plan: pod-docs/plans/board-read.md · Slug: server-runs · Status: archived · Generated: 2026-10-18_
 
-<!-- autopilot-run: started=2026-10-18T21:42:12-07:00 sprints=1 waves=6 -->
 
 ## Status board
 
@@ -14,7 +13,7 @@ _From plan: pod-docs/plans/board-read.md · Slug: server-runs · Status: active 
 | 1 | D1 | Discovery readers (config, claim files, repo docs, transcript files) and the request guard | server-runs-D1 | [#4](https://github.com/iamphduc/pod-board/pull/4) merged | done | high | — |
 | 2 | P1 | Runs list and pipeline view model | server-runs-P1 | [#6](https://github.com/iamphduc/pod-board/pull/6) merged | done | medium | M1 |
 | 2 | A1 | Board service, file watcher, SSE, and API routes | server-runs-A1 | [#6](https://github.com/iamphduc/pod-board/pull/6) merged | done | medium | M1, G1, D1 |
-| 3 | S1 | Screen 1: runs list, pipeline, slice log, Add repo, PWA manifest | server-runs-S1 | — | pushed | medium | L1, P1, A1 |
+| 3 | S1 | Screen 1: runs list, pipeline, slice log, Add repo, PWA manifest | server-runs-S1 | [#8](https://github.com/iamphduc/pod-board/pull/8) merged | done | medium | L1, P1, A1 |
 
 ## Shared contract
 
@@ -190,3 +189,21 @@ G1 declares `PrStatus` and `GhStatus` in `packages/server/src/gh.ts` with exactl
 - **Depends on:** L1, P1, A1
 - **One-way door:** none
 - **Model:** opus
+
+## Sprint summary
+
+- **Synced with merge-target:** up to date (`pod-staging` had no new commits)
+- **Slices shipped:** L1, M1, G1, D1, P1, A1, S1
+- **Queue entries:** resolved 1 (R1 `currentWave` on a done sprint, settled in this sprint's contract), deferred 3 — [L1: light chip text contrast](../../handoff-queue.md), [P1: `you` on a merged wave](../../handoff-queue.md), [A1: unreadable config is silent on screen](../../handoff-queue.md)
+- **Slice log:**
+  - L1: opus · medium · test-first yes · runtime both themes and the saved choice on the real Vite server, fonts served as woff2 · 4 NOTEs · time lost none
+  - M1: opus · high · test-first yes · runtime parser over 123 real chess-web transcripts (shapes only), `sliceDetail` on the real ladder doc · 4 NOTEs, 1 PENDING solved by adding the chess-web fixture to its files owned (gate 1 exception) and resuming it · time lost ~2 min (a shell command waiting on input)
+  - G1: opus · high · test-first yes · runtime real `gh` against pod-board #1–#3 and chess-web #79, `gh` missing, logged out · 6 NOTEs · time lost none
+  - D1: opus · high · test-first yes · runtime real config path, the live claim (read only), 11 real transcripts, guard over real HTTP · 6 NOTEs · time lost none
+  - P1: opus · medium · test-first yes · runtime `listRuns` / `buildPipeline` over this repo's real docs and 14 transcripts · 9 NOTEs (3 re-judged from PENDING), 1 PENDING · time lost none
+  - A1: opus · medium · test-first yes · runtime fresh clone, curl on every route, SSE direct and through the proxy, restart, browser `EventSource` · 7 NOTEs, 1 PENDING (the features.md rows went to the orchestrator) · time lost ~2 min (agent-browser output piped in PowerShell hung)
+  - S1: opus · medium · test-first yes · runtime screen 1 at 1280 and 375 px in both themes, live edit, lost and recover, Add repo, install offer in headless Chrome · 5 NOTEs, 1 PENDING (flaky A1 test, fixed in the wave 3 fix) · time lost none
+  - Wave 1 fix (#5): opus · medium · CI `verify (macos-latest)` failed on a case-insensitive volume; repo identity now follows the file system's case rule
+  - Wave 3 fix (#7): opus · high · flaky polling watcher test (timing in the test, not the watcher) and raw backticks in slice titles
+  - No stalls. Orchestrator check per wave: `pnpm verify`, the smoke recipe, readers over real data (wave 1), the API end to end with a temp config (wave 2), and screen 1 in the browser with the Look check (wave 3).
+- **Agent context at hand-back:** 1,334,434 tokens (sprint-planner 137,138; L1 125,640; M1 149,933; G1 74,837; D1 122,415; wave 1 fix 79,637; P1 155,242; A1 179,029; S1 193,984; wave 3 fix 116,579) — *each agent's final context size, not tokens billed*

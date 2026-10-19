@@ -4,7 +4,7 @@ _Generated: 2026-10-18 · Status: active · Grilled-with: grilling (fast)_
 
 Port base: 3000
 
-<!-- autopilot-run: started=2026-10-18T21:42:12-07:00 sprints=1 waves=3 -->
+<!-- autopilot-run: started=2026-10-18T21:42:12-07:00 sprints=2 waves=6 -->
 
 ## Goal
 Build a local, read-only web app that shows every pod run across your repos: each run's stage, the current wave's slices, what needs you, and each engineer's live activity. This is phase 1 of [docs/master-plan.md](../../docs/master-plan.md); approvals come in phase 2 (plan `board-actions`).
@@ -49,7 +49,7 @@ This plan is the first of several in a row; see the phases in [docs/master-plan.
 | Sprint | Goal | Status | Depends on |
 |--------|------|--------|------------|
 | bootstrap-model | pnpm workspace, CI on three OSes, the pod-flow parsers copied and tested on scrubbed real-run fixtures, the run model (repo → plan → sprints → waves → slices, queue entries, PRs), and the docs-version check | done | — |
-| server-runs | Run discovery (registered repos plus claim files), file watcher, transcript reader, cached `gh` reader, server-sent events, and screen 1 (runs list and pipeline) in both themes at 375 px, with the PWA manifest | active | bootstrap-model |
+| server-runs | Run discovery (registered repos plus claim files), file watcher, transcript reader, cached `gh` reader, server-sent events, and screen 1 (runs list and pipeline) in both themes at 375 px, with the PWA manifest | done | bootstrap-model |
 | board-engineer | Screen 2 (wave board with dependency lines, critical path, filters) and screen 3 (engineer view with tool summaries only), plus the empty and error states | planned | server-runs |
 
 Status values: `planned` / `active` / `done`. The orchestrator only flips its row's Status — it does not rewrite Goal/Depends-on retroactively.
