@@ -505,6 +505,10 @@ describe('buildRepoModel', () => {
       '### P2: No backticks',
       '',
       '- **Files owned:** src/** (incl. a.ts, b.ts), src/c.ts (new), app/(group)/d.ts',
+      '',
+      '### P3: Unclosed bracket',
+      '',
+      '- **Files owned:** `src/a.ts` (new, `src/b.ts`',
     ].join('\n')
     expect(sliceDetail(md, 'W1').filesOwned).toEqual([
       'packages/web/src/screens/board/**',
@@ -528,6 +532,8 @@ describe('buildRepoModel', () => {
     expect(sliceDetail(md, 'P1').filesOwned).toEqual(['app/(group)/page.tsx', 'src/x.ts'])
     // Without backticks, a parenthetical's commas don't split off files.
     expect(sliceDetail(md, 'P2').filesOwned).toEqual(['src/**', 'src/c.ts', 'app/(group)/d.ts'])
+    // An unclosed bracket doesn't swallow the files after it.
+    expect(sliceDetail(md, 'P3').filesOwned).toEqual(['src/a.ts', 'src/b.ts'])
   })
 
   it('currentWave on a done sprint', () => {
