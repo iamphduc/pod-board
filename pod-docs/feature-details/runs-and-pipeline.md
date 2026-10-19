@@ -1,101 +1,36 @@
 # Runs list and pipeline
 
-`listRuns(board, now)` in `packages/model/src/runs.ts` turns the server's `Board` into the runs list on screen 1: one row per live plan, with where it is and its state. `buildPipeline(repo, planSlug, now)` in `packages/model/src/pipeline.ts` turns one plan into the pipeline (stages of steps) and the slice log below it. Both are pure and never throw; the web app calls them on each `board` event and every 30 s, so live minutes move without a new event.
+## What it is
 
-`pipeline.ts` also holds the join rules both use: `roleOf` (what an agent does for a plan), `isPlanAgent`, `handBackPr`, `pendingHandBack`, `isHalted`, `isBlockedSlice`, and `isSliceDone` (the ported `isDone` on a `SliceModel`).
+Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per sprint, Check, Ship) and its slice log, plus the Add a repo form, the live chip, and the empty and error states. Covers the features.md rows Screen 1, Screen 1 live state, Screen 1 Add repo, and Unsupported docs and no runs. The logic is pure in `packages/model/src/runs.ts` and `pipeline.ts` and in `packages/web/src/screens/runs/view.ts`; components are glue.
 
-## Joins
+## How it works
 
-- **Agent → plan.** `a.plan` is the plan's slug, `a.sprint` is one of its sprints, or the agent has a role in it (below). Why the last part: a slice-only dispatch, a wave fix, or the fix pass may carry no plan slug.
-- **Agent → role**, first match wins:
-  - a `pod:reviewer` whose `a.plan` is the plan → a **review round**; another plan's reviewer → nothing.
-  - an engineer on branch `<plan>-fix` → the **fix pass**.
-  - an engineer on branch `<sprint>-w<N>-fix`, with `<sprint>` one of the plan's → **wave N's fix**. It counts toward the wave's time and tokens, never a slice row.
-  - `a.slice` with `a.sprint` → that sprint's slice, when that sprint's board has the code; `a.slice` with no `a.sprint` → the first sprint, in plan order, whose board has the code.
-  - else nothing. A slice code no board has, or a sprint of another plan, joins no slice.
-- **Running** is `agentState(a, now) === 'running'`. A stale agent (silent 30 min) counts as not running everywhere.
-- **Hand-back PR.** N from the last pending queue entry of the plan whose route starts with `orchestrator`, whose body matches `/complete|final PR|hand-?back|awaiting/i`, and that links `/pull/<N>`. It's **pending** until `repo.prs` says PR N merged. Why: pod leaves the hand-back entry pending after the PR merges.
-- **Halted.** The plan's queue has a pending `BLOCKED` entry whose route starts with `orchestrator`.
-- **Blocked slice.** Status `blocked` or `skipped`, or a PR cell that says `blocked` or `skipped`.
+- **Joins (agent → plan).** An agent belongs to a plan by its `plan`, by one of the plan's sprints, or by a role: a `pod:reviewer` whose plan matches is a review round; an engineer on `<plan>-fix` is the fix pass; one on `<sprint>-w<N>-fix` is wave N's fix (wave time and tokens, never a slice row); else its slice. Running means active within the last 30 minutes.
+- **Which runs.** One row per plan that isn't archived or finished (all sprints done, no pending hand-back, not halted, no agent running). A repo with an error, unsupported docs, or no live plan gets one repo row instead.
+- **Run state**, first match: `blocked` (halted, or a blocked slice in the current sprint) → `needs-you` (any queue item for the human) → `running` → `idle`. Where-text: `<sprint> · wave w/n`, `drafting` / `not drafted`, or `final review` / `final PR` / `all sprints done`.
+- **Wave step state**, first match: `blocked` → `done` → `you` (an ask naming an unfinished slice) → `live` → `wait`. Detail shows engineers, minutes, and tokens, left out when unknown.
+- **Slice log.** One group per wave of every sprint with a doc; rows hold model, confidence, minutes, and tokens from that slice's agents.
+- **Live.** The page reads `/api/events` and recomputes on each board and every 30 s. While a stream is open it also checks `/api/health` every 5 s; a failure shows `lost · retrying` and keeps the last board.
+- **States.** Banners in order: `lost · retrying`, `config unreadable`, `gh missing` / `gh logged out` with "Last checked HH:MM". The empty main view names an unsupported docs version or its absence; no repos shows `No repos yet`.
+- **Add a repo** posts to `/api/repos`; a repeat shows "Already registered."; Escape clears the error.
 
-## Runs list
+## Why it's this way
 
-- **Which plans.** One run per plan that isn't `archived` and isn't finished. Finished means every sprint is done, no hand-back is pending, it isn't halted, and none of its agents runs. Why the last three: the final review runs after the last sprint is done and before any hand-back exists, and a halted final review must stay on screen.
-- **One run per repo instead** when the repo has `error` set (`where` is the error), its docs are unsupported (`where: 'update pod'`), or it has no plan that is a run (`state: 'idle'`, `where: 'no active plan'`). An error wins over unsupported, since a missing folder also reads as unsupported.
-- **State**, first match wins:
-  1. `blocked`: halted, or a blocked slice in the current sprint.
-  2. `needs-you`: any queue item of the plan with `needsYou`.
-  3. `running`: an agent of the plan runs, or a slice in the current wave is `pushed`.
-  4. `idle`.
-- **Where.**
-  - A current sprint with a doc and waves → `<sprint> · wave <w>/<n>`: `w` is `currentWave`, else the last wave (every slice done but the sprint not closed yet). `n` is the last wave's number.
-  - A current sprint with no doc (or an empty board) → `<sprint> · drafting` while a running `pod:sprint-planner` names the plan, else `<sprint> · not drafted`.
-  - No current sprint → `final review` while one of its reviewers runs, `final PR` with a pending hand-back, else `all sprints done`.
-- **Port base.** From a claim for the plan, else the plan's `Port base:` line; absent when neither has one.
-- **Order.** By state (`blocked`, `needs-you`, `running`, `idle`, `unsupported`, `error`), then repo name, then plan slug. Names compare without case.
-- **`activeRuns(runs)`** counts `blocked`, `needs-you`, and `running`.
-
-## Pipeline
-
-`undefined` for a plan the repo doesn't have, which also covers error, unsupported, and empty repos. Stages:
-
-- **Plan** (caption `Plan`): `Plan` done (`<n> sprints`); `Go` unknown, `not recorded yet` (pod doesn't record it).
-- **One per sprint** (caption `Sprint i of n`):
-  - a done sprint → one done step, `<k> waves`.
-  - the current sprint with waves → one step per wave (`Wave <w>`).
-  - the current sprint with no waves → live `drafting` while its planner runs, else wait `not drafted`.
-  - any other sprint → one wait step: `<s> slices planned` when it has a doc with slices, else `not drafted`.
-- **Check**: `Final review` is live while a reviewer runs (`round <r>`: its round, else its place by start time), done once one has run (`<k> rounds`), else wait `not started`. `Fix pass` is the same for fix-pass engineers (`pass <i>`, `<k> passes`), else wait `only if review fails`.
-- **Ship**: `Final PR` is `you` with a pending hand-back (`PR #N · you merge`), done when it merged (`merged PR #N`), else wait `not open yet`.
-
-**Wave step state**, first match wins:
-
-1. `blocked`: a blocked slice.
-2. `done`: every slice `isSliceDone`, even with a pending `needsYou` item naming one.
-3. `you`: a `needsYou` queue item of the plan names a slice of this wave that isn't done, with `sprint:` this sprint or none.
-4. `live`: it's the current sprint's `currentWave`, a slice is `pushed`, or one of its agents runs.
-5. `wait`.
-
-**Wave detail.** Its agents are its slices' agents plus its wave fix.
-
-| State | Detail |
-|-------|--------|
-| wait | `<s> slices planned` |
-| live | `<k> engineers · <m> min so far` |
-| any other state | `<k> engineers · <m> min · <t> tok` |
-
-- With no agents, the detail is `<s> slices`, so time and tokens are never shown as 0.
-- Minutes run from the earliest `startedAt` to the latest `lastAt` (to `now` while live), rounded. They're left out when no agent has times.
-- Tokens use `formatTokens` and are left out when 0.
-- Counts are singular at 1 (`1 engineer`, `1 slice planned`).
-
-**Slice log.** One group per wave of every sprint with a doc, in sprint order, then wave order. The label is `Sprint i · wave w`. Status, first match wins:
-
-1. `blocked`.
-2. Every slice done → `merged PR #N` (the first PR number in the wave), or `merged` with no number. Older boards have done slices with no link.
-3. `PR #N open`.
-4. `running` (the wave is live, as above).
-5. `planned`.
-
-Each row holds the slice's code, title, model, and confidence (absent for `—`). Its minutes and tokens come from that slice's agents, left out with none. `live` is set while one of them runs.
-
-## Screen 1 states
-
-The web app's `screens/runs/view.ts` decides these; `RunsScreen.tsx` only renders them.
-
-- **Banners** (`banners(board, stream)`), above the main view, in this order, each a chip plus one line, with a left edge in the chip's colour:
-  1. `lost · retrying` (blocked colour): the server stream is lost; the last board stays on screen.
-  2. `config unreadable` (blocked colour): the Board has `configError`. The repo list may be out of date; the board never overwrites the file.
-  3. `gh missing` or `gh logged out` (needs-you colour), with `Last checked HH:MM.` (local time) when `ghCheckedAt` is set. `ok` and `unknown` give none, so a board that hasn't checked yet shows nothing.
-- **Empty main view** (`emptyMessage(run, repo)`): an error names the folder problem; unsupported docs name the version (`version N; Pod Board reads version 2`) or say there is none (an older pod); a repo with no plan and an unknown plan keep their messages. No repos at all shows `No repos yet`.
-- **Theme boot.** An inline script in `index.html`, before the module script, sets `data-theme` from a stored `light` or `dark` pick (`pod-board-theme`, the same `THEME_KEY`). Missing, unknown, or throwing storage does nothing. A `color-scheme` meta and two `:root[data-theme]` rules make the browser's own canvas follow it. Why: in dev, Vite loads the CSS from the module script, so without them a Dark pick paints white first.
+- **A plan stays a run while halted or while one of its agents runs**, not only while sprints remain: the final review runs after the last sprint is done, and a halted review must stay visible.
+- **`done` beats `you` on a wave step**, while the run still reads `needs-you`: the human chose this over `you` winning, so finished work reads finished and nothing waiting is hidden at plan level. See [decisions.md](../decisions.md#2026-10-19--you-only-on-unfinished-waves).
+- **Unsupported docs show nothing but a message**, not a best-effort parse: a wrong board is worse than an empty one.
+- **The health check beside the stream**: the Vite proxy kept a dead API's stream open, so the page never saw it drop.
+- **Light chip text uses darker `--*-ink` tokens** than the preview, to pass 4.5:1. See [decisions.md](../decisions.md#2026-10-19--light-chip-text-darker-ink-tokens).
 
 ## Watch out
 
-- A `→ human` PENDING note stays pending after its wave merges. The wave step reads `done` (`done` beats `you`), but the run and the plan still read `needs-you`, so the ask isn't hidden at the plan level. Don't move this into `runs.ts`.
-- In a part-done wave, an ask that names only a done slice doesn't make the wave `you`; the wave step agrees with its cards, where that slice reads `merged`.
-- A slice-only agent (no sprint, no plan) can join two plans when both have a board with that code. Real dispatches always name the sprint.
-- Agents are kept only for the transcript window (`POD_BOARD_TRANSCRIPT_DAYS`, default 30), so older waves lose their time and tokens and read `<s> slices`.
+- **Open bug (gate 2 on PR #15):** a plan's reviewers and planners join it only through `AgentRun.plan`, read by `readDispatch` (see `run-model.md`). The ported loose `plan slug` match runs first and matches prose, so a reviewer prompt quoting "`plan slug:` field" reads plan `field`. The plan then drops off the runs list (`no active plan · idle`) during its own review. The fix is to let the `- **plan:**` field win.
+- The planner's plan comes from the prose ``for plan `<slug>` ``; it holds only while pod's prompt says exactly that.
+- A pending `→ human` entry stays pending after its wave merges: the wave reads `done`, the run `needs-you`. Don't move this rule into `runs.ts`.
+- Fix branches not named `<sprint>-w<N>-fix` (such as `-w2-starve`) aren't counted in their wave's time and tokens.
+- `blocked` and `you` wave steps show done-style detail with tokens (queued, someday).
+- Agents older than the transcript window lose their time and tokens; the wave then reads `<s> slices`.
 
 ## History
 
@@ -103,3 +38,4 @@ The web app's `screens/runs/view.ts` decides these; `RunsScreen.tsx` only render
 - 2026-10-19: banners, docs version messages, and theme boot added in sprint board-engineer (slice X1).
 - 2026-10-19: a done wave reads `done` even with a pending ask for the human; `you` only on unfinished waves (decision "`you` only on unfinished waves", sprint board-engineer wave 2 fix).
 - 2026-10-19: reviewers and sprint planners now carry their plan from real dispatches (`readDispatch`, see run-model.md), so `final review`, the Check stage's live round, and `drafting` show for real runs (plan board-read fix pass).
+- 2026-10-19 · board-read · plan complete; theme boot moved to `app-shell.md`; round 2 found the prose `plan slug` bug, still open · [report](../reports/board-read.html)

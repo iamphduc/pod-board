@@ -1,6 +1,6 @@
 # Plan: Pod Board, phase 1 — see every run
 
-_Generated: 2026-10-18 · Status: active · Grilled-with: grilling (fast)_
+_Generated: 2026-10-18 · Status: archived · Grilled-with: grilling (fast)_
 
 Port base: 3000
 
