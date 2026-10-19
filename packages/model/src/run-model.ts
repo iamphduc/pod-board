@@ -251,13 +251,42 @@ function field(section: string[], name: string): string | undefined {
   return text.filter((t) => t !== '').join('\n')
 }
 
-/** Backticked paths in order; with none, the text split on commas. `(new)` and bullet labels drop out. */
+/**
+ * Backticked paths in order; with none, the text split on commas. Bullet labels and
+ * notes in brackets after an item (`(new)`, `(new, incl. a.ts, b.ts)`) drop out.
+ */
 function filesOwned(text: string | undefined): string[] {
   if (!text) return []
-  const ticked = [...text.matchAll(/`([^`]+)`/g)].map((m) => cleanPath(m[1] ?? ''))
-  const paths = ticked.length > 0 ? ticked : text.replace(/^-\s*\*\*[^*]+:\*\*/gm, ',').split(/[,\n]/).map(cleanPath)
+  const plain = dropNotes(text)
+  const ticked = [...plain.matchAll(/`([^`]+)`/g)].map((m) => cleanPath(m[1] ?? ''))
+  const paths = ticked.length > 0 ? ticked : plain.replace(/^-\s*\*\*[^*]+:\*\*/gm, ',').split(/[,\n]/).map(cleanPath)
   // A dash alone names no file.
   return paths.filter((p) => p !== '' && !/^[-—–]+$/.test(p))
 }
 
 const cleanPath = (p: string) => p.replace(/\(new\)/gi, '').trim()
+
+/**
+ * The text without notes in brackets: a `(` at the start or after a space, outside
+ * backticks, to its matching `)`, with nested brackets and backticks inside. A
+ * bracket inside a path (`app/(group)/page.tsx`) follows no space, so it stays.
+ */
+function dropNotes(text: string): string {
+  let out = ''
+  let depth = 0
+  let ticked = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!
+    if (c === '`') ticked = !ticked
+    else if (!ticked && c === '(' && (depth > 0 || i === 0 || /\s/.test(text[i - 1]!))) {
+      depth++
+      continue
+    } else if (!ticked && c === ')' && depth > 0) {
+      depth--
+      continue
+    }
+    if (depth === 0) out += c
+  }
+  // An unclosed bracket would swallow the rest; keep the text as written instead.
+  return depth === 0 ? out : text
+}

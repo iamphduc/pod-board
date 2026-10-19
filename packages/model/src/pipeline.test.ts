@@ -144,18 +144,26 @@ describe('buildPipeline', () => {
             [5, 'W5', '—', 'pending'],
             [6, 'W6', '—', 'pending'],
             [7, 'W7', 'skipped', 'done'],
+            [8, 'W8', '—', 'pending'],
+            [9, 'W9a', 'merged', 'done'],
+            [9, 'W9b', '—', 'pending'],
+            [10, 'W10a', 'merged', 'done'],
+            [10, 'W10b', '—', 'pending'],
           ],
         },
         queue: [
           ask('W1'), // blocked wins over you
-          ask('W2'), // you wins over done
+          ask('W2'), // done wins over you: a finished wave reads done
           queueLine('PENDING', 'engineer → human', 'sprint: one · slice: W3', 'old', false), // resolved: no you
           ask('W6', 'other'), // another sprint's slice: no you
+          ask('W8'), // an unfinished wave: you
+          ask('W9a'), // only a done slice asks: the wave isn't you
+          ask('W10b'), // an unfinished slice of a part-done wave asks: you
         ],
       }),
       { agents: [running({ sprint: 'one', slice: 'W5' })] },
     )
-    expect(stepStates(build(r), 'sprint:one')).toEqual(['blocked', 'you', 'done', 'live', 'live', 'wait', 'blocked'])
+    expect(stepStates(build(r), 'sprint:one')).toEqual(['blocked', 'done', 'done', 'live', 'live', 'wait', 'blocked', 'you', 'wait', 'you'])
 
     // The current wave is live on its own, with nothing pushed and no engineer.
     const fresh = repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'X1', '—', 'pending'], [2, 'X2', '—', 'pending']] } }))

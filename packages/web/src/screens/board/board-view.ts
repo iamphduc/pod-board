@@ -99,11 +99,11 @@ export function boardSlices(repo: BoardRepo | undefined, planSlug: string, now: 
 /** Queue entries naming this slice, with this sprint or none. */
 const naming = (e: QueueItem, sprint: string, code: string) => e.slice === code && (e.sprint === undefined || e.sprint === sprint)
 
-/** First match wins: blocked → needs-you → merged → running → waiting. */
+/** First match wins: blocked → merged → needs-you → running → waiting. A done card reads merged even with a pending ask. */
 function cardState(plan: PlanModel, sprint: string, slice: SliceModel, running: boolean): CardState {
   if (isBlockedSlice(slice)) return 'blocked'
-  if (plan.queue.some((e) => e.needsYou && naming(e, sprint, slice.code))) return 'needs-you'
   if (isSliceDone(slice)) return 'merged'
+  if (plan.queue.some((e) => e.needsYou && naming(e, sprint, slice.code))) return 'needs-you'
   if (slice.status === 'pushed' || running) return 'running'
   return 'waiting'
 }

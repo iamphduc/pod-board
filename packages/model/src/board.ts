@@ -48,4 +48,11 @@ export type BoardRepo = {
   claims: Claim[]
 }
 
-export type Board = { generatedAt: number; gh: GhStatus; ghCheckedAt?: number; repos: BoardRepo[] }
+export type Board = {
+  generatedAt: number
+  gh: GhStatus
+  ghCheckedAt?: number
+  /** Set on every build where the config file exists but can't be read; the last repo list is still used. */
+  configError?: 'config unreadable'
+  repos: BoardRepo[]
+}

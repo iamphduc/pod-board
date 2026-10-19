@@ -1,5 +1,6 @@
 // Keeps the Board current: watches the files it is built from, rebuilds after
-// a short quiet spell, and tells subscribers only when the Board changed.
+// a short quiet spell (or a capped wait while events keep coming), and tells
+// subscribers only when the Board changed.
 // The rules and why are in pod-docs/feature-details/server.md.
 
 import { stat } from 'node:fs/promises'
@@ -11,6 +12,8 @@ import { projectDirName } from './transcript-files.ts'
 
 export const DEBOUNCE_MS = 300
 export const TICK_MS = 30_000
+/** The longest a rebuild waits after the first event of a burst, however often events keep coming. */
+export const MAX_WAIT_MS = 1500
 const POLL_INTERVAL_MS = 500
 
 export type BoardWatcherOptions = {
@@ -21,7 +24,11 @@ export type BoardWatcherOptions = {
   /** Watch by polling (`POD_BOARD_POLL=1`): for network drives and file systems that miss events. */
   poll?: boolean
   debounceMs?: number
+  /** The longest a rebuild waits after the first event of a burst. */
+  maxWaitMs?: number
   tickMs?: number
+  /** Opens one folder watch; chokidar's `watch` unless a test passes a fake. */
+  watch?: typeof watch
   onError?: (err: unknown) => void
 }
 
@@ -42,19 +49,23 @@ type Target = { dir: string; depth: number; keep: (p: string, isDir: boolean | u
 
 /**
  * Board JSON without the fields that change on every build or gh check, so a
- * rebuild that finds nothing new sends nothing.
+ * rebuild that finds nothing new sends nothing. While gh isn't `ok`, the gh
+ * check time counts, so the banner's "Last checked" is the latest check.
  */
 export function boardSignature(board: Board): string {
+  const ghTimeCounts = board.gh !== 'ok'
   return JSON.stringify(board, (key, value) =>
-    key === 'generatedAt' || key === 'ghCheckedAt' || key === 'checkedAt' ? undefined : value,
+    key === 'generatedAt' || key === 'checkedAt' || (key === 'ghCheckedAt' && !ghTimeCounts) ? undefined : value,
   )
 }
 
 /** What to watch for a Board: the config file, the claims, and each repo's pod docs and transcripts. */
 export function watchTargets(board: Board, o: Pick<BoardWatcherOptions, 'configFile' | 'portsDir' | 'claudeDir'>): Target[] {
   const configFile = path.resolve(o.configFile)
+  const configDir = path.dirname(configFile)
   const targets: Target[] = [
-    { dir: path.dirname(configFile), depth: 0, keep: (p) => p === configFile },
+    // chokidar runs `ignored` on the watched folder too, so the folder must be kept.
+    { dir: configDir, depth: 0, keep: (p) => p === configDir || p === configFile },
     { dir: path.resolve(o.portsDir), depth: 0, keep: () => true },
   ]
   for (const repo of board.repos) {
@@ -76,8 +87,12 @@ function keepTranscriptPath(project: string, p: string, isDir: boolean | undefin
 }
 
 export function createBoardWatcher(o: BoardWatcherOptions): BoardWatcher {
-  const debounceMs = o.debounceMs ?? DEBOUNCE_MS
+  // A poller sees a quick burst of writes on up to two ticks, one interval
+  // apart; a longer quiet spell keeps that burst to one rebuild.
+  const debounceMs = (o.debounceMs ?? DEBOUNCE_MS) + (o.poll === true ? POLL_INTERVAL_MS : 0)
+  const maxWaitMs = o.maxWaitMs ?? MAX_WAIT_MS
   const tickMs = o.tickMs ?? TICK_MS
+  const openWatch = o.watch ?? watch
   const onError = o.onError ?? ((err: unknown) => console.error('pod-board watcher:', err))
   const subscribers = new Set<(b: Board) => void>()
   // Key → open watcher. A key names the folder and whether it is watched itself or through its nearest existing parent.
@@ -87,14 +102,25 @@ export function createBoardWatcher(o: BoardWatcherOptions): BoardWatcher {
   let signature = ''
   let chain: Promise<void> = Promise.resolve()
   let debounce: NodeJS.Timeout | undefined
+  // Set by a burst's first event and never pushed back, so steady events can't starve rebuilds.
+  let maxWait: NodeJS.Timeout | undefined
   let tickTimer: NodeJS.Timeout | undefined
   let ticking = false
   let closed = false
 
+  // Rebuilds once per burst: when it goes quiet, or when its wait hits the cap.
+  // Events after that start a new burst.
+  const fire = () => {
+    clearTimeout(debounce)
+    clearTimeout(maxWait)
+    debounce = maxWait = undefined
+    void rebuild()
+  }
   const schedule = () => {
     if (closed) return
     clearTimeout(debounce)
-    debounce = setTimeout(() => void rebuild(), debounceMs)
+    debounce = setTimeout(fire, debounceMs)
+    maxWait ??= setTimeout(fire, maxWaitMs)
   }
 
   async function rebuildNow(): Promise<void> {
@@ -150,7 +176,7 @@ export function createBoardWatcher(o: BoardWatcherOptions): BoardWatcher {
     const opened: Promise<void>[] = []
     for (const [key, target] of wanted) {
       if (watchers.has(key)) continue
-      const w = watch(target.dir, {
+      const w = openWatch(target.dir, {
         ignoreInitial: true,
         depth: target.depth,
         ignored: (p, stats) => !target.keep(path.resolve(p), stats ? stats.isDirectory() : undefined),
@@ -215,6 +241,7 @@ export function createBoardWatcher(o: BoardWatcherOptions): BoardWatcher {
     async close() {
       closed = true
       clearTimeout(debounce)
+      clearTimeout(maxWait)
       clearTimeout(tickTimer)
       subscribers.clear()
       await chain

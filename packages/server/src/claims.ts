@@ -1,9 +1,10 @@
 import { readdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
+import type { Claim } from '@pod-board/model'
 import { envValue, type Env } from './config.ts'
 
 /** A port claim pod writes while a run is live: `<ports dir>/<port base>` holding `<repo path> <plan>`. */
-export type Claim = { portBase: number; repoPath: string; plan: string }
+export type { Claim }
 
 /** `POD_BOARD_PORTS_DIR`, else `<os temp>/pod-ports`. */
 export function portsDir(env: Env, tmp: string): string {

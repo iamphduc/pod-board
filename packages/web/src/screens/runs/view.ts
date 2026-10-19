@@ -1,7 +1,7 @@
 // What screen 1 shows for each state: chip classes and labels, the slice log's
 // figures, and the message for a run with no pipeline. Components only render these.
 
-import { formatTokens, type LogRow, type RunState, type RunSummary } from '@pod-board/model'
+import { formatTokens, type Board, type BoardRepo, type LogRow, type RunState, type RunSummary } from '@pod-board/model'
 import type { StreamState } from '../../board-stream.ts'
 
 export type ChipClass = 's-run' | 's-ok' | 's-you' | 's-bad' | 's-idle'
@@ -51,12 +51,50 @@ export function rowFigures(row: LogRow): string {
 
 export const barTitle = (r: RunSummary) => (r.plan === undefined ? r.repo : `${r.repo} · ${r.plan}`)
 
-/** Why a run has no pipeline, and what to do about it. */
-export function emptyMessage(r: RunSummary): string {
+/** Why a run has no pipeline, and what to do about it. `repo` gives an unsupported repo's docs version. */
+export function emptyMessage(r: RunSummary, repo?: BoardRepo): string {
   if (r.state === 'error') return `Can't read this repo: ${r.where}. Check that the folder still exists.`
-  if (r.state === 'unsupported') return "This repo's pod docs are from an older pod. Update pod in this repo to see its runs."
+  if (r.state === 'unsupported') {
+    if (!repo) return "This repo's pod docs are from an older pod. Update pod in this repo to see its runs."
+    const { version } = repo.model.docs
+    return version === undefined
+      ? 'This repo has no pod docs version (an older pod). Update pod in this repo.'
+      : `This repo's pod docs are version ${version}; Pod Board reads version 2. Update pod in this repo.`
+  }
   if (r.plan === undefined) return 'No active plan in this repo. A plan shows here once pod starts one.'
   return `Can't find plan ${r.plan} in this repo's pod docs.`
+}
+
+export type Banner = { chip: Chip; text: string }
+
+const GH_BANNERS: Partial<Record<Board['gh'], Banner>> = {
+  missing: { chip: { cls: 's-you', label: 'gh missing' }, text: "gh isn't installed, so PR states aren't checked." },
+  'logged-out': {
+    chip: { cls: 's-you', label: 'gh logged out' },
+    text: "gh isn't logged in, so PR states may be out of date. Run gh auth login.",
+  },
+}
+
+/** Local `HH:MM`. */
+const clock = (ms: number) => {
+  const d = new Date(ms)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/** What's wrong above the main view, in order: the lost stream, the config error, then gh. Each has a chip. */
+export function banners(board: Board | undefined, stream: StreamState): Banner[] {
+  const out: Banner[] = []
+  if (stream === 'lost') out.push({ chip: streamChip('lost'), text: 'Lost the connection to the server. Showing the last board; retrying.' })
+  if (!board) return out
+  if (board.configError !== undefined) {
+    out.push({
+      chip: { cls: 's-bad', label: 'config unreadable' },
+      text: "The board's config file can't be read, so the repo list may be out of date. The board never overwrites it.",
+    })
+  }
+  const gh = GH_BANNERS[board.gh]
+  if (gh) out.push(board.ghCheckedAt === undefined ? gh : { ...gh, text: `${gh.text} Last checked ${clock(board.ghCheckedAt)}.` })
+  return out
 }
 
 export type TitlePart = { text: string; code: boolean }

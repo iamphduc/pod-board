@@ -27,8 +27,8 @@ A column's status is the pipeline's slice log status for that wave (`merged PR #
 **Card state**, first match wins (same order as the pipeline's wave step):
 
 1. `blocked`: `isBlockedSlice`.
-2. `needs-you`: a `needsYou` queue item of the plan names the slice, with `sprint:` this sprint or none.
-3. `merged`: `isSliceDone`.
+2. `merged`: `isSliceDone`, even with a pending `needsYou` item naming the slice.
+3. `needs-you`: a `needsYou` queue item of the plan names the slice, with `sprint:` this sprint or none.
 4. `running`: status `pushed`, or a running agent whose role is this slice of this sprint.
 5. `waiting`.
 
@@ -74,8 +74,9 @@ Among agents whose `type` ends in `engineer` and whose `roleOf` is this slice of
 ## Watch out
 
 - An entry with a `slice:` but no `sprint:` or `plan:` joins no plan's queue (the run model's rule), so it never makes a card `needs-you`.
-- A finished wave with a pending `→ human` note reads `needs-you` on its card, as on the pipeline: `you` beats `done`.
+- A done slice with a pending `→ human` note reads `merged` on its card, as on the pipeline: `done` beats `you`. The run in the runs list still reads `needs you`.
 
 ## History
 
 - 2026-10-19: added in sprint board-engineer (slice W1).
+- 2026-10-19: a done card reads `merged` even with a pending ask for the human (decision "`you` only on unfinished waves", sprint board-engineer wave 2 fix).

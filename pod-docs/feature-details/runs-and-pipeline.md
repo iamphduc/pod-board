@@ -51,8 +51,8 @@
 **Wave step state**, first match wins:
 
 1. `blocked`: a blocked slice.
-2. `you`: a `needsYou` queue item of the plan names a slice of this wave, with `sprint:` this sprint or none.
-3. `done`: every slice `isSliceDone`.
+2. `done`: every slice `isSliceDone`, even with a pending `needsYou` item naming one.
+3. `you`: a `needsYou` queue item of the plan names a slice of this wave that isn't done, with `sprint:` this sprint or none.
 4. `live`: it's the current sprint's `currentWave`, a slice is `pushed`, or one of its agents runs.
 5. `wait`.
 
@@ -79,12 +79,26 @@
 
 Each row holds the slice's code, title, model, and confidence (absent for `—`). Its minutes and tokens come from that slice's agents, left out with none. `live` is set while one of them runs.
 
+## Screen 1 states
+
+The web app's `screens/runs/view.ts` decides these; `RunsScreen.tsx` only renders them.
+
+- **Banners** (`banners(board, stream)`), above the main view, in this order, each a chip plus one line, with a left edge in the chip's colour:
+  1. `lost · retrying` (blocked colour): the server stream is lost; the last board stays on screen.
+  2. `config unreadable` (blocked colour): the Board has `configError`. The repo list may be out of date; the board never overwrites the file.
+  3. `gh missing` or `gh logged out` (needs-you colour), with `Last checked HH:MM.` (local time) when `ghCheckedAt` is set. `ok` and `unknown` give none, so a board that hasn't checked yet shows nothing.
+- **Empty main view** (`emptyMessage(run, repo)`): an error names the folder problem; unsupported docs name the version (`version N; Pod Board reads version 2`) or say there is none (an older pod); a repo with no plan and an unknown plan keep their messages. No repos at all shows `No repos yet`.
+- **Theme boot.** An inline script in `index.html`, before the module script, sets `data-theme` from a stored `light` or `dark` pick (`pod-board-theme`, the same `THEME_KEY`). Missing, unknown, or throwing storage does nothing. A `color-scheme` meta and two `:root[data-theme]` rules make the browser's own canvas follow it. Why: in dev, Vite loads the CSS from the module script, so without them a Dark pick paints white first.
+
 ## Watch out
 
-- A `→ human` PENDING note stays pending after its wave merges, so a finished wave with such a note reads `you`, and its plan reads `needs-you`. That's the rule as planned: `you` beats `done`. On this repo, sprint server-runs wave 1 shows `you` for the L1 contrast note.
+- A `→ human` PENDING note stays pending after its wave merges. The wave step reads `done` (`done` beats `you`), but the run and the plan still read `needs-you`, so the ask isn't hidden at the plan level. Don't move this into `runs.ts`.
+- In a part-done wave, an ask that names only a done slice doesn't make the wave `you`; the wave step agrees with its cards, where that slice reads `merged`.
 - A slice-only agent (no sprint, no plan) can join two plans when both have a board with that code. Real dispatches always name the sprint.
 - Agents are kept only for the transcript window (`POD_BOARD_TRANSCRIPT_DAYS`, default 30), so older waves lose their time and tokens and read `<s> slices`.
 
 ## History
 
 - 2026-10-18: added in sprint server-runs (slice P1).
+- 2026-10-19: banners, docs version messages, and theme boot added in sprint board-engineer (slice X1).
+- 2026-10-19: a done wave reads `done` even with a pending ask for the human; `you` only on unfinished waves (decision "`you` only on unfinished waves", sprint board-engineer wave 2 fix).

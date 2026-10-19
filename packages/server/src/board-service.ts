@@ -6,27 +6,21 @@
 import path from 'node:path'
 import {
   buildRepoModel,
+  handBackPr,
   parseAgentTranscript,
   type AgentRun,
   type Board,
   type BoardRepo,
-  type Claim as ModelClaim,
-  type GhStatus as ModelGhStatus,
-  type PrStatus as ModelPrStatus,
+  type Claim,
+  type PrStatus,
   type RepoModel,
 } from '@pod-board/model'
-import { readClaims, type Claim } from './claims.ts'
-import type { GhReader, GhStatus, PrStatus } from './gh.ts'
+import { readClaims } from './claims.ts'
+import type { GhReader } from './gh.ts'
 import { ignoresCase as probeIgnoresCase, normalizeRepoPath, repoId, sameRepoPath } from './guard.ts'
 import { readRepoFiles } from './repo-files.ts'
 import { loadRepos } from './repos-config.ts'
 import { createAgentFileReader, listAgentFiles } from './transcript-files.ts'
-
-// claims.ts and gh.ts keep local copies of the model's contract types; these
-// lines fail typecheck if a copy drifts from the model's shape.
-type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
-const typesMatch: [Same<Claim, ModelClaim>, Same<PrStatus, ModelPrStatus>, Same<GhStatus, ModelGhStatus>] = [true, true, true]
-void typesMatch
 
 export type BoardServiceDeps = {
   configFile: string
@@ -55,10 +49,11 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
   // An unreadable config (a half-saved edit, say) keeps the last list it read.
   let lastRegistered: string[] = []
 
-  async function registered(): Promise<string[]> {
+  /** The registered paths, and whether the config file exists but couldn't be read this time. */
+  async function registered(): Promise<{ paths: string[]; unreadable: boolean }> {
     const loaded = await loadRepos(deps.configFile)
     if ('repos' in loaded) lastRegistered = loaded.repos
-    return lastRegistered
+    return { paths: lastRegistered, unreadable: 'error' in loaded }
   }
 
   async function safeClaims(): Promise<Claim[]> {
@@ -70,7 +65,7 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
   }
 
   /** Registered paths then claimed ones, merged by Repo identity. The first spelling of a repo wins. */
-  async function repoEntries(): Promise<RepoEntry[]> {
+  async function repoEntries(): Promise<{ entries: RepoEntry[]; configUnreadable: boolean }> {
     const entries: RepoEntry[] = []
     const find = async (raw: string): Promise<RepoEntry> => {
       const p = normalizeRepoPath(raw, deps.platform)
@@ -80,12 +75,13 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
       entries.push(entry)
       return entry
     }
-    for (const p of await registered()) (await find(p)).registered = true
+    const config = await registered()
+    for (const p of config.paths) (await find(p)).registered = true
     for (const c of await safeClaims()) {
       const entry = await find(c.repoPath)
       entry.claims.push({ ...c, repoPath: entry.path })
     }
-    return entries
+    return { entries, configUnreadable: config.unreadable }
   }
 
   async function agentsOf(repoPath: string): Promise<AgentRun[]> {
@@ -125,12 +121,13 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
 
   return {
     async build() {
-      const entries = await repoEntries()
+      const { entries, configUnreadable } = await repoEntries()
       const repos = await Promise.all(entries.map(buildRepo))
       repos.sort((a, b) => compare(a.name.toLowerCase(), b.name.toLowerCase()) || compare(a.path, b.path))
       const board: Board = { generatedAt: now(), gh: deps.gh.status(), repos }
       const checkedAt = deps.gh.checkedAt()
       if (checkedAt !== undefined) board.ghCheckedAt = checkedAt
+      if (configUnreadable) board.configError = 'config unreadable'
       return board
     },
     async refreshGh(board) {
@@ -145,11 +142,9 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
   }
 }
 
-const HAND_BACK = /complete|final PR|hand-?back|awaiting/i
-
 /**
  * The PRs the board asks gh about: per plan that isn't archived, the open PRs
- * of its current sprint's slices, plus its hand-back PR. In first-seen order.
+ * of its current sprint's slices, plus its hand-back PR (the model's `handBackPr`). In first-seen order.
  */
 export function livePrNumbers(model: RepoModel): number[] {
   const numbers = new Set<number>()
@@ -159,21 +154,10 @@ export function livePrNumbers(model: RepoModel): number[] {
     for (const slice of sprint?.waves.flatMap((w) => w.slices) ?? []) {
       if (slice.pr.state === 'open' && slice.pr.number !== undefined) numbers.add(slice.pr.number)
     }
-    const handBack = handBackPr(plan.queue)
+    const handBack = handBackPr(plan)
     if (handBack !== undefined) numbers.add(handBack)
   }
   return [...numbers]
-}
-
-/** N from the last pending orchestrator entry that reads as a hand-back and links `/pull/N`. */
-function handBackPr(queue: RepoModel['queue']): number | undefined {
-  for (let i = queue.length - 1; i >= 0; i--) {
-    const e = queue[i]!
-    if (!e.isPending || !/^orchestrator/i.test(e.route.trim()) || !HAND_BACK.test(e.body)) continue
-    const n = /\/pull\/(\d+)/.exec(e.body)?.[1]
-    if (n !== undefined) return Number(n)
-  }
-  return undefined
 }
 
 function folderError(err: unknown): string {

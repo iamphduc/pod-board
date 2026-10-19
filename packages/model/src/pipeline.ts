@@ -144,13 +144,17 @@ function sliceAgents(ctx: Ctx, s: SprintModel, code: string) {
   return ctx.agents.filter(({ role }) => role.kind === 'slice' && role.sprint === s.slug && role.code === code)
 }
 
-/** Wave step state, first match wins: blocked → you → done → live → wait. */
+/**
+ * Wave step state, first match wins: blocked → done → you → live → wait.
+ * A done wave reads done even with a pending ask for the human, and only an ask
+ * naming one of its unfinished slices makes a wave `you`, so it agrees with its cards.
+ */
 function waveState(ctx: Ctx, s: SprintModel, w: WaveModel): StepState {
   if (w.slices.some(isBlockedSlice)) return 'blocked'
-  const codes = new Set(w.slices.map((x) => x.code))
-  const asks = ctx.plan.queue.some((e) => e.needsYou && e.slice !== undefined && codes.has(e.slice) && (e.sprint === undefined || e.sprint === s.slug))
-  if (asks) return 'you'
   if (w.slices.every(isSliceDone)) return 'done'
+  const open = new Set(w.slices.filter((x) => !isSliceDone(x)).map((x) => x.code))
+  const asks = ctx.plan.queue.some((e) => e.needsYou && e.slice !== undefined && open.has(e.slice) && (e.sprint === undefined || e.sprint === s.slug))
+  if (asks) return 'you'
   return isWaveLive(ctx, s, w) ? 'live' : 'wait'
 }
 

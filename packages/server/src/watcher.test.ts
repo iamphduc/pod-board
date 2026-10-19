@@ -1,13 +1,15 @@
+import { EventEmitter } from 'node:events'
 import { cpSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Board } from '@pod-board/model'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import type { FSWatcher } from 'chokidar'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { createBoardService, type BoardService } from './board-service.ts'
 import type { GhReader } from './gh.ts'
-import { createBoardWatcher, type BoardWatcher } from './watcher.ts'
+import { createBoardWatcher, MAX_WAIT_MS, type BoardWatcher } from './watcher.ts'
 
 const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'model', 'fixtures', 'chess-web')
 
@@ -33,6 +35,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.useRealTimers()
   await watcher?.close()
   watcher = undefined
   await rm(root, { recursive: true, force: true })
@@ -68,7 +71,10 @@ function collect(w: BoardWatcher) {
   })
   const next = (test: (b: Board) => boolean = () => true, ms = 5000) =>
     new Promise<Board>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`no matching board event within ${ms} ms`)), ms)
+      const timer = setTimeout(() => {
+        const seen = events.map((b) => t1Status(b) ?? '-').join(', ')
+        reject(new Error(`no matching board event within ${ms} ms (${events.length} events so far, T1: ${seen || 'none'})`))
+      }, ms)
       waiters.push({
         test,
         resolve: (b) => {
@@ -125,6 +131,8 @@ describe('board watcher', () => {
       const first = await watcher.start()
       expect(t1Status(first)).toBe('pending')
       const { events, next } = collect(watcher)
+      // Let the start-up rebuilds finish, so the edit below can reach clients only through the watcher.
+      await quiet(poll ? 1500 : 800)
 
       const started = Date.now()
       await setT1(repo, 'pushed')
@@ -133,9 +141,8 @@ describe('board watcher', () => {
       expect(watcher.board()).toBe(got)
 
       // Three quick edits give one event, carrying the last one. First let the
-      // watcher finish with the edit above: the start-up rebuild can catch it
-      // before the poller does, and the poller's late rebuild must not land
-      // in the middle of the three edits.
+      // watcher finish with the edit above, so a late rebuild for it can't
+      // land in the middle of the three edits.
       await quiet(poll ? 1500 : 800)
       const before = events.length
       await setT1(repo, 'blocked')
@@ -146,6 +153,210 @@ describe('board watcher', () => {
       expect(events.length - before).toBe(1)
     }, 15_000) // The 5 s bound is checked above; the whole test, with its waits, takes longer.
   }
+
+  for (const poll of [false, true]) {
+    test(`a config edit reaches clients within 5 seconds${poll ? ' (polling)' : ''}`, async () => {
+      const repo = copyFixture('chess-web')
+      await register(repo)
+      const { service: svc, quiet } = tracked(service())
+      watcher = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, poll })
+      const first = await watcher.start()
+      expect(first.configError).toBeUndefined()
+      const { next } = collect(watcher)
+      // Let the start-up rebuilds finish, so only the watcher can see the edits below.
+      await quiet(poll ? 1500 : 800)
+
+      let started = Date.now()
+      await writeFile(configFile, '{ not json')
+      const broken = await next((b) => b.configError === 'config unreadable', 5000)
+      expect(Date.now() - started).toBeLessThan(5000)
+      expect(broken.repos).toHaveLength(1)
+
+      await quiet(poll ? 1500 : 800)
+      started = Date.now()
+      await register(repo)
+      await next((b) => b.configError === undefined, 5000)
+      expect(Date.now() - started).toBeLessThan(5000)
+    }, 20_000)
+  }
+
+  test('in poll mode, events up to one poll interval apart give one rebuild', async () => {
+    vi.useFakeTimers()
+    const fakes: EventEmitter[] = []
+    const fakeWatch = () => {
+      const w = Object.assign(new EventEmitter(), { close: async () => {} })
+      fakes.push(w)
+      process.nextTick(() => w.emit('ready'))
+      return w as unknown as FSWatcher
+    }
+    let builds = 0
+    const svc: BoardService = {
+      build: async () => {
+        builds++
+        return { generatedAt: Date.now(), gh: 'unknown', repos: [] }
+      },
+      refreshGh: async () => false,
+    }
+    watcher = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, poll: true, watch: fakeWatch, tickMs: 1e9 })
+    const w = watcher
+    // Fires every timer due within 5 s, then waits out the rebuilds they queued
+    // (each reads real folders), plus one more, counted below.
+    const settle = async () => {
+      await vi.advanceTimersByTimeAsync(5000)
+      await w.rebuild()
+    }
+    await w.start()
+    await settle()
+    expect(fakes.length).toBeGreaterThan(0)
+    const before = builds
+
+    // A poller sees a quick burst of writes on up to two ticks, one poll interval apart.
+    fakes[0]!.emit('all', 'change', configFile)
+    await vi.advanceTimersByTimeAsync(450)
+    fakes[0]!.emit('all', 'change', configFile)
+    await settle()
+    expect(builds - before - 1).toBe(1)
+  })
+
+  describe('steady events still rebuild within the cap', () => {
+    // Real timers, kept before faking, so the watcher's real `stat` calls can finish between fake steps.
+    const realSetTimeout = globalThis.setTimeout
+    const realYield = () => new Promise((r) => realSetTimeout(r, 2))
+
+    /** A watcher over fake folder watches and a fake service that notes the fake time of each build. */
+    async function fakeWatcher(poll: boolean, build?: () => Promise<void>) {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+      const fakes: EventEmitter[] = []
+      const fakeWatch = () => {
+        const w = Object.assign(new EventEmitter(), { close: async () => {} })
+        fakes.push(w)
+        process.nextTick(() => w.emit('ready'))
+        return w as unknown as FSWatcher
+      }
+      const builds: number[] = []
+      const svc: BoardService = {
+        build: async () => {
+          builds.push(Date.now())
+          await build?.()
+          return { generatedAt: Date.now(), gh: 'unknown', repos: [] }
+        },
+        refreshGh: async () => false,
+      }
+      const w = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, poll, watch: fakeWatch, tickMs: 1e9 })
+      watcher = w
+      await w.start()
+      // Lets the start-up rebuilds run and finish.
+      await advance(5000)
+      expect(fakes.length).toBeGreaterThan(0)
+      builds.length = 0
+      return { fakes, builds, emit: () => fakes[0]!.emit('all', 'change', configFile) }
+    }
+
+    /** Moves fake time forward in small steps, giving real I/O a turn after each. */
+    async function advance(ms: number) {
+      for (let left = ms; left > 0; left -= 50) {
+        await vi.advanceTimersByTimeAsync(Math.min(50, left))
+        await realYield()
+      }
+    }
+
+    /** Emits an event every `every` ms for `forMs` ms; returns the fake time of the first one. */
+    async function stream(emit: () => void, every: number, forMs: number): Promise<number> {
+      const first = Date.now()
+      for (let t = 0; t < forMs; t += every) {
+        emit()
+        await advance(every)
+      }
+      return first
+    }
+
+    for (const [poll, every] of [
+      [true, 400],
+      [false, 150],
+    ] as const) {
+      test(`events every ${every} ms for 6 s${poll ? ' (polling)' : ''} rebuild every ${MAX_WAIT_MS} ms at most`, async () => {
+        const { builds, emit } = await fakeWatcher(poll)
+        const first = await stream(emit, every, 6000)
+        // During the 6 s: a rebuild no later than the cap after the first event, then again and again.
+        const during = builds.filter((t) => t < first + 6000)
+        expect(during.length).toBeGreaterThanOrEqual(3)
+        expect(during[0]! - first).toBeLessThanOrEqual(MAX_WAIT_MS)
+        // After a rebuild, the next event starts a new burst, so gaps stay within the cap plus one event gap.
+        for (let i = 1; i < during.length; i++) expect(during[i]! - during[i - 1]!).toBeLessThanOrEqual(MAX_WAIT_MS + every)
+      }, 30_000)
+    }
+
+    test('the cap counts from the first event, not the last', async () => {
+      const { builds, emit } = await fakeWatcher(false)
+      // Events 250 ms apart, the last at 1400 ms: the quiet spell alone would rebuild at 1700 ms.
+      const first = Date.now()
+      for (const at of [0, 250, 500, 750, 1000, 1250, 1400]) {
+        await advance(at - (Date.now() - first))
+        emit()
+      }
+      await advance(50)
+      expect(builds).toEqual([])
+      await advance(1000)
+      expect(builds).toHaveLength(1)
+      expect(builds[0]! - first).toBeLessThanOrEqual(MAX_WAIT_MS)
+    }, 30_000)
+
+    test('a quick burst still gives exactly one rebuild', async () => {
+      const { builds, emit } = await fakeWatcher(false)
+      emit()
+      await advance(100)
+      emit()
+      await advance(100)
+      emit()
+      await advance(5000)
+      expect(builds).toHaveLength(1)
+    }, 30_000)
+
+    test('an event during a rebuild gets its own rebuild within the cap', async () => {
+      let release: (() => void) | undefined
+      let hold = false
+      const { builds, emit } = await fakeWatcher(false, () => (hold ? new Promise<void>((r) => (release = r)) : Promise.resolve()))
+      hold = true
+      emit()
+      await advance(400)
+      expect(builds).toHaveLength(1)
+      // The first rebuild is still running when this event comes in.
+      const late = Date.now()
+      emit()
+      await advance(200)
+      hold = false
+      release!()
+      await advance(MAX_WAIT_MS)
+      expect(builds).toHaveLength(2)
+      expect(builds[1]! - late).toBeLessThanOrEqual(MAX_WAIT_MS)
+    }, 30_000)
+  })
+
+  test('while gh is not ok, each new gh check time reaches clients', async () => {
+    let checks = 0
+    const loggedOut: GhReader = { ...gh, status: () => 'logged-out', checkedAt: () => ++checks }
+    const svc = createBoardService({ configFile, portsDir, claudeDir, transcriptDays: 30, platform: process.platform, gh: loggedOut })
+    watcher = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, tickMs: 100 })
+    await watcher.start()
+    const { events } = collect(watcher)
+    await sleep(600)
+    expect(events.length).toBeGreaterThanOrEqual(2)
+    const times = events.map((b) => b.ghCheckedAt!)
+    expect(times).toEqual([...times].sort((a, b) => a - b))
+    expect(new Set(times).size).toBe(times.length)
+    expect(watcher.board().ghCheckedAt).toBe(times.at(-1))
+  })
+
+  test('while gh is ok, a new gh check time alone sends nothing', async () => {
+    let checks = 0
+    const healthy: GhReader = { ...gh, status: () => 'ok', checkedAt: () => ++checks }
+    const svc = createBoardService({ configFile, portsDir, claudeDir, transcriptDays: 30, platform: process.platform, gh: healthy })
+    watcher = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, tickMs: 100 })
+    await watcher.start()
+    const { events } = collect(watcher)
+    await sleep(600)
+    expect(events).toEqual([])
+  })
 
   test('emits only on change', async () => {
     const repo = copyFixture('chess-web')
