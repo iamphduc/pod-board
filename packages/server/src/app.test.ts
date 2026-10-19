@@ -1,10 +1,10 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Board } from '@pod-board/model'
+import type { AgentTimeline, Board } from '@pod-board/model'
 import type { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { createApp, type BoardSource } from './app.ts'
+import { createApp, type AppDeps, type BoardSource } from './app.ts'
 import { createBoardService } from './board-service.ts'
 import type { GhReader } from './gh.ts'
 import { normalizeRepoPath } from './guard.ts'
@@ -38,11 +38,22 @@ function fakeSource(board: Board = BOARD) {
   return { source, push, subs }
 }
 
-function fakeApp(opts: { pingMs?: number; source?: BoardSource } = {}): Hono {
+const TIMELINE: AgentTimeline = {
+  agentId: 'a1',
+  events: [{ at: 5, tool: 'Read', summary: 'Read src/a.ts', result: 'ok' }],
+  total: 1,
+  tests: { testFiles: 0, runs: 0, failedRuns: 0 },
+}
+
+type TimelineFn = AppDeps['timeline']
+const noTimeline: TimelineFn = async () => undefined
+
+function fakeApp(opts: { pingMs?: number; source?: BoardSource; timeline?: TimelineFn } = {}): Hono {
   return createApp({
     ports: [API, WEB],
     source: opts.source ?? fakeSource().source,
     addRepo: async () => ({ error: 'not a directory' }),
+    timeline: opts.timeline ?? noTimeline,
     ...(opts.pingMs === undefined ? {} : { pingMs: opts.pingMs }),
   })
 }
@@ -126,7 +137,7 @@ describe('add repo route', () => {
     const service = createBoardService({ configFile, portsDir, claudeDir, transcriptDays: 30, platform, gh })
     watcher = createBoardWatcher({ service, configFile, portsDir, claudeDir })
     await watcher.start()
-    app = createApp({ ports: [API, WEB], source: watcher, addRepo: (p) => addRepo(configFile, p, platform) })
+    app = createApp({ ports: [API, WEB], source: watcher, addRepo: (p) => addRepo(configFile, p, platform), timeline: noTimeline })
   })
 
   afterEach(async () => {
@@ -204,9 +215,46 @@ describe('add repo route', () => {
       ports: [API, WEB],
       source: watcher,
       addRepo: () => Promise.reject(new Error('EACCES')),
+      timeline: noTimeline,
     }).request('/api/repos', { method: 'POST', headers: POST_HEADERS, body: JSON.stringify({ path: root }) })
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ error: 'config unwritable' })
+  })
+})
+
+describe('timeline route', () => {
+  const asked: [string, string][] = []
+  const timeline: TimelineFn = async (repoId, agentId) => {
+    asked.push([repoId, agentId])
+    return repoId === 'r1' && agentId === 'a1' ? TIMELINE : undefined
+  }
+  const get = (path: string, headers: Record<string, string> = HOST) => fakeApp({ timeline }).request(path, { headers })
+
+  test('200 with the timeline of a board agent', async () => {
+    const res = await get('/api/agents/r1/a1/timeline')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toMatch(/application\/json/)
+    expect(await res.json()).toEqual(TIMELINE)
+  })
+
+  test('404 for an unknown repo or agent, a bad id, or a gone transcript', async () => {
+    asked.length = 0
+    for (const path of ['/api/agents/nope/a1/timeline', '/api/agents/r1/nope/timeline', '/api/agents/r1/..%2Fx/timeline', `/api/agents/r1/${'x'.repeat(65)}/timeline`]) {
+      const res = await get(path)
+      expect(res.status, path).toBe(404)
+      expect(await res.json(), path).toEqual({ error: 'not found' })
+    }
+    // A bad id never reaches the source.
+    expect(asked).toEqual([
+      ['nope', 'a1'],
+      ['r1', 'nope'],
+    ])
+  })
+
+  test('refuses a foreign Host', async () => {
+    const res = await get('/api/agents/r1/a1/timeline', { host: `evil.example:${API}` })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'forbidden host' })
   })
 })
 
@@ -216,6 +264,7 @@ describe('guard on every route', () => {
     ['GET', '/api/board'],
     ['GET', '/api/events'],
     ['POST', '/api/repos'],
+    ['GET', '/api/agents/r1/a1/timeline'],
     ['GET', '/api/nope'],
   ]
 

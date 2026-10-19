@@ -24,6 +24,7 @@ Every route sits behind `requestGuard`, with the API and web ports allowed.
 - `GET /api/health` → `{ ok: true }`.
 - `GET /api/board` → the latest Board, from memory (no files read per request).
 - `GET /api/events` → server-sent events: `event: board` with the Board JSON at once, then one per change; `: ping` every 15 s. A client that leaves is unsubscribed.
+- `GET /api/agents/:repoId/:agentId/timeline` → `200 AgentTimeline` (`createTimelineSource` in `agent-timeline.ts`). `404 { error: 'not found' }` when the repo isn't on the current Board, the agent id isn't in that repo's `agents`, the id doesn't match `^[A-Za-z0-9_-]{1,64}$`, or the transcript file is gone. The id is only matched against `listAgentFiles` for that repo (same id and session), never used to build a path. The source has its own reader cache (size and mtime), so a polling client doesn't re-read an unchanged file. Why only board agents: the route must not become a way to read any transcript on the machine.
 - `POST /api/repos` with `application/json` (a `charset` is fine) and `{ "path": string }` → `addRepo`, then a rebuild before the `201 { path }`, so every client has the new repo by the time the caller hears back. Errors: other or no content type → `415`; bad JSON or no string `path` → `400 { error: 'bad request' }`; `not absolute`/`not a directory` → `400`; `already registered` → `409`; `config unreadable` → `500`; a failed write → `500 { error: 'config unwritable' }`.
 
 ## Watch out
@@ -35,3 +36,4 @@ Every route sits behind `requestGuard`, with the API and web ports allowed.
 ## History
 
 - 2026-10-18 · server-runs A1: board service, watcher, SSE, and repo routes.
+- 2026-10-19 · board-engineer T1: agent timeline route.
