@@ -194,10 +194,15 @@ describe('board watcher', () => {
       refreshGh: async () => false,
     }
     watcher = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, poll: true, watch: fakeWatch, tickMs: 1e9 })
-    const startup = watcher.start()
-    await vi.advanceTimersByTimeAsync(0)
-    await startup
-    await vi.advanceTimersByTimeAsync(5000)
+    const w = watcher
+    // Fires every timer due within 5 s, then waits out the rebuilds they queued
+    // (each reads real folders), plus one more, counted below.
+    const settle = async () => {
+      await vi.advanceTimersByTimeAsync(5000)
+      await w.rebuild()
+    }
+    await w.start()
+    await settle()
     expect(fakes.length).toBeGreaterThan(0)
     const before = builds
 
@@ -205,8 +210,8 @@ describe('board watcher', () => {
     fakes[0]!.emit('all', 'change', configFile)
     await vi.advanceTimersByTimeAsync(450)
     fakes[0]!.emit('all', 'change', configFile)
-    await vi.advanceTimersByTimeAsync(5000)
-    expect(builds - before).toBe(1)
+    await settle()
+    expect(builds - before - 1).toBe(1)
   })
 
   test('while gh is not ok, each new gh check time reaches clients', async () => {
