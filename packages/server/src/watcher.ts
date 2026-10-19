@@ -1,5 +1,6 @@
 // Keeps the Board current: watches the files it is built from, rebuilds after
-// a short quiet spell, and tells subscribers only when the Board changed.
+// a short quiet spell (or a capped wait while events keep coming), and tells
+// subscribers only when the Board changed.
 // The rules and why are in pod-docs/feature-details/server.md.
 
 import { stat } from 'node:fs/promises'
@@ -11,6 +12,8 @@ import { projectDirName } from './transcript-files.ts'
 
 export const DEBOUNCE_MS = 300
 export const TICK_MS = 30_000
+/** The longest a rebuild waits after the first event of a burst, however often events keep coming. */
+export const MAX_WAIT_MS = 1500
 const POLL_INTERVAL_MS = 500
 
 export type BoardWatcherOptions = {
@@ -21,6 +24,8 @@ export type BoardWatcherOptions = {
   /** Watch by polling (`POD_BOARD_POLL=1`): for network drives and file systems that miss events. */
   poll?: boolean
   debounceMs?: number
+  /** The longest a rebuild waits after the first event of a burst. */
+  maxWaitMs?: number
   tickMs?: number
   /** Opens one folder watch; chokidar's `watch` unless a test passes a fake. */
   watch?: typeof watch
@@ -85,6 +90,7 @@ export function createBoardWatcher(o: BoardWatcherOptions): BoardWatcher {
   // A poller sees a quick burst of writes on up to two ticks, one interval
   // apart; a longer quiet spell keeps that burst to one rebuild.
   const debounceMs = (o.debounceMs ?? DEBOUNCE_MS) + (o.poll === true ? POLL_INTERVAL_MS : 0)
+  const maxWaitMs = o.maxWaitMs ?? MAX_WAIT_MS
   const tickMs = o.tickMs ?? TICK_MS
   const openWatch = o.watch ?? watch
   const onError = o.onError ?? ((err: unknown) => console.error('pod-board watcher:', err))
@@ -96,14 +102,25 @@ export function createBoardWatcher(o: BoardWatcherOptions): BoardWatcher {
   let signature = ''
   let chain: Promise<void> = Promise.resolve()
   let debounce: NodeJS.Timeout | undefined
+  // Set by a burst's first event and never pushed back, so steady events can't starve rebuilds.
+  let maxWait: NodeJS.Timeout | undefined
   let tickTimer: NodeJS.Timeout | undefined
   let ticking = false
   let closed = false
 
+  // Rebuilds once per burst: when it goes quiet, or when its wait hits the cap.
+  // Events after that start a new burst.
+  const fire = () => {
+    clearTimeout(debounce)
+    clearTimeout(maxWait)
+    debounce = maxWait = undefined
+    void rebuild()
+  }
   const schedule = () => {
     if (closed) return
     clearTimeout(debounce)
-    debounce = setTimeout(() => void rebuild(), debounceMs)
+    debounce = setTimeout(fire, debounceMs)
+    maxWait ??= setTimeout(fire, maxWaitMs)
   }
 
   async function rebuildNow(): Promise<void> {
@@ -224,6 +241,7 @@ export function createBoardWatcher(o: BoardWatcherOptions): BoardWatcher {
     async close() {
       closed = true
       clearTimeout(debounce)
+      clearTimeout(maxWait)
       clearTimeout(tickTimer)
       subscribers.clear()
       await chain
