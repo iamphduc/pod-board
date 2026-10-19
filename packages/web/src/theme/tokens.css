@@ -1,6 +1,110 @@
+/*
+ * Design tokens from the plan's ## Look and docs/design/preview.html.
+ * Palette values are the Look's, as written. The --*-ink tokens are for
+ * state text on its soft fill (chips): in dark they equal the base colour;
+ * in light they are the base colour where it reaches 4.5:1 on both its soft
+ * fill and --panel, else the same hue with HSL lightness lowered by the fewest
+ * whole percent that does (accent 0, bad 2, ok 4, warn 4, idle 9), taken to
+ * the nearest 8-bit colour whose hue stays within 1 degree of the base.
+ * Dots, card edges, and fills keep the base colour.
+ */
 :root {
+  color-scheme: light;
+
+  --bg: #f4f5f8;
+  --panel: #ffffff;
+  --panel-2: #eef0f5;
+  --line: #d9dde7;
+  --fg: #161a26;
+  --muted: #5d6478;
+  --accent: #2f55d4;
+  --accent-soft: #e4e9fb;
+  --ok: #1d8a55;
+  --ok-soft: #dff3e8;
+  --warn: #b26a00;
+  --warn-soft: #fbefd9;
+  --bad: #c2373a;
+  --bad-soft: #f9e1e1;
+  --idle: #7a8194;
+  --idle-soft: #eceef3;
+
+  --accent-ink: #2f55d4;
+  --ok-ink: #1a7a4b;
+  --warn-ink: #9e5e00;
+  --bad-ink: #bb3538;
+  --idle-ink: #646b7d;
+
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+
+  /* Type sizes. 1rem = 16px; nothing goes below 12px. */
+  --size-micro: 0.75rem; /* 12px: chips, eyebrows, captions, meta */
+  --size-small: 0.8125rem; /* 13px: buttons, inputs, notes, codes, numbers */
+  --size-dense: 0.875rem; /* 14px: tables, step and card names */
+  --size-body: 1rem; /* 16px: body text */
+  --size-title: 1.125rem; /* 18px: bar titles */
+  --size-h2: 1.375rem; /* 22px */
+  --size-h1: 2.25rem; /* 36px */
+
+  --radius-sm: 7px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
 }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-} }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg: #0f121a;
+    --panel: #171b26;
+    --panel-2: #1e2331;
+    --line: #2c3344;
+    --fg: #e8eaf1;
+    --muted: #9aa1b4;
+    --accent: #7e9bff;
+    --accent-soft: #232c4d;
+    --ok: #4fc58a;
+    --ok-soft: #173326;
+    --warn: #f0ae47;
+    --warn-soft: #3a2c14;
+    --bad: #f07a7c;
+    --bad-soft: #3d1d20;
+    --idle: #8b92a6;
+    --idle-soft: #232836;
+
+    --accent-ink: #7e9bff;
+    --ok-ink: #4fc58a;
+    --warn-ink: #f0ae47;
+    --bad-ink: #f07a7c;
+    --idle-ink: #8b92a6;
+  }
+}
+
 :root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0f121a;
+  --panel: #171b26;
+  --panel-2: #1e2331;
+  --line: #2c3344;
+  --fg: #e8eaf1;
+  --muted: #9aa1b4;
+  --accent: #7e9bff;
+  --accent-soft: #232c4d;
+  --ok: #4fc58a;
+  --ok-soft: #173326;
+  --warn: #f0ae47;
+  --warn-soft: #3a2c14;
+  --bad: #f07a7c;
+  --bad-soft: #3d1d20;
+  --idle: #8b92a6;
+  --idle-soft: #232836;
+
+  --accent-ink: #7e9bff;
+  --ok-ink: #4fc58a;
+  --warn-ink: #f0ae47;
+  --bad-ink: #f07a7c;
+  --idle-ink: #8b92a6;
 }
