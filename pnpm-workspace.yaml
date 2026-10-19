@@ -1,0 +1,6 @@
+packages:
+  - packages/*
+
+# esbuild (used by Vite and tsx) runs a postinstall check for its native binary.
+allowBuilds:
+  esbuild: true
