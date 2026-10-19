@@ -1,6 +1,96 @@
+// The live Board from GET /api/events. Over an injected EventSource factory so
+// tests can drive it. On error it closes the source (EventSource's own retry is
+// too eager and can't be capped), keeps the last Board, reports `lost`, and
+// opens a new one after 1 s, doubling to 30 s at most. The delay resets once a
+// valid Board arrives. Data that isn't a Board is ignored.
+
 import type { Board } from '@pod-board/model'
+
 export type StreamState = 'connecting' | 'live' | 'lost'
-export type StreamSource = { addEventListener(type: string, fn: (ev: { data?: unknown }) => void): void; close(): void }
-export function createBoardStream(_open: () => StreamSource, _onBoard: (b: Board) => void, _onState: (s: StreamState) => void) {
-  return { stop() {} }
+
+/** The part of `EventSource` the stream uses. */
+export type StreamSource = {
+  addEventListener(type: string, fn: (ev: { data?: unknown }) => void): void
+  close(): void
+}
+
+export const FIRST_RETRY_MS = 1000
+export const MAX_RETRY_MS = 30_000
+
+/** A Board-shaped value: enough to render without throwing. */
+function asBoard(data: unknown): Board | undefined {
+  if (typeof data !== 'string') return undefined
+  let v: unknown
+  try {
+    v = JSON.parse(data)
+  } catch {
+    return undefined
+  }
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return undefined
+  const b = v as Partial<Board>
+  if (typeof b.generatedAt !== 'number' || !Array.isArray(b.repos)) return undefined
+  return v as Board
+}
+
+export function createBoardStream(
+  open: () => StreamSource,
+  onBoard: (b: Board) => void,
+  onState: (s: StreamState) => void,
+): { stop(): void } {
+  let state: StreamState | undefined
+  let source: StreamSource | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let delay = FIRST_RETRY_MS
+  let stopped = false
+
+  const setState = (s: StreamState) => {
+    if (s === state) return
+    state = s
+    onState(s)
+  }
+
+  const fail = (from: StreamSource | undefined) => {
+    if (stopped || from !== source || timer !== undefined) return
+    source?.close()
+    source = undefined
+    setState('lost')
+    timer = setTimeout(() => {
+      timer = undefined
+      connect()
+    }, delay)
+    delay = Math.min(delay * 2, MAX_RETRY_MS)
+  }
+
+  const connect = () => {
+    let s: StreamSource
+    try {
+      s = open()
+    } catch {
+      fail(undefined)
+      return
+    }
+    source = s
+    s.addEventListener('board', (ev) => {
+      if (stopped || s !== source) return
+      const board = asBoard(ev.data)
+      if (!board) return
+      delay = FIRST_RETRY_MS
+      setState('live')
+      onBoard(board)
+    })
+    s.addEventListener('error', () => fail(s))
+  }
+
+  setState('connecting')
+  connect()
+
+  return {
+    stop() {
+      stopped = true
+      if (timer !== undefined) clearTimeout(timer)
+      timer = undefined
+      source?.close()
+      source = undefined
+    },
+  }
 }
