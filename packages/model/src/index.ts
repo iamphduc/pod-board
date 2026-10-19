@@ -5,6 +5,7 @@ export const MODEL_PACKAGE = '@pod-board/model'
 
 export * from './run-model.ts'
 export type * from './board.ts'
+export * from './dispatch.ts'
 export * from './transcript.ts'
 export * from './timeline.ts'
 export * from './runs.ts'
