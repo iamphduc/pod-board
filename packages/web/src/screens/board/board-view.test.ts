@@ -108,8 +108,16 @@ describe('card state', () => {
     expect(stateOf(one([{ wave: 1, code: 'C1', pr: 'skipped' }], { queue: [askC1] }), 'C1')).toBe('blocked')
   })
 
-  it('needs-you beats merged (you beats done)', () => {
-    expect(stateOf(one([{ wave: 1, code: 'C1', status: 'done', pr: pr(4) }], { queue: [askC1] }), 'C1')).toBe('needs-you')
+  it('merged beats needs-you (done beats you)', () => {
+    const r = one([{ wave: 1, code: 'C1', status: 'done', pr: pr(4), confidence: 'high' }, { wave: 1, code: 'C2' }], {
+      queue: [askC1, q('PENDING', 'engineer → human', 'sprint: s1 · slice: C2', 'x')],
+    })
+    expect(stateOf(r, 'C1')).toBe('merged')
+    // A done card keeps its merged meta, not the entry's line.
+    expect(card(wb(r), 'C1').meta).toBe('high')
+    // The unfinished card beside it still needs you.
+    expect(stateOf(r, 'C2')).toBe('needs-you')
+    expect(wb(r).counts).toEqual({ 'needs-you': 1, running: 0, waiting: 0, blocked: 0, merged: 1 })
   })
 
   it('merged beats running', () => {
