@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chip contrast</title>
+<style>
+  :root {
+    --bg: #f4f5f8; --panel: #ffffff; --line: #d9dde7; --fg: #161a26; --muted: #5d6478;
+    --mono: ui-monospace, "JetBrains Mono", Consolas, monospace;
+    --sans: "Instrument Sans", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--fg); font: 16px/1.5 var(--sans); }
+  main { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p { margin: 0 0 16px; color: var(--muted); }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .col { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .col h2 { font-size: 16px; margin: 0 0 4px; }
+  .col .sub { font-size: 13px; margin-bottom: 12px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .ratio { font: 13px var(--mono); }
+  .fail { color: #bb3538; font-weight: 600; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font: 500 12px/1 var(--mono); padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
+  .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--dot); }
+  .s-run  { --dot: #2f55d4; background: #e4e9fb; }
+  .s-ok   { --dot: #1d8a55; background: #dff3e8; }
+  .s-you  { --dot: #b26a00; background: #fbefd9; }
+  .s-bad  { --dot: #c2373a; background: #f9e1e1; }
+  .s-idle { --dot: #7a8194; background: #eceef3; }
+  .built .s-run  { color: #2f55d4; } .built .s-ok { color: #1a7a4b; } .built .s-you { color: #9e5e00; } .built .s-bad { color: #bb3538; } .built .s-idle { color: #646b7d; }
+  .preview .s-run { color: #2f55d4; } .preview .s-ok { color: #1d8a55; } .preview .s-you { color: #b26a00; } .preview .s-bad { color: #c2373a; } .preview .s-idle { color: #7a8194; }
+  .note { margin-top: 16px; font-size: 14px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Light-theme chip text</h1>
+  <p>Light theme only; dark already passes. Ratios are chip text on its soft fill (WCAG 2.x; 4.5:1 is the rule). Dots, card edges, and fills keep the Look's colors in both options.</p>
+  <div class="cols">
+    <section class="col built">
+      <h2>A — As built (in use)</h2>
+      <div class="sub">Text uses <code>--*-ink</code>: the same hue, darkened only as much as needed to pass.</div>
+      <div class="row"><span class="chip s-run">running 2</span><span class="ratio">#2f55d4 · 5.15</span></div>
+      <div class="row"><span class="chip s-ok">merged 3</span><span class="ratio">#1a7a4b · 4.61</span></div>
+      <div class="row"><span class="chip s-you">needs you 1</span><span class="ratio">#9e5e00 · 4.55</span></div>
+      <div class="row"><span class="chip s-bad">blocked 0</span><span class="ratio">#bb3538 · 4.59</span></div>
+      <div class="row"><span class="chip s-idle">waiting 1</span><span class="ratio">#646b7d · 4.59</span></div>
+    </section>
+    <section class="col preview">
+      <h2>B — Preview as drawn</h2>
+      <div class="sub">Text uses the base state color, exactly as in <code>docs/design/preview.html</code>.</div>
+      <div class="row"><span class="chip s-run">running 2</span><span class="ratio">#2f55d4 · 5.15</span></div>
+      <div class="row"><span class="chip s-ok">merged 3</span><span class="ratio fail">#1d8a55 · 3.76</span></div>
+      <div class="row"><span class="chip s-you">needs you 1</span><span class="ratio fail">#b26a00 · 3.72</span></div>
+      <div class="row"><span class="chip s-bad">blocked 0</span><span class="ratio fail">#c2373a · 4.33</span></div>
+      <div class="row"><span class="chip s-idle">waiting 1</span><span class="ratio fail">#7a8194 · 3.35</span></div>
+    </section>
+  </div>
+  <p class="note">To choose B: change the light <code>--*-ink</code> values in <code>packages/web/src/theme/tokens.css</code> to the base colors and drop the 4.5:1 check for chips in <code>tokens.test.ts</code>.</p>
+</main>
+</body>
+</html>

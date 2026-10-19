@@ -2,16 +2,16 @@
 
 _From plan: pod-docs/plans/board-read.md · Slug: server-runs · Status: active · Generated: 2026-10-18_
 
-<!-- autopilot-run: started=2026-10-18T21:42:12-07:00 sprints=1 waves=4 -->
+<!-- autopilot-run: started=2026-10-18T21:42:12-07:00 sprints=1 waves=5 -->
 
 ## Status board
 
 | Wave | Slice | Title | Branch | PR | Status | Confidence | Depends on |
 |------|-------|-------|--------|----|--------|------------|------------|
-| 1 | L1 | Look: tokens, self-hosted fonts, both themes, base controls | server-runs-L1 | — | pending | — | — |
-| 1 | M1 | Board types, transcript parser, per-slice detail fields, `currentWave` on done sprints | server-runs-M1 | — | pending | — | — |
-| 1 | G1 | Cached read-only `gh` reader | server-runs-G1 | — | pending | — | — |
-| 1 | D1 | Discovery readers (config, claim files, repo docs, transcript files) and the request guard | server-runs-D1 | — | pending | — | — |
+| 1 | L1 | Look: tokens, self-hosted fonts, both themes, base controls | server-runs-L1 | [#4](https://github.com/iamphduc/pod-board/pull/4) merged | done | medium | — |
+| 1 | M1 | Board types, transcript parser, per-slice detail fields, `currentWave` on done sprints | server-runs-M1 | [#4](https://github.com/iamphduc/pod-board/pull/4) merged | done | high | — |
+| 1 | G1 | Cached read-only `gh` reader | server-runs-G1 | [#4](https://github.com/iamphduc/pod-board/pull/4) merged | done | high | — |
+| 1 | D1 | Discovery readers (config, claim files, repo docs, transcript files) and the request guard | server-runs-D1 | [#4](https://github.com/iamphduc/pod-board/pull/4) merged | done | high | — |
 | 2 | P1 | Runs list and pipeline view model | server-runs-P1 | — | pending | — | M1 |
 | 2 | A1 | Board service, file watcher, SSE, and API routes | server-runs-A1 | — | pending | — | M1, G1, D1 |
 | 3 | S1 | Screen 1: runs list, pipeline, slice log, Add repo, PWA manifest | server-runs-S1 | — | pending | — | L1, P1, A1 |
@@ -54,7 +54,7 @@ G1 declares `PrStatus` and `GhStatus` in `packages/server/src/gh.ts` with exactl
 - `GET /api/events` → `text/event-stream`. On connect: `event: board` with `data:` the Board JSON. After that, the same event each time the Board's JSON changes (at most one per 300 ms debounce). A `: ping` comment every 15 s.
 - `POST /api/repos` with `Content-Type: application/json` and `{ "path": string }` → `201 { path }` (the normalized path); a `board` event follows. Errors: wrong content type → `415`; bad JSON or no string `path` → `400 { error: 'bad request' }`; relative → `400 { error: 'not absolute' }`; missing or not a folder → `400 { error: 'not a directory' }`; already registered → `409 { error: 'already registered' }`; config file unreadable → `500 { error: 'config unreadable' }`.
 
-**Repo identity** (D1): `normalizeRepoPath(p, platform)` resolves, drops trailing separators, and on `win32` uses `\`. Two paths are the same repo when their normalized forms match (case-insensitive on `win32`). `repoId` is the normalized path with every character outside `[A-Za-z0-9]` replaced by `-`, lowercased on `win32`. `name` is the folder's base name.
+**Repo identity** (D1): `normalizeRepoPath(p, platform)` resolves, drops trailing separators, and on `win32` uses `\`. Two paths are the same repo when their normalized forms match, ignoring case when the folder's file system ignores case (`ignoresCase(dir)`, probed per repo; a missing folder falls back to the OS default: win32 and macOS ignore case). `repoId` is the normalized path with every character outside `[A-Za-z0-9]` replaced by `-`, lowercased when the file system ignores case. `sameRepoPath(a, b, platform, ignoresCase)` and `repoId(p, platform, ignoresCase)` take that value (wave 1 fix, PR #5). `name` is the folder's base name.
 
 **Env** (D1 reads, A1 documents in the smoke recipe): `POD_BOARD_CONFIG_DIR` (config folder override), `POD_BOARD_PORTS_DIR` (default `<os temp>/pod-ports`), `POD_BOARD_CLAUDE_DIR` (default `CLAUDE_CONFIG_DIR`, else `~/.claude`), `POD_BOARD_TRANSCRIPT_DAYS` (default 30), `POD_BOARD_POLL=1` (watch by polling).
 
@@ -81,7 +81,7 @@ G1 declares `PrStatus` and `GhStatus` in `packages/server/src/gh.ts` with exactl
 
 ### M1: Board types, transcript parser, per-slice detail fields, `currentWave` on done sprints
 - **Scope:** Add `board.ts` with the contract's types and `transcript.ts` with `parseAgentTranscript({ id, session, meta, jsonl }): AgentRun | undefined`, `agentState`, and `STALE_MS`. Parser rules: `undefined` when `meta` isn't JSON or `agentType` doesn't start with `pod:`; `type` and `description` (cut to 80 characters) from meta; dispatch fields from `parseDispatch` of the first `user` record's prompt (string content, or its first text block); `startedAt`/`lastAt` from the first and last valid `timestamp`; `tokens` is `turnTokens` summed once per `message.id`; `model` from the last assistant record; `ended` when any `tool_use` is named `SubagentHandback` or the last assistant record's `stop_reason` is `end_turn`. A bad JSON line, a partial last line, or a record missing fields is skipped, never a throw. Test transcripts are built inline in the shape the contract describes (no new fixtures); during the slice, run the parser over a few real local transcripts and name what you saw in the report. In `run-model.ts`: `SliceModel` gains `model?: string`, `filesOwned: string[]`, `oneWayDoor?: string` from the sprint doc's `### <code>: <title>` section (exact code match): `**Model:**` → first word, lowercased; `**Files owned:**` → backticked paths in order without `(new)`, else comma-split; `**One-way door:**` → the text, absent when it starts with the word `none`; no section → absent or `[]`. Apply the contract's `currentWave` rule. Export `board.ts` and `transcript.ts` from `index.ts`. Update `pod-docs/feature-details/run-model.md` (new fields, `currentWave`, transcript rules). Don't edit the pod-flow copy.
-- **Files owned:** `packages/model/src/board.ts` (new), `packages/model/src/transcript.ts` (new), `packages/model/src/transcript.test.ts` (new), `packages/model/src/run-model.ts`, `packages/model/src/run-model.test.ts`, `packages/model/test/fixtures.test.ts`, `packages/model/src/index.ts`, `pod-docs/feature-details/run-model.md`
+- **Files owned:** `packages/model/src/board.ts` (new), `packages/model/src/transcript.ts` (new), `packages/model/src/transcript.test.ts` (new), `packages/model/src/run-model.ts`, `packages/model/src/run-model.test.ts`, `packages/model/test/fixtures.test.ts`, `packages/model/src/index.ts`, `pod-docs/feature-details/run-model.md`, `packages/model/fixtures/chess-web/pod-docs/sprints/ladder.md`, `packages/model/fixtures/README.md` (added by the orchestrator: the per-slice detail criterion needs the fixture's `### <code>:` sections, and no other wave-1 slice owns them)
 - **Success criteria:**
   - `[test] an engineer transcript gives type, description, sprint, slice, branch, model, startedAt, lastAt — packages/model/src/transcript.test.ts › reads an engineer transcript`
   - `[test] records repeating one message.id count its usage once; cache reads are left out — packages/model/src/transcript.test.ts › tokens count each message once`
