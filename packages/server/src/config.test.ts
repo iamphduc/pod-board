@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { listenConfig, portFromEnv } from './config.ts'
+import { configPath, listenConfig, portFromEnv } from './config.ts'
 
 describe('listenConfig', () => {
   test('binds 127.0.0.1 with the env port', () => {
@@ -34,5 +34,45 @@ describe('portFromEnv', () => {
     expect(() => portFromEnv({ POD_BOARD_WEB_PORT: 'x' }, 'POD_BOARD_WEB_PORT', 3001)).toThrowError(
       /POD_BOARD_WEB_PORT/,
     )
+  })
+})
+
+describe('configPath per OS', () => {
+  test('POD_BOARD_CONFIG_DIR wins on every OS', () => {
+    expect(configPath({ POD_BOARD_CONFIG_DIR: 'D:\\cfg', APPDATA: 'C:\\A' }, 'win32', 'C:\\Users\\me')).toBe(
+      'D:\\cfg\\config.json',
+    )
+    expect(configPath({ POD_BOARD_CONFIG_DIR: '/tmp/cfg' }, 'darwin', '/Users/me')).toBe('/tmp/cfg/config.json')
+    expect(configPath({ POD_BOARD_CONFIG_DIR: '/tmp/cfg', XDG_CONFIG_HOME: '/x' }, 'linux', '/home/me')).toBe(
+      '/tmp/cfg/config.json',
+    )
+  })
+
+  test('win32 uses APPDATA, else the home Roaming folder', () => {
+    expect(configPath({ APPDATA: 'C:\\Users\\me\\AppData\\Roaming' }, 'win32', 'C:\\Users\\me')).toBe(
+      'C:\\Users\\me\\AppData\\Roaming\\pod-board\\config.json',
+    )
+    expect(configPath({}, 'win32', 'C:\\Users\\me')).toBe('C:\\Users\\me\\AppData\\Roaming\\pod-board\\config.json')
+  })
+
+  test('darwin uses Application Support', () => {
+    expect(configPath({ XDG_CONFIG_HOME: '/x' }, 'darwin', '/Users/me')).toBe(
+      '/Users/me/Library/Application Support/pod-board/config.json',
+    )
+  })
+
+  test('linux uses XDG_CONFIG_HOME, else ~/.config', () => {
+    expect(configPath({ XDG_CONFIG_HOME: '/x/cfg' }, 'linux', '/home/me')).toBe('/x/cfg/pod-board/config.json')
+    expect(configPath({}, 'linux', '/home/me')).toBe('/home/me/.config/pod-board/config.json')
+    expect(configPath({}, 'freebsd', '/home/me')).toBe('/home/me/.config/pod-board/config.json')
+  })
+
+  test('empty values count as unset; a relative XDG_CONFIG_HOME is ignored', () => {
+    expect(configPath({ POD_BOARD_CONFIG_DIR: '', APPDATA: '' }, 'win32', 'C:\\Users\\me')).toBe(
+      'C:\\Users\\me\\AppData\\Roaming\\pod-board\\config.json',
+    )
+    expect(configPath({ XDG_CONFIG_HOME: '' }, 'linux', '/home/me')).toBe('/home/me/.config/pod-board/config.json')
+    // The XDG spec says a relative value is invalid and must be ignored.
+    expect(configPath({ XDG_CONFIG_HOME: 'cfg' }, 'linux', '/home/me')).toBe('/home/me/.config/pod-board/config.json')
   })
 })
