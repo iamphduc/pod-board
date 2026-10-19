@@ -70,4 +70,16 @@ describe('theme boot', () => {
       })),
     ).toEqual([])
   })
+
+  it('paints the stored theme before the app CSS loads', () => {
+    // In dev, Vite injects the CSS from the module script, so until then the browser's own
+    // canvas shows. color-scheme follows data-theme (and the system) so a Dark pick paints dark.
+    const head = html.slice(0, html.indexOf('</head>'))
+    expect(head).toMatch(/<meta\s+name="color-scheme"\s+content="light dark"\s*\/?>/)
+    const style = [...head.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]!).join('\n')
+    expect(style).toMatch(/:root\[data-theme="dark"\]\s*\{\s*color-scheme:\s*dark;?\s*\}/)
+    expect(style).toMatch(/:root\[data-theme="light"\]\s*\{\s*color-scheme:\s*light;?\s*\}/)
+    // No colours outside the theme files.
+    expect(style).not.toMatch(/#[0-9a-f]{3,8}\b|rgb|hsl/i)
+  })
 })
