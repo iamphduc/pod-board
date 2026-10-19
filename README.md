@@ -42,6 +42,41 @@ $env:POD_BOARD_API_PORT = '3010'; $env:POD_BOARD_WEB_PORT = '3011'; pnpm dev
 A port must be an integer from 1 to 65535, or the server stops with an error
 that names the variable.
 
+## Add repos
+
+The board shows every repo you register, plus every repo with a live pod run
+(pod writes a claim file per run). To register one, send its absolute path:
+
+```sh
+curl -s -X POST http://127.0.0.1:3000/api/repos   -H "Origin: http://127.0.0.1:3000" -H "Content-Type: application/json"   -d '{"path":"/home/you/code/my-repo"}'
+```
+
+The list lives in the board's own config file, the only file it writes:
+`%APPDATA%\pod-board\config.json` on Windows,
+`~/Library/Application Support/pod-board/config.json` on macOS, and
+`$XDG_CONFIG_HOME/pod-board/config.json` (or `~/.config/pod-board/config.json`)
+elsewhere. It never writes inside a repo.
+
+See the board as JSON at `http://127.0.0.1:3000/api/board`, and live updates
+at `http://127.0.0.1:3000/api/events`.
+
+## Settings
+
+All optional, set as environment variables:
+
+| Variable | What it does | Default |
+|---|---|---|
+| `POD_BOARD_API_PORT`, `POD_BOARD_WEB_PORT` | Ports of the two servers | `3000`, `3001` |
+| `POD_BOARD_CONFIG_DIR` | Folder for `config.json` | per OS, as above |
+| `POD_BOARD_PORTS_DIR` | Where pod writes its run claims | `<temp>/pod-ports` |
+| `POD_BOARD_CLAUDE_DIR` | Claude's folder, for agent transcripts (read only) | `CLAUDE_CONFIG_DIR`, else `~/.claude` |
+| `POD_BOARD_TRANSCRIPT_DAYS` | How many days of sessions to read | `30` |
+| `POD_BOARD_POLL` | `1` watches files by polling, for network drives | off |
+
+The board only accepts requests to `127.0.0.1` or `localhost` on its two
+ports; any other `Host` gets a 403, and so does a write from another site's
+page (`Origin`).
+
 ## Verify
 
 ```sh
@@ -54,5 +89,5 @@ runs the same command on Windows, macOS, and Linux.
 ## Layout
 
 - `packages/model`: pod docs parsers and the run model. Pure functions, no I/O.
-- `packages/server`: Hono API server.
+- `packages/server`: Hono API server: finds repos, watches their files, and serves the board.
 - `packages/web`: React and Vite web app.
