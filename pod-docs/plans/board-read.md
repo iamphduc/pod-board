@@ -48,7 +48,7 @@ This plan is the first of several in a row; see the phases in [docs/master-plan.
 
 | Sprint | Goal | Status | Depends on |
 |--------|------|--------|------------|
-| bootstrap-model | pnpm workspace, CI on three OSes, the pod-flow parsers copied and tested on scrubbed real-run fixtures, the run model (repo → plan → sprints → waves → slices, queue entries, PRs), and the docs-version check | planned | — |
+| bootstrap-model | pnpm workspace, CI on three OSes, the pod-flow parsers copied and tested on scrubbed real-run fixtures, the run model (repo → plan → sprints → waves → slices, queue entries, PRs), and the docs-version check | active | — |
 | server-runs | Run discovery (registered repos plus claim files), file watcher, transcript reader, cached `gh` reader, server-sent events, and screen 1 (runs list and pipeline) in both themes at 375 px, with the PWA manifest | planned | bootstrap-model |
 | board-engineer | Screen 2 (wave board with dependency lines, critical path, filters) and screen 3 (engineer view with tool summaries only), plus the empty and error states | planned | server-runs |
 
