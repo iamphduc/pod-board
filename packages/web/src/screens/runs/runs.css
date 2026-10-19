@@ -49,6 +49,7 @@
 
 .side-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -57,6 +58,7 @@
 .brand {
   font: 700 var(--size-title) / 1.1 var(--display);
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .runs {
