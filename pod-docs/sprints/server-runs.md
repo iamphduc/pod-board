@@ -12,8 +12,8 @@ _From plan: pod-docs/plans/board-read.md · Slug: server-runs · Status: active 
 | 1 | M1 | Board types, transcript parser, per-slice detail fields, `currentWave` on done sprints | server-runs-M1 | [#4](https://github.com/iamphduc/pod-board/pull/4) merged | done | high | — |
 | 1 | G1 | Cached read-only `gh` reader | server-runs-G1 | [#4](https://github.com/iamphduc/pod-board/pull/4) merged | done | high | — |
 | 1 | D1 | Discovery readers (config, claim files, repo docs, transcript files) and the request guard | server-runs-D1 | [#4](https://github.com/iamphduc/pod-board/pull/4) merged | done | high | — |
-| 2 | P1 | Runs list and pipeline view model | server-runs-P1 | — | pending | — | M1 |
-| 2 | A1 | Board service, file watcher, SSE, and API routes | server-runs-A1 | — | pending | — | M1, G1, D1 |
+| 2 | P1 | Runs list and pipeline view model | server-runs-P1 | — | pushed | medium | M1 |
+| 2 | A1 | Board service, file watcher, SSE, and API routes | server-runs-A1 | — | pushed | medium | M1, G1, D1 |
 | 3 | S1 | Screen 1: runs list, pipeline, slice log, Add repo, PWA manifest | server-runs-S1 | — | pending | — | L1, P1, A1 |
 
 ## Shared contract
