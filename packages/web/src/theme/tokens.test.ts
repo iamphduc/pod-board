@@ -13,7 +13,8 @@ const stripComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, '')
 function blockAfter(css: string, selector: string): string {
   const at = css.indexOf(selector)
   if (at < 0) throw new Error(`selector not found: ${selector}`)
-  const open = css.indexOf('{', at + selector.length)
+  // A selector written with its own `{` opens there; otherwise the next `{` does.
+  const open = selector.endsWith('{') ? at + selector.length - 1 : css.indexOf('{', at + selector.length)
   let depth = 0
   for (let i = open; i < css.length; i++) {
     if (css[i] === '{') depth++
