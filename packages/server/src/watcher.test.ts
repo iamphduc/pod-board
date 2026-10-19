@@ -180,7 +180,9 @@ describe('board watcher', () => {
     await watcher.rebuild()
     expect(watcher.board()).toBe(first)
     expect(events).toEqual([])
-    expect(errors).toHaveLength(1)
+    // The start-up gh tick may rebuild (and fail) too.
+    expect(errors.length).toBeGreaterThanOrEqual(1)
+    expect(errors.every((e) => e instanceof Error && e.message === 'boom')).toBe(true)
   })
 
   test('the gh timer refreshes gh and rebuilds', async () => {
