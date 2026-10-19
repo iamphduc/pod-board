@@ -8,8 +8,8 @@ _From plan: pod-docs/plans/board-read.md · Slug: board-engineer · Status: acti
 
 | Wave | Slice | Title | Branch | PR | Status | Confidence | Depends on |
 |------|-------|-------|--------|----|--------|------------|------------|
-| 1 | T1 | Tool timeline parser and the timeline route | board-engineer-T1 | — | pending | — | — |
-| 1 | W1 | Screen 2: wave board, dependency lines, critical path, filters, routes | board-engineer-W1 | — | pending | — | — |
+| 1 | T1 | Tool timeline parser and the timeline route | board-engineer-T1 | — | pushed | medium | — |
+| 1 | W1 | Screen 2: wave board, dependency lines, critical path, filters, routes | board-engineer-W1 | — | pushed | high | — |
 | 2 | E1 | Screen 3: engineer view with a live tool timeline | board-engineer-E1 | — | pending | — | T1, W1 |
 | 2 | X1 | Empty and error states: config, `gh`, unsupported docs, no runs; theme boot | board-engineer-X1 | — | pending | — | W1 |
 
