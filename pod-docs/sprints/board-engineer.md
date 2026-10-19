@@ -10,8 +10,8 @@ _From plan: pod-docs/plans/board-read.md · Slug: board-engineer · Status: acti
 |------|-------|-------|--------|----|--------|------------|------------|
 | 1 | T1 | Tool timeline parser and the timeline route | board-engineer-T1 | [#10](https://github.com/iamphduc/pod-board/pull/10) merged | done | medium | — |
 | 1 | W1 | Screen 2: wave board, dependency lines, critical path, filters, routes | board-engineer-W1 | [#10](https://github.com/iamphduc/pod-board/pull/10) merged | done | high | — |
-| 2 | E1 | Screen 3: engineer view with a live tool timeline | board-engineer-E1 | — | pending | — | T1, W1 |
-| 2 | X1 | Empty and error states: config, `gh`, unsupported docs, no runs; theme boot | board-engineer-X1 | — | pending | — | W1 |
+| 2 | E1 | Screen 3: engineer view with a live tool timeline | board-engineer-E1 | — | pushed | high | T1, W1 |
+| 2 | X1 | Empty and error states: config, `gh`, unsupported docs, no runs; theme boot | board-engineer-X1 | — | pushed | medium | W1 |
 
 ## Shared contract
 
