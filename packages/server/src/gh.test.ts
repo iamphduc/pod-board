@@ -19,27 +19,39 @@ const run = (conclusion: string | null, status = 'COMPLETED') => ({
 const ctx = (state: string) => ({ __typename: 'StatusContext', context: 'ci', state })
 
 /** A fake `gh`: records every call; answers auth and pr view from mutable settings. */
-function fakeGh() {
+type FakeGh = {
+  calls: Call[]
+  auth: ExecResult['status']
+  prs: Map<number, ExecResult>
+  hold: boolean
+  waiting: (() => void)[]
+  release(): void
+  prViews(): number
+  authCalls(): number
+  exec: GhExec
+}
+
+function fakeGh(): FakeGh {
   const calls: Call[] = []
-  const gh = {
+  const gh: FakeGh = {
     calls,
-    auth: 'ok' as ExecResult['status'],
+    auth: 'ok',
     prs: new Map<number, ExecResult>(),
     /** When set, pr view calls wait until `release()` is called. */
     hold: false,
-    waiting: [] as (() => void)[],
+    waiting: [],
     release() {
       for (const w of gh.waiting.splice(0)) w()
     },
     prViews: () => calls.filter((c) => c.args[0] === 'pr').length,
     authCalls: () => calls.filter((c) => c.args[0] === 'auth').length,
-    exec: (async (args, cwd) => {
+    exec: async (args, cwd) => {
       calls.push({ args, cwd })
       if (args[0] === 'auth') return { status: gh.auth, stdout: '' }
       if (gh.hold) await new Promise<void>((r) => gh.waiting.push(r))
       const n = Number(args[2])
       return gh.prs.get(n) ?? { status: 'failed', stdout: '' }
-    }) as GhExec,
+    },
   }
   return gh
 }
