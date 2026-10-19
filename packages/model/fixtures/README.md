@@ -20,6 +20,7 @@ chess-web is taken at `18990f3` ("wave 2 merged (#77), start wave 3") instead of
 Only the lines the parsers read are kept, each unchanged:
 
 - Plans and sprint docs: the `# ` title, italic header lines (`_From plan: … · Status: …_`), the `<!-- autopilot-run: … -->` line, `Port base:` lines, `## ` headings, every table row, and the **Slice log** lines of `## Sprint summary`.
+- chess-web's `ladder.md` also keeps, under `## Per-slice detail`, each `### <code>: <title>` heading and its `- **Files owned:**` line (with the indented lines under it), `- **One-way door:**` line, and `- **Model:**` line. The other sprint docs don't have them yet.
 - `pod-docs/README.md`: the title and the `pod docs:` line.
 - Handoff queues: the title, `## ` headings, and every entry line (`` - `[date · TYPE · from → to …]` … ``).
 
