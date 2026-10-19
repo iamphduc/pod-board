@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RunSummary } from '@pod-board/model'
-import { barTitle, emptyMessage, groupChip, rowFigures, runChip, streamChip } from './view.ts'
+import { barTitle, emptyMessage, groupChip, rowFigures, runChip, streamChip, titleParts } from './view.ts'
 
 const run = (over: Partial<RunSummary>): RunSummary => ({ repoId: 'r', repo: 'chess-web', where: 'x', state: 'idle', ...over })
 
@@ -47,5 +47,39 @@ describe('screen 1 view helpers', () => {
     expect(emptyMessage(run({ state: 'unsupported' }))).toMatch(/update pod/i)
     expect(emptyMessage(run({ state: 'error', where: 'repo folder not found' }))).toMatch(/repo folder not found/)
     expect(emptyMessage(run({ state: 'running', plan: 'p' }))).toMatch(/can.t find plan p/i)
+  })
+
+  it('title parts turn backticked spans into code and keep the rest as text', () => {
+    expect(titleParts('Port the pod-flow parsers and their tests into `model`')).toEqual([
+      { text: 'Port the pod-flow parsers and their tests into ', code: false },
+      { text: 'model', code: true },
+    ])
+    expect(titleParts('Fix `currentWave` on done sprints')).toEqual([
+      { text: 'Fix ', code: false },
+      { text: 'currentWave', code: true },
+      { text: ' on done sprints', code: false },
+    ])
+    expect(titleParts('`a` and `b`')).toEqual([
+      { text: 'a', code: true },
+      { text: ' and ', code: false },
+      { text: 'b', code: true },
+    ])
+    expect(titleParts('plain title')).toEqual([{ text: 'plain title', code: false }])
+    expect(titleParts('')).toEqual([])
+  })
+
+  it('title parts leave unmatched backticks as text', () => {
+    expect(titleParts('one ` tick')).toEqual([{ text: 'one ` tick', code: false }])
+    expect(titleParts('`a` then `b')).toEqual([
+      { text: 'a', code: true },
+      { text: ' then `b', code: false },
+    ])
+    // A run only closes on a run of the same length, so ``x`` holds a backtick inside.
+    expect(titleParts('run ``a ` b`` now')).toEqual([
+      { text: 'run ', code: false },
+      { text: 'a ` b', code: true },
+      { text: ' now', code: false },
+    ])
+    expect(titleParts('`` alone')).toEqual([{ text: '`` alone', code: false }])
   })
 })

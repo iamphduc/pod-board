@@ -82,6 +82,26 @@ function collect(w: BoardWatcher) {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+/**
+ * Wraps a service to note when each build starts, so a test can wait until the
+ * watcher has gone `ms` without starting one. In poll mode a write can be seen
+ * up to one poll interval late, and its rebuild follows a debounce after that.
+ */
+function tracked(s: BoardService) {
+  let last = Date.now()
+  const svc: BoardService = {
+    build: () => {
+      last = Date.now()
+      return s.build()
+    },
+    refreshGh: s.refreshGh,
+  }
+  const quiet = async (ms: number) => {
+    while (Date.now() - last < ms) await sleep(ms - (Date.now() - last))
+  }
+  return { service: svc, quiet }
+}
+
 const t1Status = (b: Board) =>
   b.repos[0]?.model.plans
     .find((p) => p.slug === 'sparring-ladder')
@@ -100,7 +120,8 @@ describe('board watcher', () => {
     test(`changes reach clients within 5 seconds${poll ? ' (polling)' : ''}`, async () => {
       const repo = copyFixture('chess-web')
       await register(repo)
-      watcher = createBoardWatcher({ service: service(), configFile, portsDir, claudeDir, poll })
+      const { service: svc, quiet } = tracked(service())
+      watcher = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, poll })
       const first = await watcher.start()
       expect(t1Status(first)).toBe('pending')
       const { events, next } = collect(watcher)
@@ -111,8 +132,11 @@ describe('board watcher', () => {
       expect(Date.now() - started).toBeLessThan(5000)
       expect(watcher.board()).toBe(got)
 
-      // Three quick edits give one event, carrying the last one.
-      await sleep(800)
+      // Three quick edits give one event, carrying the last one. First let the
+      // watcher finish with the edit above: the start-up rebuild can catch it
+      // before the poller does, and the poller's late rebuild must not land
+      // in the middle of the three edits.
+      await quiet(poll ? 1500 : 800)
       const before = events.length
       await setT1(repo, 'blocked')
       await setT1(repo, 'pending')
@@ -120,7 +144,7 @@ describe('board watcher', () => {
       await next((b) => t1Status(b) === 'done', 5000)
       await sleep(poll ? 2500 : 1000)
       expect(events.length - before).toBe(1)
-    })
+    }, 15_000) // The 5 s bound is checked above; the whole test, with its waits, takes longer.
   }
 
   test('emits only on change', async () => {

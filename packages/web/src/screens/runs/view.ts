@@ -58,3 +58,38 @@ export function emptyMessage(r: RunSummary): string {
   if (r.plan === undefined) return 'No active plan in this repo. A plan shows here once pod starts one.'
   return `Can't find plan ${r.plan} in this repo's pod docs.`
 }
+
+export type TitlePart = { text: string; code: boolean }
+
+/**
+ * A doc title split into plain text and Markdown code spans, for rendering as
+ * text and inline code. A backtick run closes only on a run of the same
+ * length; one with no match stays as text.
+ */
+export function titleParts(text: string): TitlePart[] {
+  const parts: TitlePart[] = []
+  const push = (t: string, code: boolean) => {
+    if (t === '') return
+    const last = parts.at(-1)
+    if (last && !last.code && !code) last.text += t
+    else parts.push({ text: t, code })
+  }
+  const runs = /`+/g
+  let at = 0
+  let open: RegExpExecArray | null
+  while ((open = runs.exec(text)) !== null) {
+    const fence = open[0]
+    let close: RegExpExecArray | null
+    while ((close = runs.exec(text)) !== null && close[0].length !== fence.length);
+    if (close === null) {
+      // No closing run: this one is text; look for spans after it.
+      runs.lastIndex = open.index + fence.length
+      continue
+    }
+    push(text.slice(at, open.index), false)
+    push(text.slice(open.index + fence.length, close.index), true)
+    at = close.index + close[0].length
+  }
+  push(text.slice(at), false)
+  return parts
+}
