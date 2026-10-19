@@ -208,7 +208,7 @@ describe('buildRepoModel', () => {
 
   it('a board with no Depends on column gives dependsOn []', () => {
     const doc = [
-      '_From plan: pod-docs/plans/alpha.md · Slug: one_',
+      '_From plan: pod-docs/plans/alpha.md · Slug: one · Status: active_',
       '',
       '| Wave | Slice | Title | Branch | PR | Status |',
       '|---|---|---|---|---|---|',
@@ -353,7 +353,7 @@ describe('buildRepoModel', () => {
       'pod-docs/plans/no-body.md': '# Plan: No body\n\n| Sprint | Goal | Status |\n|---|---|---|\n',
       'pod-docs/plans/thin.md': '# Plan: Thin\n\n| Sprint |\n|---|\n| thin-one |\n| |\n',
       'pod-docs/sprints/thin-one.md': [
-        '_From plan: pod-docs/plans/thin.md · Slug: thin-one_',
+        '_From plan: pod-docs/plans/thin.md · Slug: thin-one · Status: active_',
         '| Wave | Slice |',
         '|---|---|',
         '| x | A1 |',

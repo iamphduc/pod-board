@@ -42,6 +42,9 @@ The browser loads the web app from the Vite dev server, which proxies `/api` to 
 - `pod-docs/plans/board-read.md` — phase 1 goal, scope, look, and key decisions.
 - `docs/master-plan.md` — the phases beyond this plan.
 - `docs/design/preview.html` — the approved design.
+- `pod-docs/feature-details/run-model.md` — how `buildRepoModel` reads a repo's pod docs into plans, sprints, waves, slices, and the queue, and why.
+- `packages/model/src/pod-flow/README.md` — where the ported pod-flow parsers came from; the copy stays unchanged, new behavior goes in new modules.
+- `packages/model/fixtures/README.md` — the scrubbed real-run fixtures: source repos, snapshot date, and what was cut.
 
 ## Smoke recipe
 

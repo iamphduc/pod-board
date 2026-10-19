@@ -1,3 +1,8 @@
-// Public entry of @pod-board/model. The run model and its parsers land here
-// in later slices; nothing under src/ may do I/O (see test/no-io.test.ts).
+// Public entry of @pod-board/model: the run model, the format readers, and the
+// ported pod-flow parsers. Nothing under src/ may do I/O (see test/no-io.test.ts).
 export const MODEL_PACKAGE = '@pod-board/model'
+
+export * from './run-model.ts'
+export * from './formats.ts'
+export * from './pod-flow/model.ts'
+export type * from './pod-flow/types.ts'
