@@ -34,15 +34,32 @@ It builds on the ported pod-flow parsers (`packages/model/src/pod-flow/`, kept a
 - **No text kept.** Only the fields above leave the parser; transcript text, tool input, and tool output never do.
 - **State.** `agentState(a, now)`: `ended` → `'ended'`; else `now - lastAt < STALE_MS` (30 minutes) → `'running'`; else, or with no `lastAt`, `'stale'`. A `lastAt` ahead of `now` (clock skew) reads as running.
 
+## Tool timeline
+
+`parseAgentTimeline({ agentId, jsonl, roots })` in `packages/model/src/timeline.ts` turns one agent's transcript into an `AgentTimeline`: one event per tool call and the agent's test progress. The server passes `roots: [repo.path]`. It never throws.
+
+- **No text leaves it.** A summary is built only from the tool name, file paths, and fixed words. Assistant text, thinking, prompts, tool output, command arguments, search patterns, edit contents, and URLs beyond the host never do. Why: transcripts can hold secrets, and the board serves the timeline to a browser.
+- **Events.** One per `tool_use` block in `assistant` records, deduped by `tool_use.id`, because a block repeats over a message's streamed records (a block with no id counts each time). `at` is the record's timestamp; a block in a record with no valid timestamp is skipped. `result` comes from the first `tool_result` with that `tool_use_id` that comes after the call: `is_error: true` → `failed`, else `ok`; none yet → absent. Events sort oldest first (file order on a tie) and the newest 300 are kept; `total` counts all.
+- **Tool name.** Kept when it matches `^[\w:.-]{1,64}$`, else `tool`.
+- **Paths** (`file_path`, `notebook_path`, `path`): `\` → `/`; after `/.claude/worktrees/<name>/` → the rest; else after a root (any case, on a `/` boundary) → the rest; else the base name. Over 60 characters → `…` and the last 59.
+- **Summaries.** Read, Edit, Write, MultiEdit, NotebookEdit → `<Tool> <path>`. Grep, Glob → `<Tool>`, plus ` in <path>`. Task, Agent → `<Tool>: <subagent_type>`; Skill → `Skill: <skill>` (when it matches `^[\w:.-]{1,40}$`, else the tool name). WebFetch → `WebFetch <hostname>` (only `^[a-z0-9.-]+$`). SubagentHandback → `Hand-back`. Anything else → its name.
+- **Shell** (Bash, PowerShell): `<Tool>: ` plus up to 3 segments joined by ` · ` (then ` …`). The command splits on `&&`, `||`, `;`, `|`, and newlines; tokens holding `=` are skipped; the program is the first token's base name without `.exe`, shown only when it's a known program (else `command`). Only programs that take subcommands show one: the first of that program's own subcommands among the next four tokens. Those programs are the package managers (pnpm, npm, yarn, bun), deno, cargo, go, git, gh, agent-browser, vitest, vite, and corepack, each with its own fixed list in `SUBCOMMANDS`. So `pnpm --filter x test` → `pnpm test`, `git -C test status` → `git status`, and `echo test`, `grep -r test src`, `ls test`, `cat test.md` → just the program. Why: a word after `echo` or `grep` is an argument, not a subcommand.
+- **Runners and scripts.** After a package manager's `exec` or `dlx`, and after `npx` or `bunx`, the first token that isn't a flag is the program it runs; its base name shows when it's a known program (`pnpm exec vitest`, `npx jest`, `npx tsc`), else nothing more (`npx cowsay test` → `npx`). After a package manager's `run`, the first token that isn't a flag shows when it's one of the fixed script names (`test`, `build`, `dev`, `verify`, `typecheck`, `lint`, `start`, `vitest`): `npm run test`. Quoted arguments, and any word not on these fixed lists, never show.
+- **Tests.** A test run is a shell event with a segment that runs `vitest` or `jest` (as the program, or after `exec`, `dlx`, `npx`, or `bunx`), or whose subcommand is `test`, `verify`, or `vitest` on a package manager, deno, cargo, or go, or whose script after `run` is one of those. Why: counting the test runner after `exec` or `npx` is the safest reading of test progress; git, gh, and every other program never run tests. `runs`, `failedRuns`, and `last` count finished runs only (those with a result). `testFiles` counts distinct edited paths (Write, Edit, MultiEdit) matching `.test.` or `.spec.` before a JS or TS extension, or under `__tests__/`. `testFirst` is absent with no test-file edit; else `true` unless a code file (not a test file, not `.md`, `.json`, `.yaml`, `.yml`, `.lock`) was edited first.
+
 ## Watch out
 
 - Of the fixtures, only chess-web's `ladder.md` keeps its `### ` slice sections. Other fixture sprint docs read with no `model` and `filesOwned: []`.
 
 - The ported `parseSprint` reads `Slug:` with `[\w-]+`, which takes `_`. A header that ends right after the slug (`· Slug: ladder_`) reads as `ladder_`. Real docs always have `· Status:` after it, so it hasn't bitten yet.
 - `parsePlan` defaults a missing plan status to `active` and a missing sprint-row status to `planned`.
+- A program not in `SUBCOMMANDS` never shows a subcommand and never counts as a test run. Add a program there (with its own list) before expecting its runs to count; a new word on any list must be safe to show.
+- Scripts with other names don't count as test runs: `pnpm run test:unit` reads as `pnpm run`, and `npm run my-tests` too. A runner given a flag with a separate value (`npx -p pkg vitest`) reads `pkg` as the program, so it isn't counted. `node node_modules/vitest/vitest.mjs` reads as `node`.
 - Tests under `packages/model/src/` must build `RepoFiles` and transcripts inline (the no-I/O test scans that folder). Tests that read fixtures go in `packages/model/test/fixtures.test.ts`.
 
 ## History
 
 - 2026-10-18 — added in sprint bootstrap-model (slice R1).
 - 2026-10-18 — sprint server-runs (slice M1): board types, transcript parser and `agentState`, per-slice `model`, `filesOwned`, `oneWayDoor`, and no `currentWave` on a done sprint.
+- 2026-10-19 — sprint board-engineer (slice T1): tool timeline parser and test progress.
+- 2026-10-19 — sprint board-engineer (wave 1 fix): subcommands only after programs that take them, so `echo test` and `grep … test` aren't test runs; test runners after `exec`, `dlx`, `npx`, `bunx`, and test scripts after `run`, count.

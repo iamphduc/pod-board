@@ -1,5 +1,6 @@
 import { homedir, tmpdir } from 'node:os'
 import { serve } from '@hono/node-server'
+import { createTimelineSource } from './agent-timeline.ts'
 import { createApp } from './app.ts'
 import { createBoardService } from './board-service.ts'
 import { portsDir } from './claims.ts'
@@ -36,6 +37,7 @@ const app = createApp({
   ports: [listen.port, webPort],
   source: watcher,
   addRepo: (p) => addRepo(configFile, p, platform),
+  timeline: createTimelineSource({ board: () => watcher.board(), ...settings, now: Date.now }).timeline,
 })
 
 const server = serve({ fetch: app.fetch, hostname: listen.hostname, port: listen.port }, () => {

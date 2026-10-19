@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { listRuns, type Board } from '@pod-board/model'
+import { listRuns, type Board, type RunSummary } from '@pod-board/model'
 import { createBoardStream, healthProbe, type StreamState } from './board-stream.ts'
+import { boardSlices } from './screens/board/board-view.ts'
 import { RunsScreen } from './screens/runs/RunsScreen.tsx'
 import { resolveSelection, startClock } from './selection.ts'
 
@@ -30,7 +31,9 @@ export function App() {
   }, [])
 
   const runs = useMemo(() => (board ? listRuns(board, now) : []), [board, now])
-  const selection = resolveSelection(runs, hash)
+  const slicesOf = (run: RunSummary) =>
+    run.plan === undefined ? [] : boardSlices(board?.repos.find((r) => r.id === run.repoId), run.plan, now)
+  const selection = resolveSelection(runs, hash, slicesOf)
 
   useEffect(() => {
     if (!board || selection.hash === undefined || selection.hash === hash) return
@@ -38,5 +41,7 @@ export function App() {
     setHash(selection.hash)
   }, [board, selection.hash, hash])
 
-  return <RunsScreen board={board} stream={stream} runs={runs} selected={selection.run} now={now} />
+  return (
+    <RunsScreen board={board} stream={stream} runs={runs} selected={selection.run} view={selection.view} slice={selection.slice} now={now} />
+  )
 }

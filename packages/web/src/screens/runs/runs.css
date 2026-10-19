@@ -185,6 +185,31 @@
   color: var(--accent-ink);
 }
 
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: -6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  padding: 8px 12px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  font: 600 var(--size-small) / 1 var(--body);
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.tab:hover {
+  color: var(--fg);
+}
+
+.tab[aria-current="page"] {
+  color: var(--accent-ink);
+  border-bottom-color: var(--accent);
+}
+
 .lost {
   padding: 8px 12px;
   border-radius: var(--radius-sm);

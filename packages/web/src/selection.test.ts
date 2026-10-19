@@ -29,7 +29,7 @@ describe('selected run', () => {
   })
 
   it('no runs gives none', () => {
-    expect(resolveSelection([], '#/e--projects-a/alpha')).toEqual({ run: undefined, hash: undefined })
+    expect(resolveSelection([], '#/e--projects-a/alpha')).toEqual({ run: undefined, view: 'pipeline', slice: undefined, hash: undefined })
   })
 
   it('when the selected run vanishes, the selection moves to the first and the hash follows', () => {
@@ -41,9 +41,83 @@ describe('selected run', () => {
   })
 
   it('hashFor and parseHash round-trip, plan or no plan', () => {
-    for (const r of runs) expect(parseHash(hashFor(r))).toEqual({ repoId: r.repoId, plan: r.plan })
+    for (const r of runs) expect(parseHash(hashFor(r))).toEqual({ repoId: r.repoId, plan: r.plan, view: 'pipeline' })
     expect(hashFor(run('a b', 'p/q'))).toBe('#/a%20b/p%2Fq')
-    expect(parseHash('#/a%20b/p%2Fq')).toEqual({ repoId: 'a b', plan: 'p/q' })
+    expect(parseHash('#/a%20b/p%2Fq')).toEqual({ repoId: 'a b', plan: 'p/q', view: 'pipeline' })
+  })
+})
+
+describe('routes', () => {
+  const slicesOf = (r: RunSummary) => (r.plan === 'alpha' ? ['L1', 'H 1'] : [])
+
+  it('every hash form parses', () => {
+    expect(parseHash('#/r')).toEqual({ repoId: 'r', view: 'pipeline' })
+    expect(parseHash('#/r/p')).toEqual({ repoId: 'r', plan: 'p', view: 'pipeline' })
+    expect(parseHash('#/r/p/board')).toEqual({ repoId: 'r', plan: 'p', view: 'board' })
+    expect(parseHash('#/r/p/board/L1')).toEqual({ repoId: 'r', plan: 'p', view: 'board', slice: 'L1' })
+    expect(parseHash('#/r/p/board/H%201')).toEqual({ repoId: 'r', plan: 'p', view: 'board', slice: 'H 1' })
+    for (const bad of ['#/r/p/pipeline', '#/r/p/board/L1/x', '#/r/p/x/L1', '#/r/p/board/', '#/r//board', '#/r/p/board/%E0%A4%A']) {
+      expect(parseHash(bad), bad).toBeUndefined()
+    }
+  })
+
+  it('a plan slug "board" is a plan in the two-segment form', () => {
+    expect(parseHash('#/r/board')).toEqual({ repoId: 'r', plan: 'board', view: 'pipeline' })
+    const own = [run('r', 'board')]
+    expect(resolveSelection(own, '#/r/board')).toMatchObject({ run: own[0], view: 'pipeline', hash: '#/r/board' })
+    expect(resolveSelection(own, '#/r/board/board')).toMatchObject({ run: own[0], view: 'board', hash: '#/r/board/board' })
+  })
+
+  it('the board hash picks the board view, and a slice on the board opens it', () => {
+    expect(resolveSelection(runs, '#/e--projects-a/alpha/board', slicesOf)).toEqual({
+      run: runs[0],
+      view: 'board',
+      slice: undefined,
+      hash: '#/e--projects-a/alpha/board',
+    })
+    expect(resolveSelection(runs, '#/e--projects-a/alpha/board/H%201', slicesOf)).toEqual({
+      run: runs[0],
+      view: 'board',
+      slice: 'H 1',
+      hash: '#/e--projects-a/alpha/board/H%201',
+    })
+  })
+
+  it('a code not on the shown board is dropped, and the hash follows', () => {
+    expect(resolveSelection(runs, '#/e--projects-a/alpha/board/Z9', slicesOf)).toMatchObject({
+      view: 'board',
+      slice: undefined,
+      hash: '#/e--projects-a/alpha/board',
+    })
+    expect(resolveSelection(runs, '#/e--projects-a/beta/board/L1', slicesOf)).toMatchObject({
+      run: runs[1],
+      slice: undefined,
+      hash: '#/e--projects-a/beta/board',
+    })
+  })
+
+  it('a plan-less run never gets the board view', () => {
+    expect(hashFor(runs[2]!, 'board', 'L1')).toBe('#/e--projects-b')
+    // `#/e--projects-b/board` names plan "board", which repo b doesn't have.
+    expect(resolveSelection(runs, '#/e--projects-b/board').run).toBe(runs[0])
+    expect(resolveSelection(runs, '#/e--projects-b/board').view).toBe('pipeline')
+  })
+
+  it('a hash naming no run gives the first run’s pipeline', () => {
+    expect(resolveSelection(runs, '#/nope/alpha/board/L1', slicesOf)).toEqual({
+      run: runs[0],
+      view: 'pipeline',
+      slice: undefined,
+      hash: '#/e--projects-a/alpha',
+    })
+  })
+
+  it('hashFor builds each form, encoded', () => {
+    expect(hashFor(runs[0]!)).toBe('#/e--projects-a/alpha')
+    expect(hashFor(runs[0]!, 'pipeline', 'L1')).toBe('#/e--projects-a/alpha')
+    expect(hashFor(runs[0]!, 'board')).toBe('#/e--projects-a/alpha/board')
+    expect(hashFor(run('a b', 'p/q'), 'board', 'C/1')).toBe('#/a%20b/p%2Fq/board/C%2F1')
+    expect(parseHash('#/a%20b/p%2Fq/board/C%2F1')).toEqual({ repoId: 'a b', plan: 'p/q', view: 'board', slice: 'C/1' })
   })
 })
 
