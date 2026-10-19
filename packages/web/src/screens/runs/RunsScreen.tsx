@@ -1,5 +1,7 @@
 import { activeRuns, buildPipeline, type Board, type RunSummary } from '@pod-board/model'
 import type { StreamState } from '../../board-stream.ts'
+import { hashFor, type View } from '../../selection.ts'
+import { BoardScreen } from '../board/BoardScreen.tsx'
 import { AddRepoForm } from './AddRepoForm.tsx'
 import { Chip } from './Chip.tsx'
 import { Pipeline } from './Pipeline.tsx'
@@ -14,12 +16,20 @@ type Props = {
   stream: StreamState
   runs: RunSummary[]
   selected: RunSummary | undefined
+  view: View
+  slice: string | undefined
   now: number
 }
 
-export function RunsScreen({ board, stream, runs, selected, now }: Props) {
+const VIEWS: { view: View; label: string }[] = [
+  { view: 'pipeline', label: 'Pipeline' },
+  { view: 'board', label: 'Wave board' },
+]
+
+export function RunsScreen({ board, stream, runs, selected, view, slice, now }: Props) {
   const repo = selected && board?.repos.find((r) => r.id === selected.repoId)
   const pipeline = repo && selected?.plan !== undefined ? buildPipeline(repo, selected.plan, now) : undefined
+  const tabs = selected?.plan !== undefined && pipeline !== undefined
   return (
     <div className="screen">
       <aside className="side">
@@ -37,6 +47,15 @@ export function RunsScreen({ board, stream, runs, selected, now }: Props) {
           {selected?.portBase !== undefined && <span className="mono note">ports {selected.portBase}</span>}
           <ThemeControl />
         </div>
+        {tabs && selected && (
+          <nav className="tabs" aria-label="Views">
+            {VIEWS.map((v) => (
+              <a key={v.view} className="tab" href={hashFor(selected, v.view)} aria-current={view === v.view ? 'page' : undefined}>
+                {v.label}
+              </a>
+            ))}
+          </nav>
+        )}
         {stream === 'lost' && (
           <p className="note lost" role="status">
             Lost the connection to the server. Showing the last board; retrying.
@@ -49,6 +68,8 @@ export function RunsScreen({ board, stream, runs, selected, now }: Props) {
             <h2>No repos yet</h2>
             <p className="muted">Add a repo's folder with the Add a repo form to see its pod runs.</p>
           </div>
+        ) : pipeline && repo && view === 'board' && selected.plan !== undefined ? (
+          <BoardScreen repo={repo} plan={selected.plan} {...(slice === undefined ? {} : { slice })} now={now} />
         ) : pipeline ? (
           <>
             <Pipeline pipeline={pipeline} />
