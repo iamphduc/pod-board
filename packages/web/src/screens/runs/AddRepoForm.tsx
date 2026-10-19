@@ -23,7 +23,7 @@ export function AddRepoForm() {
           type="text"
           autoComplete="off"
           spellCheck={false}
-          placeholder="Folder path, like E:\Projects\app"
+          placeholder="Full folder path"
           value={state.input}
           readOnly={state.sending}
           aria-invalid={state.error ? 'true' : undefined}

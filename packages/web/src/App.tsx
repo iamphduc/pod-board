@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { listRuns, type Board } from '@pod-board/model'
-import { createBoardStream, type StreamState } from './board-stream.ts'
+import { createBoardStream, healthProbe, type StreamState } from './board-stream.ts'
 import { RunsScreen } from './screens/runs/RunsScreen.tsx'
 import { resolveSelection, startClock } from './selection.ts'
 
@@ -18,6 +18,7 @@ export function App() {
         setNow(Date.now())
       },
       setStream,
+      { probe: () => healthProbe() },
     )
     return () => s.stop()
   }, [])

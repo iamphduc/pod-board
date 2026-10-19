@@ -2,7 +2,8 @@
 // tests can drive it. On error it closes the source (EventSource's own retry is
 // too eager and can't be capped), keeps the last Board, reports `lost`, and
 // opens a new one after 1 s, doubling to 30 s at most. The delay resets once a
-// valid Board arrives. Data that isn't a Board is ignored.
+// valid Board arrives. Data that isn't a Board is ignored. With a `probe`, a
+// failed health check while a stream is open counts as an error too.
 
 import type { Board } from '@pod-board/model'
 
@@ -17,6 +18,18 @@ export type StreamSource = {
 export const FIRST_RETRY_MS = 1000
 export const MAX_RETRY_MS = 30_000
 export const PROBE_EVERY_MS = 5000
+
+export type StreamOptions = {
+  /** Resolves true while the server is up. Checked every `probeEveryMs` while a stream is open. */
+  probe?: () => Promise<boolean>
+  probeEveryMs?: number
+}
+
+/** GET /api/health through the same origin as the stream. */
+export async function healthProbe(fetchFn: typeof fetch = fetch): Promise<boolean> {
+  const res = await fetchFn('/api/health', { cache: 'no-store' })
+  return res.ok
+}
 
 /** A Board-shaped value: enough to render without throwing. */
 function asBoard(data: unknown): Board | undefined {
@@ -37,7 +50,10 @@ export function createBoardStream(
   open: () => StreamSource,
   onBoard: (b: Board) => void,
   onState: (s: StreamState) => void,
+  options: StreamOptions = {},
 ): { stop(): void } {
+  const { probe, probeEveryMs = PROBE_EVERY_MS } = options
+  let probing = false
   let state: StreamState | undefined
   let source: StreamSource | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -82,12 +98,33 @@ export function createBoardStream(
     s.addEventListener('error', () => fail(s))
   }
 
+  // A proxy (Vite's, in dev) can hold the stream open after the server dies, and
+  // the server's `: ping` comments never reach page code, so ask for health.
+  const probeTimer = probe
+    ? setInterval(() => {
+        const s = source
+        if (stopped || !s || probing) return
+        probing = true
+        probe()
+          .then(
+            (ok) => {
+              if (!ok) fail(s)
+            },
+            () => fail(s),
+          )
+          .finally(() => {
+            probing = false
+          })
+      }, probeEveryMs)
+    : undefined
+
   setState('connecting')
   connect()
 
   return {
     stop() {
       stopped = true
+      if (probeTimer !== undefined) clearInterval(probeTimer)
       if (timer !== undefined) clearTimeout(timer)
       timer = undefined
       source?.close()

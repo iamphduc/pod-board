@@ -201,6 +201,7 @@
 
 .pipe-frame,
 .log-frame {
+  position: relative;
   overflow-x: auto;
   min-width: 0;
 }
@@ -216,11 +217,11 @@
 }
 
 .stage {
-  flex: 1;
+  flex: 1 1 0;
   display: grid;
   gap: 6px;
   align-content: start;
-  min-width: 0;
+  min-width: 136px;
 }
 
 .stage .cap {
@@ -237,6 +238,7 @@
 }
 
 .step {
+  position: relative;
   display: grid;
   gap: 3px;
   padding: 9px 10px;
@@ -392,5 +394,51 @@
 
   .run-list {
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+}
+
+/* Phone: each log row stacks its figures under its title, so states stay in view. */
+
+@media (max-width: 560px) {
+  .slice-log {
+    min-width: 0;
+  }
+
+  .slice-log tbody,
+  .slice-log tr,
+  .slice-log th,
+  .slice-log td {
+    display: block;
+  }
+
+  .slice-log tr {
+    padding: 7px 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .slice-log tr.grp {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-top: 0;
+    padding-top: 14px;
+  }
+
+  .slice-log th,
+  .slice-log td,
+  .slice-log tr.grp th,
+  .slice-log tr.grp td {
+    padding: 0;
+    border-top: 0;
+  }
+
+  .slice-log td:last-child {
+    text-align: left;
+    white-space: normal;
+  }
+
+  .slice-log tr:not(.grp) td:last-child:not(:empty) {
+    margin-top: 4px;
   }
 }
