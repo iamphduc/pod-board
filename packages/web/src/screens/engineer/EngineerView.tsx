@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AgentRun, BoardRepo } from '@pod-board/model'
 import { createTimelineLoader, fetchJsonVia, type TimelineState } from '../../timeline-loader.ts'
 import { cardChip, type Card } from '../board/board-view.ts'
@@ -30,14 +30,6 @@ export function EngineerView({ repo, card, agent, now }: Props) {
   const timeline = state.kind === 'ready' || state.kind === 'loading' || state.kind === 'error' ? state.timeline : undefined
   const details = engineerDetails(card.slice, agent, now, timeline?.tests)
   const view = timeline ? timelineRows(timeline) : undefined
-
-  // Keep the newest row in sight while the reader is at the bottom of the log.
-  const logRef = useRef<HTMLOListElement>(null)
-  const atBottom = useRef(true)
-  useLayoutEffect(() => {
-    const el = logRef.current
-    if (el && atBottom.current) el.scrollTop = el.scrollHeight
-  }, [view?.rows.length])
 
   return (
     <div className="frame ev" aria-label={`Engineer for ${card.code}`} role="region">
@@ -80,25 +72,22 @@ export function EngineerView({ repo, card, agent, now }: Props) {
             {view.rows.length === 0 ? (
               <p className="muted ev-note">No tool calls yet.</p>
             ) : (
-              <ol
-                className="ev-log"
-                ref={logRef}
-                tabIndex={0}
-                aria-label="Tool calls, oldest first"
-                onScroll={(e) => {
-                  const el = e.currentTarget
-                  atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8
-                }}
-              >
-                {view.earlier && <li className="ev-earlier">{view.earlier}</li>}
-                {view.rows.map((r) => (
-                  <li key={r.key}>
-                    <b>{r.time}</b>
-                    <span className="ev-sum">{r.summary}</span>
-                    {r.result && <span className={`ev-res ${r.result.cls}`}>{r.result.label}</span>}
-                  </li>
-                ))}
-              </ol>
+              // The box scrolls from its bottom (column-reverse), so the newest row stays in sight.
+              <div className="ev-scroll" tabIndex={0} role="group" aria-label="Tool calls, oldest first">
+                <ol className="ev-log">
+                  {view.earlier && <li className="ev-earlier">{view.earlier}</li>}
+                  {view.rows.map((r) => (
+                    <li key={r.key}>
+                      <b>{r.time}</b>
+                      <span className="ev-sum">
+                        {r.summary}
+                        {r.result && ' '}
+                        {r.result && <span className={`ev-res ${r.result.cls}`}>{r.result.label}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
             )}
           </>
         )}
