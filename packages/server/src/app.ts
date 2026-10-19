@@ -1,6 +1,7 @@
-import type { Board } from '@pod-board/model'
+import type { AgentTimeline, Board } from '@pod-board/model'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
+import { AGENT_ID } from './agent-timeline.ts'
 import { requestGuard } from './guard.ts'
 import type { AddRepoError } from './repos-config.ts'
 
@@ -18,6 +19,8 @@ export type AppDeps = {
   ports: readonly number[]
   source: BoardSource
   addRepo: (path: string) => Promise<{ path: string } | { error: AddRepoError }>
+  /** One board agent's tool timeline; undefined when it isn't on the Board or its file is gone. */
+  timeline: (repoId: string, agentId: string) => Promise<AgentTimeline | undefined>
   pingMs?: number
 }
 
@@ -59,6 +62,12 @@ export function createApp(deps: AppDeps): Hono {
       })
     }),
   )
+
+  app.get('/api/agents/:repoId/:agentId/timeline', async (c) => {
+    const { repoId, agentId } = c.req.param()
+    const timeline = AGENT_ID.test(agentId) ? await deps.timeline(repoId, agentId) : undefined
+    return timeline ? c.json(timeline) : c.json({ error: 'not found' }, 404)
+  })
 
   app.post('/api/repos', async (c) => {
     const type = (c.req.header('content-type') ?? '').split(';')[0]!.trim().toLowerCase()
