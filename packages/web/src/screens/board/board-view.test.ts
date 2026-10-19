@@ -125,7 +125,7 @@ describe('card state', () => {
 
   it('needs-you only from an entry naming this slice, with this sprint or none', () => {
     const rows = [{ wave: 1, code: 'C1' }]
-    expect(stateOf(one(rows, { queue: [q('PENDING', 'engineer → human', 'slice: C1', 'x')] }), 'C1')).toBe('needs-you')
+    expect(stateOf(one(rows, { queue: [q('PENDING', 'engineer → human', 'plan: alpha · slice: C1', 'x')] }), 'C1')).toBe('needs-you')
     expect(stateOf(one(rows, { queue: [q('PENDING', 'engineer → human', 'sprint: s1 · slice: C2', 'x')] }), 'C1')).toBe('waiting')
     expect(stateOf(one(rows, { queue: [q('PENDING', 'engineer → human', 'sprint: s1 · slice: C1', 'x', false)] }), 'C1')).toBe('waiting')
     expect(stateOf(one(rows, { queue: [q('NOTE', 'engineer → orchestrator', 'sprint: s1 · slice: C1', 'x')] }), 'C1')).toBe('waiting')
@@ -240,22 +240,22 @@ describe('card meta', () => {
       q('NOTE', 'engineer → orchestrator', 'sprint: s1 · slice: A1', 'not for you'),
     ]
     expect(card(wb(one([{ wave: 1, code: 'A1' }], { queue })), 'A1').meta).toBe('PENDING: keep undo after reload?')
-    const cut = card(wb(one([{ wave: 1, code: 'A1' }], { queue: [q('PENDING', 'engineer → human', 'slice: A1', long)] })), 'A1').meta
+    const cut = card(wb(one([{ wave: 1, code: 'A1' }], { queue: [q('PENDING', 'engineer → human', 'plan: alpha · slice: A1', long)] })), 'A1').meta
     expect(cut).toBe(`PENDING: ${'x'.repeat(50)}…`)
     expect(cut).toHaveLength(60)
     const exact = 'y'.repeat(51)
-    expect(card(wb(one([{ wave: 1, code: 'A1' }], { queue: [q('PENDING', 'engineer → human', 'slice: A1', exact)] })), 'A1').meta).toBe(`PENDING: ${exact}`)
+    expect(card(wb(one([{ wave: 1, code: 'A1' }], { queue: [q('PENDING', 'engineer → human', 'plan: alpha · slice: A1', exact)] })), 'A1').meta).toBe(`PENDING: ${exact}`)
   })
 
   it('blocked → the latest pending BLOCKED entry naming it, else its status', () => {
     const queue = [
       q('BLOCKED', 'engineer → orchestrator', 'sprint: s1 · slice: A1', 'tests fail on main'),
       q('BLOCKED', 'engineer → orchestrator', 'sprint: s1 · slice: A1', 'old', false),
-      q('BLOCKED', 'engineer → orchestrator', 'slice: A2', 'another slice'),
+      q('BLOCKED', 'engineer → orchestrator', 'plan: alpha · slice: A2', 'another slice'),
     ]
     expect(card(wb(one([{ wave: 1, code: 'A1', status: 'blocked' }], { queue })), 'A1').meta).toBe('BLOCKED: tests fail on main')
     expect(card(wb(one([{ wave: 1, code: 'A1', status: 'skipped' }])), 'A1').meta).toBe('status skipped')
-    const cut = card(wb(one([{ wave: 1, code: 'A1', status: 'blocked' }], { queue: [q('BLOCKED', 'engineer → orchestrator', 'slice: A1', long)] })), 'A1').meta
+    const cut = card(wb(one([{ wave: 1, code: 'A1', status: 'blocked' }], { queue: [q('BLOCKED', 'engineer → orchestrator', 'plan: alpha · slice: A1', long)] })), 'A1').meta
     expect(cut).toHaveLength(60)
     expect(cut.endsWith('…')).toBe(true)
   })
