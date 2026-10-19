@@ -11,6 +11,8 @@ import { projectDirName } from './transcript-files.ts'
 
 export const DEBOUNCE_MS = 300
 export const TICK_MS = 30_000
+/** The longest a rebuild waits after the first event of a burst, however often events keep coming. */
+export const MAX_WAIT_MS = 1500
 const POLL_INTERVAL_MS = 500
 
 export type BoardWatcherOptions = {
