@@ -58,3 +58,10 @@ export function emptyMessage(r: RunSummary): string {
   if (r.plan === undefined) return 'No active plan in this repo. A plan shows here once pod starts one.'
   return `Can't find plan ${r.plan} in this repo's pod docs.`
 }
+
+export type TitlePart = { text: string; code: boolean }
+
+/** Stub: filled in by the next commit. */
+export function titleParts(text: string): TitlePart[] {
+  return text === '' ? [] : [{ text, code: false }]
+}
