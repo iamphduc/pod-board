@@ -103,6 +103,29 @@ describe('run model on real-run fixtures', () => {
     expect(rework?.queue.every((e) => e.plan === 'feed-ux-rework' || (!e.plan && e.sprint !== undefined))).toBe(true)
   })
 
+  test('chess-web per-slice detail', () => {
+    const repo = buildRepoModel(loadFixture('chess-web'))
+    const ladder = repo.plans.find((p) => p.slug === 'sparring-ladder')?.sprints[0]
+    const slices = Object.fromEntries((ladder?.waves ?? []).flatMap((w) => w.slices).map((s) => [s.code, s]))
+    expect(Object.keys(slices)).toEqual(['L1', 'H1', 'C1', 'U1', 'M1', 'T1'])
+    for (const s of Object.values(slices)) {
+      expect(s.model, s.code).toBe('opus')
+      expect(s, s.code).not.toHaveProperty('oneWayDoor')
+      expect(s.filesOwned.length, s.code).toBeGreaterThan(0)
+      expect(s.filesOwned.some((f) => f.includes('(new)') || f.includes('`')), s.code).toBe(false)
+    }
+    expect(slices.L1?.filesOwned).toEqual(['src/styles/liem.css', 'src/index.css', 'tests/ladder-look.test.ts'])
+    // Sub-bullets under Files owned, in order, labels dropped.
+    expect(slices.M1?.filesOwned).toEqual([
+      'scripts/calibrate/calibrate.ts',
+      'scripts/calibrate/measure.ts',
+      'scripts/calibrate/accuracy.ts',
+      'scripts/calibrate/__tests__/measure.test.ts',
+      'scripts/calibrate/__tests__/cli.test.ts',
+    ])
+    expect(slices.H1?.filesOwned).toHaveLength(11)
+  })
+
   test('old layout repos are unsupported', () => {
     for (const name of ['speak-out', 'skyscraper-view']) {
       expect(buildRepoModel(loadFixture(name)), name).toEqual({

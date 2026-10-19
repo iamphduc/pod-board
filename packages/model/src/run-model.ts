@@ -19,6 +19,12 @@ export type SliceModel = {
   confidence: string
   pr: PrRef
   dependsOn: string[]
+  /** From the slice's `**Model:**` line: its first word, lowercased. */
+  model?: string
+  /** From the slice's `**Files owned:**` field, in order, without `(new)`. */
+  filesOwned: string[]
+  /** From the slice's `**One-way door:**` line; absent when it says none. */
+  oneWayDoor?: string
 }
 
 export type WaveModel = { wave: number; slices: SliceModel[] }
@@ -162,7 +168,8 @@ function buildSprint(row: PlanRow | undefined, file: SprintFile | undefined): Sp
     isArchived: file?.doc.isArchived ?? false,
     waves: file ? buildWaves(file) : [],
   }
-  const open = file?.doc.rows.filter((r) => !isDone(r)).map((r) => r.wave) ?? []
+  // A done sprint has no current wave, even with a blocked or skipped slice left on its board.
+  const open = sprint.status === 'done' ? [] : (file?.doc.rows.filter((r) => !isDone(r)).map((r) => r.wave) ?? [])
   if (open.length > 0) sprint.currentWave = Math.min(...open)
   return sprint
 }
@@ -184,13 +191,13 @@ function buildWaves({ doc, md }: SprintFile): WaveModel[] {
   doc.rows.forEach((row, i) => {
     const cell = depsAt < 0 ? '' : (rows[i]?.[depsAt] ?? '')
     const slices = waves.get(row.wave) ?? []
-    slices.push(buildSlice(row, cell))
+    slices.push(buildSlice(row, cell, sliceDetail(md, row.slice)))
     waves.set(row.wave, slices)
   })
   return [...waves].sort(([a], [b]) => a - b).map(([wave, slices]) => ({ wave, slices }))
 }
 
-function buildSlice(row: Row, depsCell: string): SliceModel {
+function buildSlice(row: Row, depsCell: string, detail: SliceDetail): SliceModel {
   return {
     code: row.slice,
     title: row.title,
@@ -199,5 +206,58 @@ function buildSlice(row: Row, depsCell: string): SliceModel {
     confidence: row.confidence,
     pr: prRef(row.pr, row.status),
     dependsOn: sliceDeps(depsCell),
+    ...detail,
   }
 }
+
+type SliceDetail = Pick<SliceModel, 'model' | 'filesOwned' | 'oneWayDoor'>
+
+/**
+ * The slice's fields from its `### <code>: <title>` section (exact code match; the first such section),
+ * which runs to the next `##` or `###` heading. No section → no model or door, and no files.
+ */
+export function sliceDetail(md: string, code: string): SliceDetail {
+  const lines = md.split(/\r?\n/)
+  const start = lines.findIndex((line) => {
+    const heading = /^###\s+([^:]+):/.exec(line)
+    return heading?.[1]?.trim() === code
+  })
+  if (start < 0) return { filesOwned: [] }
+  const end = lines.findIndex((line, i) => i > start && /^#{2,3}\s/.test(line))
+  const section = lines.slice(start + 1, end < 0 ? undefined : end)
+
+  const detail: SliceDetail = { filesOwned: filesOwned(field(section, 'Files owned')) }
+  const model = field(section, 'Model')?.split(/\s+/)[0]?.replace(/[.,;:]+$/, '').toLowerCase()
+  if (model) detail.model = model
+  const door = field(section, 'One-way door')?.trim()
+  if (door && !/^none\b/i.test(door)) detail.oneWayDoor = door
+  return detail
+}
+
+/**
+ * A `- **<name>:** …` field of a slice section: its text, then the text of the deeper lines under it.
+ * Only a top-level bullet counts, so `**Model:**` inside another field's text isn't the field.
+ */
+function field(section: string[], name: string): string | undefined {
+  const label = `- **${name}:**`
+  const at = section.findIndex((line) => line.startsWith(label))
+  const first = section[at]
+  if (first === undefined) return undefined
+  const text = [first.slice(label.length).trim()]
+  for (const line of section.slice(at + 1)) {
+    if (!/^\s+\S/.test(line)) break
+    text.push(line.trim())
+  }
+  return text.filter((t) => t !== '').join('\n')
+}
+
+/** Backticked paths in order; with none, the text split on commas. `(new)` and bullet labels drop out. */
+function filesOwned(text: string | undefined): string[] {
+  if (!text) return []
+  const ticked = [...text.matchAll(/`([^`]+)`/g)].map((m) => cleanPath(m[1] ?? ''))
+  const paths = ticked.length > 0 ? ticked : text.replace(/^-\s*\*\*[^*]+:\*\*/gm, ',').split(/[,\n]/).map(cleanPath)
+  // A dash alone names no file.
+  return paths.filter((p) => p !== '' && !/^[-—–]+$/.test(p))
+}
+
+const cleanPath = (p: string) => p.replace(/\(new\)/gi, '').trim()

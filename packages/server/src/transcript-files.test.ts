@@ -1,0 +1,181 @@
+import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import {
+  claudeDir,
+  createAgentFileReader,
+  listAgentFiles,
+  projectDirName,
+  readAgentFile,
+  retainAgentFiles,
+  transcriptDays,
+} from './transcript-files.ts'
+
+const DAY = 24 * 60 * 60 * 1000
+
+describe('transcript settings', () => {
+  test('claudeDir: POD_BOARD_CLAUDE_DIR, else CLAUDE_CONFIG_DIR, else ~/.claude', () => {
+    expect(claudeDir({ POD_BOARD_CLAUDE_DIR: '/a', CLAUDE_CONFIG_DIR: '/b' }, '/home/me')).toBe('/a')
+    expect(claudeDir({ CLAUDE_CONFIG_DIR: '/b' }, '/home/me')).toBe('/b')
+    expect(claudeDir({ POD_BOARD_CLAUDE_DIR: '', CLAUDE_CONFIG_DIR: '' }, 'home')).toBe(join('home', '.claude'))
+    expect(claudeDir({}, 'home')).toBe(join('home', '.claude'))
+  })
+
+  test('transcriptDays: POD_BOARD_TRANSCRIPT_DAYS, default 30, bad values throw', () => {
+    expect(transcriptDays({})).toBe(30)
+    expect(transcriptDays({ POD_BOARD_TRANSCRIPT_DAYS: '' })).toBe(30)
+    expect(transcriptDays({ POD_BOARD_TRANSCRIPT_DAYS: '7' })).toBe(7)
+    for (const bad of ['0', '-1', 'abc', '1.5', ' 7', '1e3']) {
+      expect(() => transcriptDays({ POD_BOARD_TRANSCRIPT_DAYS: bad }), bad).toThrowError(/POD_BOARD_TRANSCRIPT_DAYS/)
+    }
+  })
+})
+
+describe('finds agent transcripts', () => {
+  let claude: string
+  const repoPath = 'E:\\Projects\\chess-web'
+  const now = Date.UTC(2026, 9, 18, 12)
+
+  beforeEach(async () => {
+    claude = await mkdtemp(join(tmpdir(), 'pod-board-d1-claude-'))
+  })
+  afterEach(async () => {
+    await rm(claude, { recursive: true, force: true })
+  })
+
+  const projectDir = () => join(claude, 'projects', 'E--Projects-chess-web')
+
+  /** Makes `<session>/subagents/` with the given files and dates both folders `changedAt`. */
+  async function session(name: string, changedAt: number, files: Record<string, string>): Promise<void> {
+    const sub = join(projectDir(), name, 'subagents')
+    await mkdir(sub, { recursive: true })
+    for (const [file, text] of Object.entries(files)) await writeFile(join(sub, file), text)
+    const t = new Date(changedAt)
+    await utimes(sub, t, t)
+    await utimes(join(projectDir(), name), t, t)
+  }
+
+  test('projectDirName maps a Windows and a POSIX path', () => {
+    expect(projectDirName('E:\\Projects\\chess-web')).toBe('E--Projects-chess-web')
+    expect(projectDirName('E:/Projects/chess-web')).toBe('E--Projects-chess-web')
+    expect(projectDirName('/home/me/my repo.v2')).toBe('-home-me-my-repo-v2')
+  })
+
+  test('missing folders give []', async () => {
+    expect(await listAgentFiles(join(claude, 'nope'), repoPath, 30, now)).toEqual([])
+    expect(await listAgentFiles(claude, repoPath, 30, now)).toEqual([])
+    await mkdir(join(projectDir(), 's-empty'), { recursive: true })
+    expect(await listAgentFiles(claude, repoPath, 30, now)).toEqual([])
+  })
+
+  test('lists agents of sessions changed within the window, sorted', async () => {
+    await session('s-new', now - DAY, {
+      'agent-b2.jsonl': '{}\n',
+      'agent-b2.meta.json': '{"agentType":"pod:engineer"}',
+      'agent-a1.jsonl': '{}\n',
+      'agent-a1.meta.json': '{}',
+      'agent-c3.jsonl': '{}\n', // no meta file
+      'agent-d4.meta.json': '{}', // no transcript
+      'notes.txt': 'x',
+      'agent-.jsonl': '{}',
+    })
+    await session('s-edge', now - 29.9 * DAY, { 'agent-e5.jsonl': '{}\n' })
+    await session('s-old', now - 30.1 * DAY, { 'agent-o1.jsonl': '{}\n', 'agent-o1.meta.json': '{}' })
+    // The session folder is old but a new agent was added to subagents/ today.
+    await session('s-mixed', now - 40 * DAY, { 'agent-m1.jsonl': '{}\n' })
+    await utimes(join(projectDir(), 's-mixed', 'subagents'), new Date(now - DAY), new Date(now - DAY))
+    // Another project's sessions are never listed.
+    await mkdir(join(claude, 'projects', 'E--Projects-other', 's-x', 'subagents'), { recursive: true })
+    await writeFile(join(claude, 'projects', 'E--Projects-other', 's-x', 'subagents', 'agent-x.jsonl'), '{}')
+
+    const found = await listAgentFiles(claude, repoPath, 30, now)
+    const sub = (s: string) => join(projectDir(), s, 'subagents')
+    expect(found).toEqual([
+      { id: 'e5', session: 's-edge', jsonlPath: join(sub('s-edge'), 'agent-e5.jsonl'), metaPath: join(sub('s-edge'), 'agent-e5.meta.json') },
+      { id: 'm1', session: 's-mixed', jsonlPath: join(sub('s-mixed'), 'agent-m1.jsonl'), metaPath: join(sub('s-mixed'), 'agent-m1.meta.json') },
+      { id: 'a1', session: 's-new', jsonlPath: join(sub('s-new'), 'agent-a1.jsonl'), metaPath: join(sub('s-new'), 'agent-a1.meta.json') },
+      { id: 'b2', session: 's-new', jsonlPath: join(sub('s-new'), 'agent-b2.jsonl'), metaPath: join(sub('s-new'), 'agent-b2.meta.json') },
+      { id: 'c3', session: 's-new', jsonlPath: join(sub('s-new'), 'agent-c3.jsonl'), metaPath: join(sub('s-new'), 'agent-c3.meta.json') },
+    ])
+    // A shorter window leaves out more.
+    expect((await listAgentFiles(claude, repoPath, 2, now)).map((f) => f.id)).toEqual(['m1', 'a1', 'b2', 'c3'])
+  })
+
+  test('reads an agent, with "" for a missing meta file', async () => {
+    await session('s1', now, {
+      'agent-a1.jsonl': '{"type":"user"}\n',
+      'agent-a1.meta.json': '{"agentType":"pod:engineer"}',
+      'agent-c3.jsonl': '{"type":"user"}\n',
+    })
+    const [a1, c3] = await listAgentFiles(claude, repoPath, 30, now)
+    const reader = createAgentFileReader()
+    expect(await reader.read(a1!)).toEqual({
+      id: 'a1',
+      session: 's1',
+      meta: '{"agentType":"pod:engineer"}',
+      jsonl: '{"type":"user"}\n',
+    })
+    expect(await reader.read(c3!)).toEqual({ id: 'c3', session: 's1', meta: '', jsonl: '{"type":"user"}\n' })
+  })
+
+  test("an unchanged file isn't read twice; a changed one is", async () => {
+    await session('s1', now, { 'agent-a1.jsonl': 'line-1\n', 'agent-a1.meta.json': '{"v":1}' })
+    const [file] = await listAgentFiles(claude, repoPath, 30, now)
+    // A whole-second mtime, so setting it again gives the very same value (NTFS keeps 100 ns).
+    const mtime = new Date(Math.floor(now / 1000) * 1000)
+    await utimes(file!.jsonlPath, mtime, mtime)
+    const reader = createAgentFileReader()
+    const first = await reader.read(file!)
+
+    // Same size and same mtime: the cache answers, so the new bytes are not seen.
+    expect((await stat(file!.jsonlPath)).mtimeMs).toBe(mtime.getTime())
+    await writeFile(file!.jsonlPath, 'LINE-1\n')
+    await utimes(file!.jsonlPath, mtime, mtime)
+    const second = await reader.read(file!)
+    expect(second).toBe(first)
+    expect(second.jsonl).toBe('line-1\n')
+
+    // The transcript grows: read again.
+    await writeFile(file!.jsonlPath, 'line-1\nline-2\n')
+    expect((await reader.read(file!)).jsonl).toBe('line-1\nline-2\n')
+
+    // Only the meta file changes: read again.
+    await writeFile(file!.metaPath, '{"v":22}')
+    expect((await reader.read(file!)).meta).toBe('{"v":22}')
+  })
+
+  test('retain forgets agents no longer listed', async () => {
+    await session('s1', now, { 'agent-a1.jsonl': 'x\n' })
+    const [file] = await listAgentFiles(claude, repoPath, 30, now)
+    const reader = createAgentFileReader()
+    const first = await reader.read(file!)
+    reader.retain([file!])
+    expect(await reader.read(file!)).toBe(first)
+    reader.retain([])
+    const again = await reader.read(file!)
+    expect(again).not.toBe(first)
+    expect(again).toEqual(first)
+  })
+
+  test('readAgentFile shares one cache', async () => {
+    await session('s1', now, { 'agent-a1.jsonl': 'x\n' })
+    const [file] = await listAgentFiles(claude, repoPath, 30, now)
+    const first = await readAgentFile(file!)
+    expect(first).toEqual({ id: 'a1', session: 's1', meta: '', jsonl: 'x\n' })
+    expect(await readAgentFile(file!)).toBe(first)
+    retainAgentFiles([])
+    expect(await readAgentFile(file!)).not.toBe(first)
+    retainAgentFiles([])
+  })
+
+  test('a transcript deleted after listing throws, and the files are left as they were', async () => {
+    await session('s1', now, { 'agent-a1.jsonl': 'x\n' })
+    const [file] = await listAgentFiles(claude, repoPath, 30, now)
+    const reader = createAgentFileReader()
+    await reader.read(file!)
+    expect(await readFile(file!.jsonlPath, 'utf8')).toBe('x\n')
+    await rm(file!.jsonlPath)
+    await expect(reader.read(file!)).rejects.toThrow()
+  })
+})
