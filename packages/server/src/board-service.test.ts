@@ -4,12 +4,19 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Board } from '@pod-board/model'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import * as model from '@pod-board/model'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { createBoardService, type BoardServiceDeps } from './board-service.ts'
 import type { GhReader, GhStatus, PrStatus } from './gh.ts'
 import { normalizeRepoPath, repoId } from './guard.ts'
 import { projectDirName } from './transcript-files.ts'
 import { createBoardWatcher } from './watcher.ts'
+
+// The model as is, with handBackPr watched, so the test can see the server uses the model's rule.
+vi.mock('@pod-board/model', async (original) => {
+  const actual = await original<typeof import('@pod-board/model')>()
+  return { ...actual, handBackPr: vi.fn(actual.handBackPr) }
+})
 
 const platform = process.platform
 const caseless = platform === 'win32' || platform === 'darwin'
@@ -166,6 +173,49 @@ describe('board service', () => {
     expect((await service.build()).repos.map((r) => r.name)).toEqual(['chess-web'])
   })
 
+  test('config error on the board', async () => {
+    const repo = copyFixture()
+    const service = createBoardService(deps())
+    // No config file: never an error.
+    const none = await service.build()
+    expect(none.configError).toBeUndefined()
+    expect('configError' in none).toBe(false)
+
+    // Unreadable on the first read: an error, and no registered repos.
+    await mkdir(dirname(configFile), { recursive: true })
+    await writeFile(configFile, '{ not json')
+    const first = await service.build()
+    expect(first.configError).toBe('config unreadable')
+    expect(first.repos).toEqual([])
+
+    await register(repo)
+    const ok = await service.build()
+    expect(ok.configError).toBeUndefined()
+    expect(ok.repos.map((r) => r.name)).toEqual(['chess-web'])
+
+    // Corrupt again: set on every build, and the last list stays.
+    await writeFile(configFile, '{ not json')
+    for (let i = 0; i < 2; i++) {
+      const bad = await service.build()
+      expect(bad.configError).toBe('config unreadable')
+      expect(bad.repos.map((r) => r.name)).toEqual(['chess-web'])
+    }
+
+    // A newer config version is unreadable too, never overwritten.
+    await writeFile(configFile, JSON.stringify({ version: 2, repos: [] }))
+    expect((await service.build()).configError).toBe('config unreadable')
+
+    // Fixed: cleared.
+    await register(repo)
+    expect((await service.build()).configError).toBeUndefined()
+
+    // Deleted: a missing file is no error.
+    await rm(configFile)
+    const gone = await service.build()
+    expect(gone.configError).toBeUndefined()
+    expect(gone.repos).toEqual([])
+  })
+
   test('asks gh only for live PRs', async () => {
     const repo = join(root, 'repos', 'live')
     const docs = join(repo, 'pod-docs')
@@ -275,6 +325,8 @@ describe('board service', () => {
     const second = await service.build()
     expect(second.repos[0]!.prs.map((p) => p.number)).toEqual([11, 20])
     expect(new Set(gh.asked)).toEqual(new Set([11, 20]))
+    // The hand-back PR comes from the model's rule, not a copy.
+    expect(vi.mocked(model.handBackPr)).toHaveBeenCalledWith(expect.objectContaining({ slug: 'p' }))
   })
 
   test('refreshGh asks for every readable repo, even with no PRs, so gh status is known; it skips repos with an error', async () => {
