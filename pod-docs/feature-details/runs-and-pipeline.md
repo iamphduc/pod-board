@@ -51,8 +51,8 @@
 **Wave step state**, first match wins:
 
 1. `blocked`: a blocked slice.
-2. `you`: a `needsYou` queue item of the plan names a slice of this wave, with `sprint:` this sprint or none.
-3. `done`: every slice `isSliceDone`.
+2. `done`: every slice `isSliceDone`, even with a pending `needsYou` item naming one.
+3. `you`: a `needsYou` queue item of the plan names a slice of this wave that isn't done, with `sprint:` this sprint or none.
 4. `live`: it's the current sprint's `currentWave`, a slice is `pushed`, or one of its agents runs.
 5. `wait`.
 
@@ -92,7 +92,8 @@ The web app's `screens/runs/view.ts` decides these; `RunsScreen.tsx` only render
 
 ## Watch out
 
-- A `→ human` PENDING note stays pending after its wave merges, so a finished wave with such a note reads `you`, and its plan reads `needs-you`. That's the rule as planned: `you` beats `done`. On this repo, sprint server-runs wave 1 shows `you` for the L1 contrast note.
+- A `→ human` PENDING note stays pending after its wave merges. The wave step reads `done` (`done` beats `you`), but the run and the plan still read `needs-you`, so the ask isn't hidden at the plan level. Don't move this into `runs.ts`.
+- In a part-done wave, an ask that names only a done slice doesn't make the wave `you`; the wave step agrees with its cards, where that slice reads `merged`.
 - A slice-only agent (no sprint, no plan) can join two plans when both have a board with that code. Real dispatches always name the sprint.
 - Agents are kept only for the transcript window (`POD_BOARD_TRANSCRIPT_DAYS`, default 30), so older waves lose their time and tokens and read `<s> slices`.
 
@@ -100,3 +101,4 @@ The web app's `screens/runs/view.ts` decides these; `RunsScreen.tsx` only render
 
 - 2026-10-18: added in sprint server-runs (slice P1).
 - 2026-10-19: banners, docs version messages, and theme boot added in sprint board-engineer (slice X1).
+- 2026-10-19: a done wave reads `done` even with a pending ask for the human; `you` only on unfinished waves (decision "`you` only on unfinished waves", sprint board-engineer wave 2 fix).
