@@ -23,3 +23,8 @@ export function portFromEnv(env: Env, name: string, fallback: number): number {
 export function listenConfig(env: Env): ListenConfig {
   return { hostname: '127.0.0.1', port: portFromEnv(env, 'POD_BOARD_API_PORT', DEFAULT_API_PORT) }
 }
+
+/** Where the board keeps its own config file. Not built yet. */
+export function configPath(_env: Env, _platform: NodeJS.Platform, _home: string): string {
+  return ''
+}
