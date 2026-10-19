@@ -195,6 +195,7 @@ describe('buildRepoModel', () => {
       confidence: 'medium',
       pr: { state: 'merged', number: 76 },
       dependsOn: [],
+      filesOwned: [],
     })
     expect(slices.H1?.pr).toEqual({ state: 'open', number: 12, url: 'https://github.com/o/r/pull/12' })
     expect(slices.U1?.pr).toEqual({ state: 'merged', number: 77, url: 'https://github.com/o/r/pull/77' })
