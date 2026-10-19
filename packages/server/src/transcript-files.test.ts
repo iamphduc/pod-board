@@ -7,6 +7,8 @@ import {
   createAgentFileReader,
   listAgentFiles,
   projectDirName,
+  readAgentFile,
+  retainAgentFiles,
   transcriptDays,
 } from './transcript-files.ts'
 
@@ -120,11 +122,14 @@ describe('finds agent transcripts', () => {
   test("an unchanged file isn't read twice; a changed one is", async () => {
     await session('s1', now, { 'agent-a1.jsonl': 'line-1\n', 'agent-a1.meta.json': '{"v":1}' })
     const [file] = await listAgentFiles(claude, repoPath, 30, now)
+    // A whole-second mtime, so setting it again gives the very same value (NTFS keeps 100 ns).
+    const mtime = new Date(Math.floor(now / 1000) * 1000)
+    await utimes(file!.jsonlPath, mtime, mtime)
     const reader = createAgentFileReader()
     const first = await reader.read(file!)
 
     // Same size and same mtime: the cache answers, so the new bytes are not seen.
-    const { mtime } = await stat(file!.jsonlPath)
+    expect((await stat(file!.jsonlPath)).mtimeMs).toBe(mtime.getTime())
     await writeFile(file!.jsonlPath, 'LINE-1\n')
     await utimes(file!.jsonlPath, mtime, mtime)
     const second = await reader.read(file!)
@@ -151,6 +156,17 @@ describe('finds agent transcripts', () => {
     const again = await reader.read(file!)
     expect(again).not.toBe(first)
     expect(again).toEqual(first)
+  })
+
+  test('readAgentFile shares one cache', async () => {
+    await session('s1', now, { 'agent-a1.jsonl': 'x\n' })
+    const [file] = await listAgentFiles(claude, repoPath, 30, now)
+    const first = await readAgentFile(file!)
+    expect(first).toEqual({ id: 'a1', session: 's1', meta: '', jsonl: 'x\n' })
+    expect(await readAgentFile(file!)).toBe(first)
+    retainAgentFiles([])
+    expect(await readAgentFile(file!)).not.toBe(first)
+    retainAgentFiles([])
   })
 
   test('a transcript deleted after listing throws, and the files are left as they were', async () => {
