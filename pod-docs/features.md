@@ -11,3 +11,5 @@ _For agents: engineers and the reviewer drive these rows. You add or fix rows wh
 
 | Feature | User reaches it by | Drive | Proof |
 |---|---|---|---|
+| API health | `GET /api/health` on the API port | `curl -s http://127.0.0.1:<api>/api/health`, and the same path on the web port (proxy) | Both answer `{"ok":true}`; `/api/nope` answers 404; `netstat` shows both ports listening on `127.0.0.1` only |
+| Web shell | Open the web URL | Browser: open `http://127.0.0.1:<web>/`, then stop the API and reload | Heading "Pod Board" and "API health: ok"; with the API stopped, "API health: down (HTTP 502)" |
