@@ -1,0 +1,157 @@
+/*
+ * Screen 3: the engineer view (preview "Screen 3"), under the board frame when a
+ * slice is open. Tokens and L1's classes only; no colour literals (pwa.test.ts
+ * checks). Two columns on desktop, stacked at narrow widths. The timeline log
+ * scrolls inside itself and never makes the page scroll sideways.
+ */
+
+.ev {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.ev-side {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 14px;
+  min-width: 0;
+}
+
+.ev-side + .ev-side {
+  border-left: 1px solid var(--line);
+}
+
+.ev-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ev-title {
+  margin-right: auto;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: var(--size-title);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.ev-details {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+  font-size: var(--size-dense);
+}
+
+/* Each pair is a wrapper div; it hands its children to the grid. */
+.ev-details > div {
+  display: contents;
+}
+
+.ev-details dt {
+  color: var(--muted);
+}
+
+.ev-details dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ev-details dd.mono {
+  font-size: var(--size-small);
+  line-height: 1.6;
+}
+
+.ev-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ev-note {
+  font-size: var(--size-dense);
+}
+
+.ev-warn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--size-small);
+  color: var(--muted);
+}
+
+.ev-log {
+  list-style: none;
+  margin: 0;
+  padding: 10px;
+  display: grid;
+  gap: 2px;
+  max-height: 22rem;
+  overflow: auto;
+  background: var(--panel-2);
+  border-radius: var(--radius-sm);
+  font: var(--size-micro) / 1.6 var(--mono);
+  color: var(--muted);
+}
+
+.ev-log li {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  min-width: 0;
+}
+
+.ev-log b {
+  flex: none;
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.ev-sum {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ev-earlier {
+  font-style: italic;
+}
+
+/* A result's mark takes its chip's colour. */
+.ev-res {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.ev-res::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ev-res.s-ok {
+  color: var(--ok-ink);
+}
+
+.ev-res.s-bad {
+  color: var(--bad-ink);
+}
+
+@media (max-width: 820px) {
+  .ev {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ev-side + .ev-side {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}
