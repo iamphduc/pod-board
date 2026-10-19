@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as model from './index.ts'
-import { buildRepoModel, type RepoFiles, type SprintModel } from './run-model.ts'
+import { buildRepoModel, sliceDetail, type RepoFiles, type SprintModel } from './run-model.ts'
 
 // Every snapshot is built inline: test/no-io.test.ts scans this folder, so no file reads here.
 
@@ -485,6 +485,49 @@ describe('buildRepoModel', () => {
     // A doc with no detail at all still gives [] for every slice.
     const bare: RepoFiles = { ...files, 'pod-docs/sprints/one.md': sprint('one', [[1, 'A1', '—', 'pending']], { from: 'alpha' }) }
     expect(sprintOf(bare, 'alpha', 'one')?.waves[0]?.slices[0]?.filesOwned).toEqual([])
+  })
+
+  it('files named in a parenthetical after an item are not owned files', () => {
+    // The E1 and W1 lines of the board-engineer sprint doc, as written.
+    const md = [
+      '### W1: Screen 2: wave board, dependency lines, critical path, filters, routes',
+      '',
+      '- **Files owned:** `packages/web/src/screens/board/**` (new, incl. `board-view.ts`, `board-view.test.ts`, `geometry.ts`, `geometry.test.ts`, `BoardScreen.tsx`, `board.css`), `packages/web/src/selection.ts`, `packages/web/src/selection.test.ts`, `packages/web/src/App.tsx`, `packages/web/src/screens/runs/RunsScreen.tsx`, `packages/web/src/screens/runs/runs.css`, `pod-docs/feature-details/wave-board.md` (new), `pod-docs/codebase-structure.md`',
+      '',
+      '### E1: Screen 3: engineer view with a live tool timeline',
+      '',
+      '- **Files owned:** `packages/web/src/screens/engineer/**` (new, incl. `view.ts`, `view.test.ts`, `EngineerView.tsx`, `engineer.css`), `packages/web/src/timeline-loader.ts` (new), `packages/web/src/timeline-loader.test.ts` (new), `packages/web/src/screens/board/BoardScreen.tsx`, `pod-docs/feature-details/engineer-view.md` (new), `pod-docs/codebase-structure.md`',
+      '',
+      '### P1: Paths with brackets',
+      '',
+      '- **Files owned:** `app/(group)/page.tsx` (new), `src/x.ts` (shared (with `y.ts`) for now)',
+      '',
+      '### P2: No backticks',
+      '',
+      '- **Files owned:** src/** (incl. a.ts, b.ts), src/c.ts (new), app/(group)/d.ts',
+    ].join('\n')
+    expect(sliceDetail(md, 'W1').filesOwned).toEqual([
+      'packages/web/src/screens/board/**',
+      'packages/web/src/selection.ts',
+      'packages/web/src/selection.test.ts',
+      'packages/web/src/App.tsx',
+      'packages/web/src/screens/runs/RunsScreen.tsx',
+      'packages/web/src/screens/runs/runs.css',
+      'pod-docs/feature-details/wave-board.md',
+      'pod-docs/codebase-structure.md',
+    ])
+    expect(sliceDetail(md, 'E1').filesOwned).toEqual([
+      'packages/web/src/screens/engineer/**',
+      'packages/web/src/timeline-loader.ts',
+      'packages/web/src/timeline-loader.test.ts',
+      'packages/web/src/screens/board/BoardScreen.tsx',
+      'pod-docs/feature-details/engineer-view.md',
+      'pod-docs/codebase-structure.md',
+    ])
+    // Brackets inside a path are part of it; a nested parenthetical drops out whole.
+    expect(sliceDetail(md, 'P1').filesOwned).toEqual(['app/(group)/page.tsx', 'src/x.ts'])
+    // Without backticks, a parenthetical's commas don't split off files.
+    expect(sliceDetail(md, 'P2').filesOwned).toEqual(['src/**', 'src/c.ts', 'app/(group)/d.ts'])
   })
 
   it('currentWave on a done sprint', () => {

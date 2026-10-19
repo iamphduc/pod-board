@@ -1,10 +1,12 @@
+import { EventEmitter } from 'node:events'
 import { cpSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Board } from '@pod-board/model'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import type { FSWatcher } from 'chokidar'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { createBoardService, type BoardService } from './board-service.ts'
 import type { GhReader } from './gh.ts'
 import { createBoardWatcher, type BoardWatcher } from './watcher.ts'
@@ -33,6 +35,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.useRealTimers()
   await watcher?.close()
   watcher = undefined
   await rm(root, { recursive: true, force: true })
@@ -146,6 +149,91 @@ describe('board watcher', () => {
       expect(events.length - before).toBe(1)
     }, 15_000) // The 5 s bound is checked above; the whole test, with its waits, takes longer.
   }
+
+  for (const poll of [false, true]) {
+    test(`a config edit reaches clients within 5 seconds${poll ? ' (polling)' : ''}`, async () => {
+      const repo = copyFixture('chess-web')
+      await register(repo)
+      const { service: svc, quiet } = tracked(service())
+      watcher = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, poll })
+      const first = await watcher.start()
+      expect(first.configError).toBeUndefined()
+      const { next } = collect(watcher)
+      // Let the start-up rebuilds finish, so only the watcher can see the edits below.
+      await quiet(poll ? 1500 : 800)
+
+      let started = Date.now()
+      await writeFile(configFile, '{ not json')
+      const broken = await next((b) => b.configError === 'config unreadable', 5000)
+      expect(Date.now() - started).toBeLessThan(5000)
+      expect(broken.repos).toHaveLength(1)
+
+      await quiet(poll ? 1500 : 800)
+      started = Date.now()
+      await register(repo)
+      await next((b) => b.configError === undefined, 5000)
+      expect(Date.now() - started).toBeLessThan(5000)
+    }, 20_000)
+  }
+
+  test('in poll mode, events up to one poll interval apart give one rebuild', async () => {
+    vi.useFakeTimers()
+    const fakes: EventEmitter[] = []
+    const fakeWatch = () => {
+      const w = Object.assign(new EventEmitter(), { close: async () => {} })
+      fakes.push(w)
+      process.nextTick(() => w.emit('ready'))
+      return w as unknown as FSWatcher
+    }
+    let builds = 0
+    const svc: BoardService = {
+      build: async () => {
+        builds++
+        return { generatedAt: Date.now(), gh: 'unknown', repos: [] }
+      },
+      refreshGh: async () => false,
+    }
+    watcher = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, poll: true, watch: fakeWatch, tickMs: 1e9 })
+    const startup = watcher.start()
+    await vi.advanceTimersByTimeAsync(0)
+    await startup
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(fakes.length).toBeGreaterThan(0)
+    const before = builds
+
+    // A poller sees a quick burst of writes on up to two ticks, one poll interval apart.
+    fakes[0]!.emit('all', 'change', configFile)
+    await vi.advanceTimersByTimeAsync(450)
+    fakes[0]!.emit('all', 'change', configFile)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(builds - before).toBe(1)
+  })
+
+  test('while gh is not ok, each new gh check time reaches clients', async () => {
+    let checks = 0
+    const loggedOut: GhReader = { ...gh, status: () => 'logged-out', checkedAt: () => ++checks }
+    const svc = createBoardService({ configFile, portsDir, claudeDir, transcriptDays: 30, platform: process.platform, gh: loggedOut })
+    watcher = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, tickMs: 100 })
+    await watcher.start()
+    const { events } = collect(watcher)
+    await sleep(600)
+    expect(events.length).toBeGreaterThanOrEqual(2)
+    const times = events.map((b) => b.ghCheckedAt!)
+    expect(times).toEqual([...times].sort((a, b) => a - b))
+    expect(new Set(times).size).toBe(times.length)
+    expect(watcher.board().ghCheckedAt).toBe(times.at(-1))
+  })
+
+  test('while gh is ok, a new gh check time alone sends nothing', async () => {
+    let checks = 0
+    const healthy: GhReader = { ...gh, status: () => 'ok', checkedAt: () => ++checks }
+    const svc = createBoardService({ configFile, portsDir, claudeDir, transcriptDays: 30, platform: process.platform, gh: healthy })
+    watcher = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, tickMs: 100 })
+    await watcher.start()
+    const { events } = collect(watcher)
+    await sleep(600)
+    expect(events).toEqual([])
+  })
 
   test('emits only on change', async () => {
     const repo = copyFixture('chess-web')
