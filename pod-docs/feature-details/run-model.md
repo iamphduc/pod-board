@@ -25,7 +25,7 @@ It builds on the ported pod-flow parsers (`packages/model/src/pod-flow/`, kept a
 `parseAgentTranscript({ id, session, meta, jsonl })` gets the text of `agent-<id>.meta.json` and `agent-<id>.jsonl`; the server finds and reads the files. It never throws.
 
 - **Pod agents only.** `undefined` when `meta` isn't a JSON object or its `agentType` doesn't start with `pod:`. `type` is `agentType`; `description` is cut to 80 characters (`''` when missing).
-- **Dispatch.** `sprint`, `slice`, `branch`, `plan`, and `round` come from `parseDispatch` of the first `user` record that has a prompt: its string content, or its first text block. Later user records (tool results, follow-ups) are never read for fields.
+- **Dispatch.** `sprint`, `slice`, `branch`, `plan`, and `round` come from `readDispatch(prompt, agentType)` (`dispatch.ts`) of the first `user` record that has a prompt: its string content, or its first text block. Later user records (tool results, follow-ups) are never read for fields. `readDispatch` takes the ported `parseDispatch` fields, then the plan, first match wins: a `plan slug:` field; a markdown list field `- **plan:** <slug>` at the start of a line (the reviewer's dispatch); then, for a `pod:sprint-planner` only, the exact prose form ``for plan `<slug>` `` (the planner's prompt has no field). Engineers get no plan from their prompt: they join a plan by sprint, slice, or branch. Why: the port reads only `plan slug:`, which real pod dispatches never write, so every real reviewer and planner had no plan.
 - **Times.** `startedAt` and `lastAt` are the first and last `timestamp` that parses, in file order, over every record type.
 - **Tokens.** `turnTokens` (input + output + cache writes; cache reads are left out) summed once per `message.id`. One message streams over several records with the same id, and only its last record has the final output count, so the last record's usage counts. Usage on a record with no `message.id` is skipped; a usage field that isn't a number counts as 0.
 - **Model.** The `message.model` of the last assistant record that has one.
@@ -55,6 +55,7 @@ It builds on the ported pod-flow parsers (`packages/model/src/pod-flow/`, kept a
 - `parsePlan` defaults a missing plan status to `active` and a missing sprint-row status to `planned`.
 - A program not in `SUBCOMMANDS` never shows a subcommand and never counts as a test run. Add a program there (with its own list) before expecting its runs to count; a new word on any list must be safe to show.
 - Scripts with other names don't count as test runs: `pnpm run test:unit` reads as `pnpm run`, and `npm run my-tests` too. A runner given a flag with a separate value (`npx -p pkg vitest`) reads `pkg` as the program, so it isn't counted. `node node_modules/vitest/vitest.mjs` reads as `node`.
+- The planner's plan comes from prose, so it holds only while pod's planner prompt says ``for plan `<slug>` ``. An engineer's or reviewer's prompt can quote that phrase (pasted findings, context), so the prose rule stays planner-only. A new agent type that names its plan only in prose needs a dispatch field or its own rule here.
 - Tests under `packages/model/src/` must build `RepoFiles` and transcripts inline (the no-I/O test scans that folder). Tests that read fixtures go in `packages/model/test/fixtures.test.ts`.
 
 ## History
@@ -64,3 +65,4 @@ It builds on the ported pod-flow parsers (`packages/model/src/pod-flow/`, kept a
 - 2026-10-19 — sprint board-engineer (slice T1): tool timeline parser and test progress.
 - 2026-10-19 — sprint board-engineer (wave 2 fix): names in a bracketed note after a Files owned item aren't owned files.
 - 2026-10-19 — sprint board-engineer (wave 1 fix): subcommands only after programs that take them, so `echo test` and `grep … test` aren't test runs; test runners after `exec`, `dlx`, `npx`, `bunx`, and test scripts after `run`, count.
+- 2026-10-19 — plan board-read fix pass: `readDispatch` reads the plan from the reviewer's `- **plan:**` field and the sprint planner's ``for plan `<slug>` `` prose, so a running final review keeps its plan on the runs list.
