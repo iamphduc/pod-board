@@ -1,41 +1,42 @@
-import { useEffect, useState } from 'react'
-
-type Health = { state: 'checking' } | { state: 'ok' } | { state: 'down'; reason: string }
-
-function label(health: Health): string {
-  if (health.state === 'checking') return 'checking…'
-  if (health.state === 'ok') return 'ok'
-  return `down (${health.reason})`
-}
+import { useEffect, useMemo, useState } from 'react'
+import { listRuns, type Board } from '@pod-board/model'
+import { createBoardStream, healthProbe, type StreamState } from './board-stream.ts'
+import { RunsScreen } from './screens/runs/RunsScreen.tsx'
+import { resolveSelection, startClock } from './selection.ts'
 
 export function App() {
-  const [health, setHealth] = useState<Health>({ state: 'checking' })
+  const [board, setBoard] = useState<Board>()
+  const [stream, setStream] = useState<StreamState>('connecting')
+  const [now, setNow] = useState(() => Date.now())
+  const [hash, setHash] = useState(() => window.location.hash)
 
   useEffect(() => {
-    let live = true
-    fetch('/api/health')
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const body: unknown = await res.json()
-        if (typeof body !== 'object' || body === null || (body as { ok?: unknown }).ok !== true) {
-          throw new Error('unexpected response')
-        }
-        if (live) setHealth({ state: 'ok' })
-      })
-      .catch((err: unknown) => {
-        if (live) setHealth({ state: 'down', reason: err instanceof Error ? err.message : String(err) })
-      })
-    return () => {
-      live = false
-    }
+    const s = createBoardStream(
+      () => new EventSource('/api/events'),
+      (b) => {
+        setBoard(b)
+        setNow(Date.now())
+      },
+      setStream,
+      { probe: () => healthProbe() },
+    )
+    return () => s.stop()
+  }, [])
+  useEffect(() => startClock(setNow), [])
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
-  return (
-    <main>
-      <h1>Pod Board</h1>
-      <p>
-        API health: <output data-testid="health">{label(health)}</output>
-      </p>
-    </main>
-  )
+  const runs = useMemo(() => (board ? listRuns(board, now) : []), [board, now])
+  const selection = resolveSelection(runs, hash)
+
+  useEffect(() => {
+    if (!board || selection.hash === undefined || selection.hash === hash) return
+    window.history.replaceState(null, '', selection.hash)
+    setHash(selection.hash)
+  }, [board, selection.hash, hash])
+
+  return <RunsScreen board={board} stream={stream} runs={runs} selected={selection.run} now={now} />
 }
