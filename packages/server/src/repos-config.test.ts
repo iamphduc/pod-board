@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -66,10 +67,39 @@ describe('addRepo rules', () => {
     expect(await loadRepos(file)).toEqual({ repos: [normalizeRepoPath(repoA, 'win32')] })
   })
 
-  test.runIf(platform !== 'win32')('off win32 another case is another repo', async () => {
-    await mkdir(join(root, 'REPO-B'))
+  test('another case is the same repo exactly where the real file system ignores case', async () => {
     await addRepo(file, repoB, platform)
-    expect(await addRepo(file, join(root, 'REPO-B'), platform)).toEqual({ path: join(root, 'REPO-B') })
+    const other = join(root, 'REPO-B')
+    // Independent check: does the other-case name reach the same folder?
+    if (existsSync(other)) {
+      expect(await addRepo(file, other, platform)).toEqual({ error: 'already registered' })
+      expect(await loadRepos(file)).toEqual({ repos: [normalizeRepoPath(repoB, platform)] })
+    } else {
+      await mkdir(other)
+      expect(await addRepo(file, other, platform)).toEqual({ path: normalizeRepoPath(other, platform) })
+    }
+  })
+
+  test('a file system that keeps case makes another case another repo, whatever the OS', async () => {
+    const other = join(root, 'REPO-B')
+    if (!existsSync(other)) await mkdir(other)
+    const asked: string[] = []
+    const keepsCase = { ignoresCase: async (dir: string) => (asked.push(dir), false) }
+    await addRepo(file, repoB, platform, keepsCase)
+    expect(await addRepo(file, other, platform, keepsCase)).toEqual({ path: normalizeRepoPath(other, platform) })
+    expect(asked).toContain(normalizeRepoPath(other, platform))
+    // The exact same path is still the same repo.
+    expect(await addRepo(file, repoB + '/', platform, keepsCase)).toEqual({ error: 'already registered' })
+  })
+
+  test('a file system that ignores case makes another case the same repo, whatever the OS', async () => {
+    const other = join(root, 'REPO-B')
+    if (!existsSync(other)) await mkdir(other)
+    const ignores = { ignoresCase: async () => true }
+    await addRepo(file, repoB, platform, ignores)
+    const before = await readFile(file)
+    expect(await addRepo(file, other, platform, ignores)).toEqual({ error: 'already registered' })
+    expect(await readFile(file)).toEqual(before)
   })
 
   test('relative and missing paths are refused and nothing is written', async () => {

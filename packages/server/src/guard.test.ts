@@ -1,6 +1,10 @@
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Hono } from 'hono'
 import { describe, expect, test } from 'vitest'
-import { normalizeRepoPath, repoId, requestGuard } from './guard.ts'
+import { ignoresCase, normalizeRepoPath, repoId, requestGuard, sameRepoPath } from './guard.ts'
 
 function guarded(): Hono {
   const app = new Hono()
@@ -119,15 +123,61 @@ describe('repo identity', () => {
     expect(normalizeRepoPath('/', 'linux')).toBe('/')
   })
 
-  test('repoId maps every non-alphanumeric character to - and lowercases on win32', () => {
-    expect(repoId('E:\\Projects\\Pod-Board', 'win32')).toBe('e--projects-pod-board')
-    expect(repoId('e:/projects/pod-board/', 'win32')).toBe('e--projects-pod-board')
-    expect(repoId('/home/Me/my repo', 'linux')).toBe('-home-Me-my-repo')
-    expect(repoId('/home/Me/my repo/', 'linux')).toBe('-home-Me-my-repo')
+  test('repoId maps every non-alphanumeric character to - and lowercases where case is ignored', () => {
+    expect(repoId('E:\\Projects\\Pod-Board', 'win32', true)).toBe('e--projects-pod-board')
+    expect(repoId('e:/projects/pod-board/', 'win32', true)).toBe('e--projects-pod-board')
+    expect(repoId('/home/Me/my repo', 'linux', false)).toBe('-home-Me-my-repo')
+    expect(repoId('/home/Me/my repo/', 'linux', false)).toBe('-home-Me-my-repo')
   })
 
-  test('case only matters off win32', () => {
-    expect(repoId('E:\\A\\B', 'win32')).toBe(repoId('e:/a/b', 'win32'))
-    expect(repoId('/A/B', 'linux')).not.toBe(repoId('/a/b', 'linux'))
+  test('case follows the file system, not the OS name', () => {
+    // A default macOS volume ignores case.
+    expect(sameRepoPath('/Users/me/Repo-B', '/Users/me/repo-b/', 'darwin', true)).toBe(true)
+    expect(repoId('/Users/me/Repo-B', 'darwin', true)).toBe(repoId('/users/me/repo-b', 'darwin', true))
+    // A case-sensitive folder on Windows (fsutil, WSL) keeps it.
+    expect(sameRepoPath('E:\\A\\B', 'e:/a/b', 'win32', false)).toBe(false)
+    expect(repoId('E:\\A\\B', 'win32', false)).not.toBe(repoId('e:/a/b', 'win32', false))
+    // Separators and trailing slashes never matter.
+    expect(sameRepoPath('E:\\A\\B', 'E:/A/B/', 'win32', false)).toBe(true)
+    expect(sameRepoPath('/A/B', '/a/b', 'linux', false)).toBe(false)
+    expect(repoId('E:\\A\\B', 'win32', true)).toBe(repoId('e:/a/b', 'win32', true))
+    expect(repoId('/A/B', 'linux', false)).not.toBe(repoId('/a/b', 'linux', false))
+  })
+})
+
+describe('ignoresCase probe', () => {
+  test('matches what the real file system does with another case', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pod-board-case-'))
+    try {
+      const dir = join(root, 'Probe-Dir')
+      await mkdir(dir)
+      // Independent check: does the other-case name reach the same folder?
+      const truth = existsSync(join(root, 'pROBE-dIR'))
+      expect(await ignoresCase(dir)).toBe(truth)
+      // A name with no letters probes the nearest parent that has some.
+      const digits = join(dir, '123')
+      await mkdir(digits)
+      expect(await ignoresCase(digits)).toBe(truth)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('two folders that differ only in case are a case-sensitive file system', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pod-board-case-'))
+    try {
+      await mkdir(join(root, 'twin'))
+      if (existsSync(join(root, 'TWIN'))) return // this file system ignores case: no twins possible
+      await mkdir(join(root, 'TWIN'))
+      expect(await ignoresCase(join(root, 'twin'))).toBe(false)
+      expect(await ignoresCase(join(root, 'TWIN'))).toBe(false)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a missing folder falls back to the OS default and never throws', async () => {
+    const gone = join(tmpdir(), 'pod-board-case-gone-' + Date.now(), 'Nope')
+    expect(await ignoresCase(gone)).toBe(process.platform === 'win32' || process.platform === 'darwin')
   })
 })
