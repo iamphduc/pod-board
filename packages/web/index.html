@@ -11,6 +11,14 @@
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <link rel="preload" href="/fonts/instrument-sans-400.woff2" as="font" type="font/woff2" crossorigin />
     <title>Pod Board</title>
+    <!-- Applies a stored Light or Dark pick before the first paint, so Dark never flashes light.
+         Same key and values as src/theme/theme.ts (THEME_KEY); src/theme-boot.test.ts checks it. -->
+    <script>
+      try {
+        var choice = window.localStorage.getItem('pod-board-theme')
+        if (choice === 'light' || choice === 'dark') document.documentElement.setAttribute('data-theme', choice)
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

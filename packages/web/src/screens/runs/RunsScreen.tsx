@@ -8,7 +8,7 @@ import { Pipeline } from './Pipeline.tsx'
 import { RunsList } from './RunsList.tsx'
 import { SliceLog } from './SliceLog.tsx'
 import { ThemeControl } from './ThemeControl.tsx'
-import { barTitle, emptyMessage, runChip, streamChip } from './view.ts'
+import { banners, barTitle, emptyMessage, runChip, streamChip } from './view.ts'
 import './runs.css'
 
 type Props = {
@@ -30,6 +30,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, now }: 
   const repo = selected && board?.repos.find((r) => r.id === selected.repoId)
   const pipeline = repo && selected?.plan !== undefined ? buildPipeline(repo, selected.plan, now) : undefined
   const tabs = selected?.plan !== undefined && pipeline !== undefined
+  const notices = banners(board, stream)
   return (
     <div className="screen">
       <aside className="side">
@@ -56,10 +57,15 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, now }: 
             ))}
           </nav>
         )}
-        {stream === 'lost' && (
-          <p className="note lost" role="status">
-            Lost the connection to the server. Showing the last board; retrying.
-          </p>
+        {notices.length > 0 && (
+          <div className="banners">
+            {notices.map((b) => (
+              <p key={b.chip.label} className="banner" data-tone={b.chip.cls} role="status">
+                <Chip chip={b.chip} />
+                <span>{b.text}</span>
+              </p>
+            ))}
+          </div>
         )}
         {!board ? (
           <p className="muted">{stream === 'lost' ? 'Waiting for the server…' : 'Connecting to the server…'}</p>
@@ -76,7 +82,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, now }: 
             <SliceLog log={pipeline.log} />
           </>
         ) : (
-          <p className="muted">{emptyMessage(selected)}</p>
+          <p className="muted">{emptyMessage(selected, repo)}</p>
         )}
       </main>
     </div>

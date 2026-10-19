@@ -210,12 +210,42 @@
   border-bottom-color: var(--accent);
 }
 
-.lost {
-  padding: 8px 12px;
+/* Banners: what's wrong above the main view. A chip names it; the left edge carries its state. */
+.banners {
+  display: grid;
+  gap: 8px;
+}
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--idle);
   border-radius: var(--radius-sm);
-  border-left: 3px solid var(--bad);
-  background: var(--bad-soft);
-  color: var(--bad-ink);
+  background: var(--panel);
+  color: var(--fg);
+  font-size: var(--size-small);
+}
+
+.banner .chip {
+  flex: none;
+}
+
+.banner[data-tone="s-bad"] {
+  border-left-color: var(--bad);
+}
+
+.banner[data-tone="s-you"] {
+  border-left-color: var(--warn);
+}
+
+.banner > span {
+  flex: 1 1 16rem;
+  min-width: 0;
 }
 
 .empty {
