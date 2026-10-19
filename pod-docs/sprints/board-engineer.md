@@ -2,14 +2,14 @@
 
 _From plan: pod-docs/plans/board-read.md · Slug: board-engineer · Status: active · Generated: 2026-10-19_
 
-<!-- autopilot-run: started=2026-10-18T21:42:12-07:00 sprints=2 waves=7 -->
+<!-- autopilot-run: started=2026-10-18T21:42:12-07:00 sprints=2 waves=8 -->
 
 ## Status board
 
 | Wave | Slice | Title | Branch | PR | Status | Confidence | Depends on |
 |------|-------|-------|--------|----|--------|------------|------------|
-| 1 | T1 | Tool timeline parser and the timeline route | board-engineer-T1 | — | pushed | medium | — |
-| 1 | W1 | Screen 2: wave board, dependency lines, critical path, filters, routes | board-engineer-W1 | — | pushed | high | — |
+| 1 | T1 | Tool timeline parser and the timeline route | board-engineer-T1 | [#10](https://github.com/iamphduc/pod-board/pull/10) merged | done | medium | — |
+| 1 | W1 | Screen 2: wave board, dependency lines, critical path, filters, routes | board-engineer-W1 | [#10](https://github.com/iamphduc/pod-board/pull/10) merged | done | high | — |
 | 2 | E1 | Screen 3: engineer view with a live tool timeline | board-engineer-E1 | — | pending | — | T1, W1 |
 | 2 | X1 | Empty and error states: config, `gh`, unsupported docs, no runs; theme boot | board-engineer-X1 | — | pending | — | W1 |
 
