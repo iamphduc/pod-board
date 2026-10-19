@@ -13,12 +13,12 @@ Pod Board is a local, read-only web app that shows every pod run across a develo
 ## Parts
 
 - `model` (packages/model) — `@pod-board/model`: parsers for pod's docs and the run model built from them. Pure TypeScript, used as source through its package `exports`, with no build step.
-- `server` (packages/server) — `@pod-board/server`: Hono API server on Node, started with `tsx`. Serves `/api/*`.
+- `server` (packages/server) — `@pod-board/server`: Hono API server on Node, started with `tsx`. Finds repos (its config file plus pod's port claims), reads their pod docs and agent transcripts, asks `gh` about live PRs, watches the files with chokidar, and serves the Board at `/api/board` and as server-sent events at `/api/events`. Every route sits behind a request guard (loopback `Host` on the API or web port; `Origin` too for writes). See `pod-docs/feature-details/server.md`.
 - `web` (packages/web) — `@pod-board/web`: React + Vite single-page app.
 
 ## How they connect
 
-The browser loads the web app from the Vite dev server, which proxies `/api` to the API server. The server reads repo files and hands their text to `model`, which returns the run model; the server sends it to the web app as JSON. `model` never reads files itself. No database: state is rebuilt from files on start and kept in memory.
+The browser loads the web app from the Vite dev server, which proxies `/api` to the API server. The server reads repo files and transcripts and hands their text to `model`, which returns the run model and agent runs; the server sends the Board to the web app as JSON, and again over SSE whenever it changes. `model` never reads files itself. No database: state is rebuilt from files on start and kept in memory. The only file the server writes is its own config (the registered repos).
 
 ## Stack & conventions
 
@@ -26,6 +26,7 @@ The browser loads the web app from the Vite dev server, which proxies `/api` to 
 - pnpm workspace; the pnpm version is pinned in `package.json` (`packageManager`). Use pnpm only; `pnpm-lock.yaml` is the one lockfile.
 - Vitest, one root config (`vitest.config.ts`) that runs `packages/*/src/**/*.test.ts` and `packages/*/test/**/*.test.ts`.
 - **`model` has no I/O.** Nothing under `packages/model/src/` imports `node:*` builtins, `fs`, `path`, `child_process`, or network code. `packages/model/test/no-io.test.ts` enforces it. Tests under `packages/model/test/` may read files.
+- Env, all optional: `POD_BOARD_CONFIG_DIR` (folder for the board's `config.json`; default `%APPDATA%\pod-board`, `~/Library/Application Support/pod-board`, or `$XDG_CONFIG_HOME/pod-board`), `POD_BOARD_PORTS_DIR` (pod's claim files; default `<os temp>/pod-ports`), `POD_BOARD_CLAUDE_DIR` (default `CLAUDE_CONFIG_DIR`, else `~/.claude`), `POD_BOARD_TRANSCRIPT_DAYS` (default 30), `POD_BOARD_POLL=1` (watch by polling). A bad value stops the server with an error naming the variable.
 - Ports come from env: `POD_BOARD_API_PORT` (default `3000`) and `POD_BOARD_WEB_PORT` (default `3001`). Both servers bind to `127.0.0.1` only. An invalid port stops the process with an error naming the variable (`portFromEnv` in the server's config module, which the Vite config also uses).
 - `.gitattributes` forces LF line endings so fixtures check out the same on every OS.
 - No linter yet.
@@ -42,6 +43,7 @@ The browser loads the web app from the Vite dev server, which proxies `/api` to 
 - `pod-docs/plans/board-read.md` — phase 1 goal, scope, look, and key decisions.
 - `docs/master-plan.md` — the phases beyond this plan.
 - `docs/design/preview.html` — the approved design.
+- `pod-docs/feature-details/server.md` — how the server finds repos, builds and watches the Board, and serves the API, and why.
 - `pod-docs/feature-details/run-model.md` — how `buildRepoModel` reads a repo's pod docs into plans, sprints, waves, slices, and the queue, and why.
 - `packages/model/src/pod-flow/README.md` — where the ported pod-flow parsers came from; the copy stays unchanged, new behavior goes in new modules.
 - `packages/model/fixtures/README.md` — the scrubbed real-run fixtures: source repos, snapshot date, and what was cut.
@@ -49,9 +51,10 @@ The browser loads the web app from the Vite dev server, which proxies `/api` to 
 ## Smoke recipe
 
 - **Install:** `pnpm install` (Node 22 or later; run `corepack enable pnpm` first if pnpm is missing).
-- **Start commands:** both servers together with `pnpm dev`, ports from env: `POD_BOARD_API_PORT=<api> POD_BOARD_WEB_PORT=<web> pnpm dev` (PowerShell: `$env:POD_BOARD_API_PORT='<api>'; $env:POD_BOARD_WEB_PORT='<web>'; pnpm dev`). Separately: `pnpm --filter @pod-board/server dev` and `pnpm --filter @pod-board/web dev`, with the same env. Ready when the log shows `pod-board API listening on http://127.0.0.1:<api>` and Vite's `Local: http://127.0.0.1:<web>/`.
-- **DB setup:** none.
+- **Start commands:** both servers together with `pnpm dev`. Always point the board's config and claims at temp folders, so a run never touches the real config or pod's live claims: `POD_BOARD_CONFIG_DIR=<tmp>/cfg POD_BOARD_PORTS_DIR=<tmp>/ports POD_BOARD_API_PORT=<api> POD_BOARD_WEB_PORT=<web> pnpm dev` (PowerShell: `$env:POD_BOARD_CONFIG_DIR='<tmp>\cfg'; $env:POD_BOARD_PORTS_DIR='<tmp>\ports'; $env:POD_BOARD_API_PORT='<api>'; $env:POD_BOARD_WEB_PORT='<web>'; pnpm dev`). Separately: `pnpm --filter @pod-board/server dev` and `pnpm --filter @pod-board/web dev`, with the same env. Ready when the log shows `pod-board API listening on http://127.0.0.1:<api>` and Vite's `Local: http://127.0.0.1:<web>/`. Transcripts are read (never written) from `~/.claude`; set `POD_BOARD_CLAUDE_DIR` to an empty temp folder to leave them out.
+- **DB setup:** none. To get a repo with pod docs to look at, copy a fixture: `cp -r packages/model/fixtures/chess-web <tmp>/chess-web`.
 - **Login credentials:** none.
-- **Key URLs:** web app `http://127.0.0.1:<web>/` (shows "Pod Board" and "API health: ok"); API health `http://127.0.0.1:<api>/api/health` → `{"ok":true}`, also reachable through the web proxy at `http://127.0.0.1:<web>/api/health`.
+- **Add a repo:** `curl -s -X POST http://127.0.0.1:<api>/api/repos -H "Origin: http://127.0.0.1:<api>" -H "Content-Type: application/json" -d '{"path":"<absolute repo path>"}'` → `201 {"path":"…"}`; again → `409`. It lands in `<tmp>/cfg/config.json`. A claim file also adds a repo: `<tmp>/ports/3100` holding `<repo path> <plan slug>`.
+- **Key URLs:** web app `http://127.0.0.1:<web>/` (shows "Pod Board" and "API health: ok"); API health `http://127.0.0.1:<api>/api/health` → `{"ok":true}`, also through the web proxy at `http://127.0.0.1:<web>/api/health`; the Board `http://127.0.0.1:<api>/api/board` (each repo with `model.plans`, `agents`, `prs`, `claims`); live updates `curl -sN http://127.0.0.1:<api>/api/events` (an `event: board` at once, another within a few seconds of editing a sprint doc in a watched repo, `: ping` every 15 s). Any other `Host` (say `curl -H "Host: evil.example"`) → `403 {"error":"forbidden host"}`.
 - **Stop:** Ctrl+C in the `pnpm dev` terminal. On Windows, check that nothing still listens on the ports (`netstat -ano | findstr :<api>`).
 - **Verification:** `pnpm verify`
