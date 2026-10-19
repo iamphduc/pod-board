@@ -18,20 +18,41 @@ const MAX_SEGMENTS = 3
 const SUBCOMMAND_REACH = 4
 
 const PROGRAMS = new Set([
-  'pnpm', 'npm', 'npx', 'yarn', 'bun', 'deno', 'node', 'tsx', 'git', 'gh', 'vitest', 'jest', 'tsc', 'vite', 'agent-browser',
-  'curl', 'ls', 'cd', 'cat', 'mkdir', 'rm', 'cp', 'mv', 'echo', 'grep', 'rg', 'find', 'head', 'tail', 'sed', 'wc', 'sort',
-  'touch', 'pwd', 'sleep', 'kill', 'netstat', 'ps', 'corepack', 'bash', 'sh', 'pwsh', 'powershell', 'cmd',
+  'pnpm', 'npm', 'npx', 'yarn', 'bun', 'bunx', 'deno', 'node', 'tsx', 'git', 'gh', 'vitest', 'jest', 'tsc', 'vite',
+  'agent-browser', 'cargo', 'go', 'curl', 'ls', 'cd', 'cat', 'mkdir', 'rm', 'cp', 'mv', 'echo', 'grep', 'rg', 'find', 'head',
+  'tail', 'sed', 'wc', 'sort', 'touch', 'pwd', 'sleep', 'kill', 'netstat', 'ps', 'corepack', 'bash', 'sh', 'pwsh',
+  'powershell', 'cmd',
 ])
 
-const SUBCOMMANDS = new Set([
-  'test', 'run', 'install', 'add', 'remove', 'build', 'dev', 'verify', 'typecheck', 'lint', 'exec', 'dlx', 'vitest', 'start',
-  'commit', 'push', 'pull', 'fetch', 'status', 'diff', 'log', 'show', 'checkout', 'switch', 'merge', 'rebase', 'reset',
-  'restore', 'stash', 'worktree', 'branch', 'tag', 'remote', 'clone', 'init', 'pr', 'issue', 'api', 'auth', 'view',
-  'list', 'open', 'close', 'batch', 'snapshot', 'click', 'fill', 'screenshot',
+/** Package managers: `run` names a script, `exec` and `dlx` name a program. */
+const PACKAGE_MANAGERS = new Set(['pnpm', 'npm', 'yarn', 'bun'])
+const SCRIPTS = ['test', 'build', 'dev', 'verify', 'typecheck', 'lint', 'start', 'vitest']
+const PACKAGE_SUBS = new Set([...SCRIPTS, 'run', 'install', 'add', 'remove', 'exec', 'dlx', 'init'])
+const SCRIPT_NAMES = new Set(SCRIPTS)
+
+/** The subcommands each program takes. A program not listed here takes none, so `echo test` reads as `echo`. */
+const SUBCOMMANDS = new Map<string, Set<string>>([
+  ...[...PACKAGE_MANAGERS].map((p): [string, Set<string>] => [p, PACKAGE_SUBS]),
+  ['deno', new Set(['test', 'run', 'task', 'install', 'add', 'lint', 'fmt', 'check'])],
+  ['cargo', new Set(['test', 'build', 'run', 'check', 'add', 'install'])],
+  ['go', new Set(['test', 'build', 'run', 'vet', 'mod'])],
+  ['git', new Set([
+    'add', 'commit', 'push', 'pull', 'fetch', 'status', 'diff', 'log', 'show', 'checkout', 'switch', 'merge', 'rebase', 'reset',
+    'restore', 'stash', 'worktree', 'branch', 'tag', 'remote', 'clone', 'init',
+  ])],
+  ['gh', new Set(['pr', 'issue', 'api', 'auth', 'run', 'repo', 'release', 'workflow'])],
+  ['agent-browser', new Set(['open', 'close', 'batch', 'snapshot', 'click', 'fill', 'screenshot'])],
+  ['vitest', new Set(['run', 'watch'])],
+  ['vite', new Set(['build', 'dev', 'preview'])],
+  ['corepack', new Set(['enable', 'prepare'])],
 ])
 
+/** Programs whose first argument is the program to run. */
+const RUNNERS = new Set(['npx', 'bunx'])
 const TEST_PROGRAMS = new Set(['vitest', 'jest'])
-const TEST_SUBCOMMANDS = new Set(['test', 'verify', 'vitest'])
+/** A test run is one of these as a subcommand of a package manager, deno, cargo, or go, or as a script after `run`. */
+const TEST_WORDS = new Set(['test', 'verify', 'vitest'])
+const TESTS_BY_SUB = new Set([...PACKAGE_MANAGERS, 'deno', 'cargo', 'go'])
 
 const NAME = /^[\w:.-]{1,64}$/
 const AGENT_NAME = /^[\w:.-]{1,40}$/
@@ -181,7 +202,7 @@ function hostOf(url: unknown): string | undefined {
 /**
  * Programs and known subcommands of up to three command segments. Arguments,
  * env tokens, and unknown programs never show; an unknown program reads as
- * `command`.
+ * `command`. Every word shown is on a fixed list.
  */
 function shellSummary(command: unknown): Shell {
   if (typeof command !== 'string') return { summary: '', isTest: false }
@@ -189,17 +210,45 @@ function shellSummary(command: unknown): Shell {
   let isTest = false
   for (const segment of command.split(/&&|\|\||[;|\n]/)) {
     const tokens = segment.split(/\s+/).filter((t) => t !== '' && !t.includes('='))
-    const first = tokens[0]
-    if (first === undefined) continue
-    const base = (first.split(/[\\/]/).pop() ?? '').toLowerCase().replace(/\.exe$/, '')
-    const program = PROGRAMS.has(base) ? base : undefined
-    const sub = tokens.slice(1, 1 + SUBCOMMAND_REACH).find((t) => SUBCOMMANDS.has(t))
-    if ((program !== undefined && TEST_PROGRAMS.has(program)) || (sub !== undefined && TEST_SUBCOMMANDS.has(sub))) isTest = true
-    parts.push(program === undefined ? 'command' : sub === undefined ? program : `${program} ${sub}`)
+    if (tokens.length === 0) continue
+    const words = segmentWords(tokens)
+    if (words.isTest) isTest = true
+    parts.push(words.shown.join(' '))
   }
   const shown = parts.slice(0, MAX_SEGMENTS).join(' · ')
   return { summary: parts.length > MAX_SEGMENTS ? `${shown} …` : shown, isTest }
 }
+
+/** One segment's shown words (program, subcommand, then a runner's program or a script) and whether it runs tests. */
+function segmentWords(tokens: string[]): { shown: string[]; isTest: boolean } {
+  const program = baseName(tokens[0] ?? '')
+  if (!PROGRAMS.has(program)) return { shown: ['command'], isTest: false }
+  if (RUNNERS.has(program)) return withProgram([program], nextArg(tokens, 1))
+  const subs = SUBCOMMANDS.get(program)
+  const at = subs === undefined ? -1 : tokens.findIndex((t, i) => i >= 1 && i <= SUBCOMMAND_REACH && subs.has(t))
+  const sub = tokens[at]
+  if (sub === undefined) return { shown: [program], isTest: TEST_PROGRAMS.has(program) }
+  if (PACKAGE_MANAGERS.has(program) && (sub === 'exec' || sub === 'dlx')) return withProgram([program, sub], nextArg(tokens, at + 1))
+  if (PACKAGE_MANAGERS.has(program) && sub === 'run') {
+    const script = nextArg(tokens, at + 1)
+    if (script === undefined || !SCRIPT_NAMES.has(script)) return { shown: [program, sub], isTest: false }
+    return { shown: [program, sub, script], isTest: TEST_WORDS.has(script) }
+  }
+  return { shown: [program, sub], isTest: TEST_PROGRAMS.has(program) || (TESTS_BY_SUB.has(program) && TEST_WORDS.has(sub)) }
+}
+
+/** A runner's words, plus the program it runs when that program is known; a test run when it's a test program. */
+function withProgram(shown: string[], raw: string | undefined): { shown: string[]; isTest: boolean } {
+  const program = raw === undefined ? '' : baseName(raw)
+  if (!PROGRAMS.has(program)) return { shown, isTest: false }
+  return { shown: [...shown, program], isTest: TEST_PROGRAMS.has(program) }
+}
+
+/** The first token from `from` on that isn't a flag. */
+const nextArg = (tokens: string[], from: number) => tokens.slice(from).find((t) => !t.startsWith('-'))
+
+/** A program token's base name, lowercased, without `.exe`. */
+const baseName = (token: string) => (token.split(/[\\/]/).pop() ?? '').toLowerCase().replace(/\.exe$/, '')
 
 /** A root with `/` slashes and no trailing slash. */
 const rootOf = (root: string) => root.replaceAll('\\', '/').replace(/\/+$/, '')
