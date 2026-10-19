@@ -16,6 +16,7 @@ export type StreamSource = {
 
 export const FIRST_RETRY_MS = 1000
 export const MAX_RETRY_MS = 30_000
+export const PROBE_EVERY_MS = 5000
 
 /** A Board-shaped value: enough to render without throwing. */
 function asBoard(data: unknown): Board | undefined {

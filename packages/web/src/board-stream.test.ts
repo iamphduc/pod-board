@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Board } from '@pod-board/model'
-import { createBoardStream, type StreamSource, type StreamState } from './board-stream.ts'
+import { createBoardStream, PROBE_EVERY_MS, type StreamSource, type StreamState } from './board-stream.ts'
 
 type Listener = (ev: { data?: unknown }) => void
 
@@ -169,5 +169,79 @@ describe('reconnects and keeps the last board', () => {
     expect(got).toEqual(['connecting', 'lost'])
     vi.advanceTimersByTime(1000)
     expect(calls).toBe(2)
+  })
+})
+
+describe('notices a dead server behind a proxy that keeps the stream open', () => {
+  let sources: FakeSource[]
+  let states: StreamState[]
+  beforeEach(() => {
+    vi.useFakeTimers()
+    sources = []
+    states = []
+  })
+  afterEach(() => vi.useRealTimers())
+
+  const start = (probe: () => Promise<boolean>) =>
+    createBoardStream(
+      () => {
+        const s = new FakeSource()
+        sources.push(s)
+        return s
+      },
+      () => {},
+      (s) => states.push(s),
+      { probe },
+    )
+
+  it('a failed health probe while connected counts as an error', async () => {
+    let healthy = true
+    start(async () => healthy)
+    sources[0]!.fire('board', JSON.stringify(board(1)))
+    await vi.advanceTimersByTimeAsync(PROBE_EVERY_MS)
+    expect(states).toEqual(['connecting', 'live'])
+    healthy = false
+    await vi.advanceTimersByTimeAsync(PROBE_EVERY_MS)
+    expect(states).toEqual(['connecting', 'live', 'lost'])
+    expect(sources[0]!.closed).toBe(true)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(sources).toHaveLength(2)
+  })
+
+  it('a probe that throws counts as an error', async () => {
+    start(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    await vi.advanceTimersByTimeAsync(PROBE_EVERY_MS)
+    expect(states.at(-1)).toBe('lost')
+  })
+
+  it('no probes while waiting to reconnect, and none after stop', async () => {
+    let calls = 0
+    const stream = start(async () => {
+      calls += 1
+      return true
+    })
+    sources[0]!.fire('error')
+    await vi.advanceTimersByTimeAsync(900)
+    expect(calls).toBe(0)
+    stream.stop()
+    await vi.advanceTimersByTimeAsync(PROBE_EVERY_MS * 3)
+    expect(calls).toBe(0)
+  })
+
+  it('a slow probe is not stacked, and its late answer after stop does nothing', async () => {
+    let calls = 0
+    let answer: (ok: boolean) => void = () => {}
+    const stream = start(() => {
+      calls += 1
+      return new Promise<boolean>((r) => (answer = r))
+    })
+    await vi.advanceTimersByTimeAsync(PROBE_EVERY_MS * 3)
+    expect(calls).toBe(1)
+    stream.stop()
+    answer(false)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(states).toEqual(['connecting'])
   })
 })
