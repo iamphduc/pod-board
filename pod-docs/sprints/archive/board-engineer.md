@@ -1,8 +1,7 @@
 # Sprint: Wave board, engineer view, and empty and error states
 
-_From plan: pod-docs/plans/board-read.md · Slug: board-engineer · Status: active · Generated: 2026-10-19_
+_From plan: pod-docs/plans/board-read.md · Slug: board-engineer · Status: archived · Generated: 2026-10-19_
 
-<!-- autopilot-run: started=2026-10-19T03:31:01-07:00 sprints=0 waves=0 -->
 
 ## Status board
 
@@ -10,8 +9,8 @@ _From plan: pod-docs/plans/board-read.md · Slug: board-engineer · Status: acti
 |------|-------|-------|--------|----|--------|------------|------------|
 | 1 | T1 | Tool timeline parser and the timeline route | board-engineer-T1 | [#10](https://github.com/iamphduc/pod-board/pull/10) merged | done | medium | — |
 | 1 | W1 | Screen 2: wave board, dependency lines, critical path, filters, routes | board-engineer-W1 | [#10](https://github.com/iamphduc/pod-board/pull/10) merged | done | high | — |
-| 2 | E1 | Screen 3: engineer view with a live tool timeline | board-engineer-E1 | — | pushed | high | T1, W1 |
-| 2 | X1 | Empty and error states: config, `gh`, unsupported docs, no runs; theme boot | board-engineer-X1 | — | pushed | medium | W1 |
+| 2 | E1 | Screen 3: engineer view with a live tool timeline | board-engineer-E1 | [#12](https://github.com/iamphduc/pod-board/pull/12) merged | done | high | T1, W1 |
+| 2 | X1 | Empty and error states: config, `gh`, unsupported docs, no runs; theme boot | board-engineer-X1 | [#12](https://github.com/iamphduc/pod-board/pull/12) merged | done | medium | W1 |
 
 ## Shared contract
 
@@ -146,3 +145,21 @@ parseAgentTimeline(input: { agentId: string; jsonl: string; roots: string[] }): 
 - **Depends on:** W1
 - **One-way door:** none
 - **Model:** opus
+
+## Sprint summary
+
+- **Synced with merge-target:** up to date (`pod-staging` had no new commits)
+- **Slices shipped:** T1, W1, E1, X1
+- **Queue entries:** resolved 7 (A1 config error, settled in this sprint's contract and built by X1; the flaky polling test from #10, fixed by #11 and #14; the gate 3 halt on #12, answered by the human with option A; and the human's answers to L1 chip contrast, P1 `you` on done waves, and F1 the speak-out fixture), deferred 0
+- **Slice log:**
+  - T1: opus · medium · test-first yes · runtime the timeline route over 3 real engineer transcripts (temp copies), traversal ids, a foreign Host, an appended line, a moved file · 6 NOTEs, 1 PENDING (false test-run count; fixed in the wave 1 fix) · time lost none
+  - W1: opus · high · test-first yes · runtime both boards (chess-web copy and this repo) at 1280 and 375 px in both themes, filters, keys, live update · 5 NOTEs · time lost none
+  - E1: opus · high · test-first yes · runtime screen 3 on real transcripts, the planted fake secret (0 hits in the timeline JSON, `/api/board`, and the page), a live appended row, 1280 and 375 px in both themes · 4 NOTEs · time lost ~4 min (agent-browser batch quoting)
+  - X1: opus · medium · test-first yes · runtime each error state (corrupt config, `pod docs: 1`, no version, gh logged out and missing, no repos, all banners) at 1280 and 375 px in both themes, theme boot with the app script blocked · 5 NOTEs (1 re-judged from PENDING), 2 PENDINGs (config not watched, stale gh time; both fixed in the wave 2 fix) · time lost none
+  - Wave 1 fix (#9): opus · high · commands that only mention `test` counted as test runs (`runs: 4` for one real run)
+  - Wave 2 fix (#11): opus · medium · the config file wasn't watched (27 s / 29 s), the polling test flake, the stale gh check time, and bare names in Files owned
+  - After the gate 3 halt (#14): opus · high · steady edits starved live updates (0 events during 10 s of writes); a 1.5 s cap on the rebuild wait
+  - After the gate 3 halt (#13): opus · medium · the human's decisions: done waves and cards show `done`; the speak-out fixture cut to a 1 KB sample
+  - CI: #10's first Ubuntu run hit the old polling flake (passed on re-run; the flake was in code that wave didn't touch); #12's first Ubuntu run failed on the starvation → halt at gate 3. No stalls.
+  - Orchestrator check per wave: `pnpm verify`; the test-run bug reproduced with a made-up transcript; screen 2 at 1280 and 375 px in both themes (wave 1); the planted-secret check on the combined head, the config-watch and gh-time timings, Files owned in `/api/board`, and the steady-edit measurement in both watch modes (wave 2).
+- **Agent context at hand-back:** 1,201,857 tokens (sprint-planner 117,765; T1 132,777; W1 192,285; wave 1 fix 98,516; E1 168,252; X1 163,852; wave 2 fix 121,114; starvation fix 110,118; decisions fix 97,178) — *each agent's final context size, not tokens billed*
