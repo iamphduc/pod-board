@@ -1,9 +1,10 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type CSSProperties } from 'react'
 import type { BoardRepo } from '@pod-board/model'
 import { hashFor } from '../../selection.ts'
 import { Chip } from '../runs/Chip.tsx'
 import { DocTitle } from '../runs/DocTitle.tsx'
-import { buildWaveBoard, CARD_EDGE, cardChip, filterState, type Card, type FilterState } from './board-view.ts'
+import { EngineerView } from '../engineer/EngineerView.tsx'
+import { buildWaveBoard, CARD_EDGE, cardChip, engineerFor, filterState, type Card, type FilterState } from './board-view.ts'
 import { edgePath } from './geometry.ts'
 import './board.css'
 
@@ -51,6 +52,15 @@ export function BoardScreen({ repo, plan, slice, now }: Props) {
       window.removeEventListener('resize', draw)
     }
   }, [draw])
+
+  const openCard = board?.columns.flatMap((c) => c.cards).find((c) => c.code === slice)
+  const engineer = openCard && board?.sprint !== undefined ? engineerFor(repo, plan, board.sprint, openCard.code) : undefined
+
+  // Bring the engineer view into sight when a slice opens; on a narrow screen it sits below the board.
+  const viewRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (openCard) viewRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [openCard?.code]) // the open slice, not the card object, which every Board event replaces
 
   if (!board) return null
   if (board.columns.length === 0) {
@@ -139,6 +149,11 @@ export function BoardScreen({ repo, plan, slice, now }: Props) {
           ))}
         </div>
       </div>
+      {openCard && (
+        <div ref={viewRef}>
+          <EngineerView key={openCard.code} repo={repo} card={openCard} agent={engineer} now={now} />
+        </div>
+      )}
     </section>
   )
 }
