@@ -4,7 +4,8 @@
 // is ever kept. The rules and why are in pod-docs/feature-details/run-model.md.
 
 import type { AgentRun, AgentState } from './board.ts'
-import { parseDispatch, turnTokens } from './pod-flow/model.ts'
+import { readDispatch } from './dispatch.ts'
+import { turnTokens } from './pod-flow/model.ts'
 import type { Usage } from './pod-flow/types.ts'
 
 /** An agent that wrote nothing for this long, and didn't end, reads as stale. */
@@ -58,7 +59,7 @@ export function parseAgentTranscript({ id, session, meta, jsonl }: AgentFile): A
   const run: AgentRun = { id, session, type: info.agentType, description, tokens: 0, ended: handedBack || lastStop === 'end_turn' }
   for (const tokens of usageById.values()) run.tokens += tokens
   if (prompt !== undefined) {
-    for (const [key, value] of Object.entries(parseDispatch(prompt))) {
+    for (const [key, value] of Object.entries(readDispatch(prompt, info.agentType))) {
       if (value !== undefined) Object.assign(run, { [key]: value })
     }
   }

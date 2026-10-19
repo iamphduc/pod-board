@@ -102,3 +102,4 @@ The web app's `screens/runs/view.ts` decides these; `RunsScreen.tsx` only render
 - 2026-10-18: added in sprint server-runs (slice P1).
 - 2026-10-19: banners, docs version messages, and theme boot added in sprint board-engineer (slice X1).
 - 2026-10-19: a done wave reads `done` even with a pending ask for the human; `you` only on unfinished waves (decision "`you` only on unfinished waves", sprint board-engineer wave 2 fix).
+- 2026-10-19: reviewers and sprint planners now carry their plan from real dispatches (`readDispatch`, see run-model.md), so `final review`, the Check stage's live round, and `drafting` show for real runs (plan board-read fix pass).
