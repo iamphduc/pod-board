@@ -1,14 +1,8 @@
 import { execFile } from 'node:child_process'
+import type { GhStatus, PrStatus } from '@pod-board/model'
 
-// Contract types: same shape as `PrStatus` and `GhStatus` in `@pod-board/model` (M1).
-export type PrStatus = {
-  number: number
-  state: 'open' | 'merged' | 'closed'
-  checks: 'pass' | 'fail' | 'pending' | 'none'
-  url?: string
-  checkedAt: number
-}
-export type GhStatus = 'ok' | 'missing' | 'logged-out' | 'unknown'
+// The contract types live in the model; re-exported for callers of this module.
+export type { GhStatus, PrStatus }
 
 /** `not-found`: the `gh` binary isn't on PATH. `failed`: it ran and exited non-zero, timed out, or was killed. */
 export type ExecResult = { status: 'ok' | 'failed' | 'not-found'; stdout: string }
