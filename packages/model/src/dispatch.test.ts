@@ -410,7 +410,7 @@ const FENCED_REVIEWER = [
 describe('readDispatch: drive paths and fenced blocks', () => {
   it('a Windows drive path is a path and gives nothing', () => {
     expect(readDispatch('- **plan:** E:/r/pod-docs/plans/alpha.md', 'pod:reviewer').plan).toBeUndefined()
-    expect(readDispatch('- **plan:** E:\r\pod-docs\plans\alpha.md', 'pod:reviewer').plan).toBeUndefined()
+    expect(readDispatch(String.raw`- **plan:** E:\r\pod-docs\plans\alpha.md`, 'pod:reviewer').plan).toBeUndefined()
     expect(readDispatch('- **plan:** `E:/r/pod-docs/plans/alpha.md`', 'pod:reviewer').plan).toBeUndefined()
     expect(readDispatch('Plan: c:/r/alpha.md.', 'pod:reviewer').plan).toBeUndefined()
     expect(readDispatch('- **branch name:** E:/r/x', 'pod:engineer').branch).toBeUndefined()
