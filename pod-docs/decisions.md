@@ -48,3 +48,8 @@ Consequences: the repo can go public without that text in the current tree (it s
 Context: gate 3 on PR #12: steady edits (every 300 ms poll, every 150 ms native) gave no board events while they continued.
 Decision: option A: one more fix engineer on `board-engineer-w2` caps the wait so a rebuild runs within about 1.5–2 s of a burst's first event, while still grouping quick edits.
 Consequences: autopilot resumes after the fix merges into PR #12.
+
+## 2026-10-19 — one more fix before the final merge
+Context: gate 2 on PR #15: round 2 found that the loose `plan slug` match reads prose, so a reviewer prompt quoting "`plan slug:` field" reads `plan=field`.
+Decision: option A: one more fix engineer on `board-read`, then a round 3 review, and merge only when everything checks out. The fix also drops the dispatch `description` from `/api/board` (the reviewer's "now" hardening item).
+Consequences: autopilot resumes; the final merge waits for a passing round 3.
