@@ -25,7 +25,7 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 
 ## Watch out
 
-- **Open bug (gate 2 on PR #15):** a plan's reviewers and planners join it only through `AgentRun.plan`, read by `readDispatch` (see `run-model.md`). The ported loose `plan slug` match runs first and matches prose, so a reviewer prompt quoting "`plan slug:` field" reads plan `field`. The plan then drops off the runs list (`no active plan · idle`) during its own review. The fix is to let the `- **plan:**` field win.
+- A plan's reviewers and planners join it only through `AgentRun.plan`, read by `readDispatch` (see `run-model.md`) from list fields only. A field read from prose once gave a round 2 reviewer plan `field`, and the plan dropped off the runs list (`no active plan · idle`) during its own review. Don't bring back a loose match.
 - The planner's plan comes from the prose ``for plan `<slug>` ``; it holds only while pod's prompt says exactly that.
 - A pending `→ human` entry stays pending after its wave merges: the wave reads `done`, the run `needs-you`. Don't move this rule into `runs.ts`.
 - Fix branches not named `<sprint>-w<N>-fix` (such as `-w2-starve`) aren't counted in their wave's time and tokens.
@@ -39,3 +39,4 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - 2026-10-19: a done wave reads `done` even with a pending ask for the human; `you` only on unfinished waves (decision "`you` only on unfinished waves", sprint board-engineer wave 2 fix).
 - 2026-10-19: reviewers and sprint planners now carry their plan from real dispatches (`readDispatch`, see run-model.md), so `final review`, the Check stage's live round, and `drafting` show for real runs (plan board-read fix pass).
 - 2026-10-19 · board-read · plan complete; theme boot moved to `app-shell.md`; round 2 found the prose `plan slug` bug, still open · [report](../reports/board-read.html)
+- 2026-10-19: a dispatch field quoted in prose never beats the real list field, so a round 2 reviewer keeps its plan in `final review` and the Check stage shows `round 2` live (plan board-read fix 2).

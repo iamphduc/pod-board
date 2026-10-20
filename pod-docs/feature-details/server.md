@@ -32,7 +32,7 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - Keep the cap timer apart from the quiet-spell timer, and never reset it within a burst.
 - Real-file watcher tests must wait out the start-up rebuilds before the edit they time.
 - Every rebuild re-parses every transcript in full; only file text is cached. Fine at 67 MB here, but queued for caching by size and mtime before hosting.
-- `AgentRun.description` (assistant text, cut to 80 characters) is in `/api/board` though no page shows it; queued to be dropped.
+- Agents on the Board carry no `description`: the meta file's description is assistant-written text no page shows. `AgentRun` still lists it as optional only for old test helpers; never set it.
 - `Claim`, `PrStatus`, and `GhStatus` come from `@pod-board/model`; change the shapes there.
 
 ## History
@@ -43,3 +43,4 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - 2026-10-19 · board-engineer wave 2 fix: config edits reach the board through the watcher; poll mode waits one poll interval longer before a rebuild; a new `ghCheckedAt` counts as a change while `gh` isn't `ok`.
 - 2026-10-19 · board-engineer wave 2 fix 2: a rebuild waits at most 1.5 s after a burst's first event, so steady edits still reach clients.
 - 2026-10-19 · board-read · plan complete; final PR held at gate 2 for a dispatch bug outside the server · [report](../reports/board-read.html)
+- 2026-10-19 · board-read fix 2: `/api/board` no longer serves agent descriptions.
