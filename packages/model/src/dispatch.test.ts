@@ -466,8 +466,8 @@ describe('drive paths and fenced blocks, end to end', () => {
     expect(stage(r, 'sprint:two')).toEqual([['two', 'live', 'drafting']])
   })
 
-  it('a reviewer given a drive-path plan and a plan slug stays in final review', () => {
-    const prompt = '- **kind:** plan\n- **plan:** E:/r/pod-docs/plans/alpha.md\n- **plan slug:** alpha\n- **round:** 4'
+  it('a reviewer given a drive-path plan slug and a plan field stays in final review', () => {
+    const prompt = '- **kind:** plan\n- **plan slug:** E:/r/pod-docs/plans/alpha.md\n- **plan:** alpha\n- **round:** 4'
     const r = repo(planFiles([['one', 'done']]), 'pod:reviewer', prompt)
     expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).map((x) => [x.plan, x.where, x.state])).toEqual([['alpha', 'final review', 'running']])
     expect(stage(r, 'check')?.[0]).toEqual(['Final review', 'live', 'round 4'])
