@@ -9,7 +9,7 @@ import type { FSWatcher } from 'chokidar'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { createBoardService, type BoardService } from './board-service.ts'
 import type { GhReader } from './gh.ts'
-import { createBoardWatcher, MAX_WAIT_MS, type BoardWatcher } from './watcher.ts'
+import { createBoardWatcher, DEBOUNCE_MS, MAX_WAIT_MS, type BoardWatcher } from './watcher.ts'
 
 const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'model', 'fixtures', 'chess-web')
 
@@ -88,6 +88,30 @@ function collect(w: BoardWatcher) {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+// Real timers, kept before any test fakes them, so the watcher's real `stat` calls can finish between fake steps.
+const realSetTimeout = globalThis.setTimeout
+const realYield = () => new Promise((r) => realSetTimeout(r, 2))
+
+/** Moves fake time forward in small steps, giving real I/O a turn after each. */
+async function advance(ms: number) {
+  for (let left = ms; left > 0; left -= 50) {
+    await vi.advanceTimersByTimeAsync(Math.min(50, left))
+    await realYield()
+  }
+}
+
+/** One folder watch that emits only what a test tells it to. */
+function fakeWatches() {
+  const fakes: EventEmitter[] = []
+  const watch = () => {
+    const w = Object.assign(new EventEmitter(), { close: async () => {} })
+    fakes.push(w)
+    process.nextTick(() => w.emit('ready'))
+    return w as unknown as FSWatcher
+  }
+  return { fakes, watch }
+}
+
 /**
  * Wraps a service to note when each build starts, so a test can wait until the
  * watcher has gone `ms` without starting one. In poll mode a write can be seen
@@ -140,17 +164,21 @@ describe('board watcher', () => {
       expect(Date.now() - started).toBeLessThan(5000)
       expect(watcher.board()).toBe(got)
 
-      // Three quick edits give one event, carrying the last one. First let the
-      // watcher finish with the edit above, so a late rebuild for it can't
-      // land in the middle of the three edits.
+      // Three quick edits reach clients, and the last board carries the last
+      // one. How many boards they give is pinned in 'a burst of real edits':
+      // here a runner stall between two writes can split them, correctly.
       await quiet(poll ? 1500 : 800)
       const before = events.length
+      const burst = Date.now()
       await setT1(repo, 'blocked')
       await setT1(repo, 'pending')
       await setT1(repo, 'done')
       await next((b) => t1Status(b) === 'done', 5000)
+      expect(Date.now() - burst).toBeLessThan(5000)
       await sleep(poll ? 2500 : 1000)
-      expect(events.length - before).toBe(1)
+      expect(events.length).toBeGreaterThan(before)
+      expect(t1Status(events.at(-1)!)).toBe('done')
+      expect(watcher.board()).toBe(events.at(-1))
     }, 15_000) // The 5 s bound is checked above; the whole test, with its waits, takes longer.
   }
 
@@ -182,13 +210,7 @@ describe('board watcher', () => {
 
   test('in poll mode, events up to one poll interval apart give one rebuild', async () => {
     vi.useFakeTimers()
-    const fakes: EventEmitter[] = []
-    const fakeWatch = () => {
-      const w = Object.assign(new EventEmitter(), { close: async () => {} })
-      fakes.push(w)
-      process.nextTick(() => w.emit('ready'))
-      return w as unknown as FSWatcher
-    }
+    const { fakes, watch: fakeWatch } = fakeWatches()
     let builds = 0
     const svc: BoardService = {
       build: async () => {
@@ -219,20 +241,10 @@ describe('board watcher', () => {
   })
 
   describe('steady events still rebuild within the cap', () => {
-    // Real timers, kept before faking, so the watcher's real `stat` calls can finish between fake steps.
-    const realSetTimeout = globalThis.setTimeout
-    const realYield = () => new Promise((r) => realSetTimeout(r, 2))
-
     /** A watcher over fake folder watches and a fake service that notes the fake time of each build. */
     async function fakeWatcher(poll: boolean, build?: () => Promise<void>) {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
-      const fakes: EventEmitter[] = []
-      const fakeWatch = () => {
-        const w = Object.assign(new EventEmitter(), { close: async () => {} })
-        fakes.push(w)
-        process.nextTick(() => w.emit('ready'))
-        return w as unknown as FSWatcher
-      }
+      const { fakes, watch: fakeWatch } = fakeWatches()
       const builds: number[] = []
       const svc: BoardService = {
         build: async () => {
@@ -250,14 +262,6 @@ describe('board watcher', () => {
       expect(fakes.length).toBeGreaterThan(0)
       builds.length = 0
       return { fakes, builds, emit: () => fakes[0]!.emit('all', 'change', configFile) }
-    }
-
-    /** Moves fake time forward in small steps, giving real I/O a turn after each. */
-    async function advance(ms: number) {
-      for (let left = ms; left > 0; left -= 50) {
-        await vi.advanceTimersByTimeAsync(Math.min(50, left))
-        await realYield()
-      }
     }
 
     /** Emits an event every `every` ms for `forMs` ms; returns the fake time of the first one. */
@@ -329,6 +333,86 @@ describe('board watcher', () => {
       await advance(MAX_WAIT_MS)
       expect(builds).toHaveLength(2)
       expect(builds[1]! - late).toBeLessThanOrEqual(MAX_WAIT_MS)
+    }, 30_000)
+  })
+
+  // Real files and the real service, but a fake watch and fake timers, so the
+  // test sets when the watcher hears of each write. A real-file test can't:
+  // a runner stall between two writes splits them into two correct boards.
+  describe('a burst of real edits', () => {
+    async function editWatcher(poll: boolean) {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+      const repo = copyFixture('chess-web')
+      await register(repo)
+      const { fakes, watch: fakeWatch } = fakeWatches()
+      // Counts builds still reading, so a test can let one finish before its next write.
+      const real = service()
+      let reading = 0
+      const svc: BoardService = {
+        build: async () => {
+          reading++
+          try {
+            return await real.build()
+          } finally {
+            reading--
+          }
+        },
+        refreshGh: real.refreshGh,
+      }
+      const w = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, poll, watch: fakeWatch, tickMs: 1e9 })
+      watcher = w
+      const first = await w.start()
+      expect(t1Status(first)).toBe('pending')
+      // Lets the start-up rebuilds run, then waits for the last one to finish.
+      await advance(5000)
+      await w.rebuild()
+      expect(fakes.length).toBeGreaterThan(0)
+      const { events } = collect(w)
+      /** Moves fake time forward, then lets any rebuild it started finish reading. */
+      const wait = async (ms: number) => {
+        await advance(ms)
+        while (reading > 0) await realYield()
+      }
+      /** Writes T1's status for real, then tells the watcher. */
+      const edit = async (status: string) => {
+        await setT1(repo, status)
+        fakes[0]!.emit('all', 'change', join(repo, 'pod-docs', 'sprints', 'ladder.md'))
+      }
+      /** Fires every timer still due, then waits out the rebuilds they queued. A rebuild that finds nothing new sends nothing. */
+      const settle = async () => {
+        await advance(MAX_WAIT_MS + 1000)
+        await w.rebuild()
+      }
+      return { w, events, edit, wait, settle }
+    }
+
+    for (const [poll, gap] of [
+      [false, 100],
+      // A poller sees a quick burst on up to two ticks, one poll interval apart.
+      [true, 450],
+    ] as const) {
+      test(`quick edits give one board, carrying the last${poll ? ' (polling)' : ''}`, async () => {
+        const { w, events, edit, wait, settle } = await editWatcher(poll)
+        await edit('blocked')
+        await wait(gap)
+        await edit('pending')
+        await wait(gap)
+        await edit('done')
+        await settle()
+        expect(events.map(t1Status)).toEqual(['done'])
+        expect(w.board()).toBe(events[0])
+      }, 30_000)
+    }
+
+    test('edits farther apart than the quiet spell give one board each', async () => {
+      const { events, edit, wait, settle } = await editWatcher(false)
+      await edit('blocked')
+      // The quiet spell ends and its rebuild runs before the next write.
+      await wait(DEBOUNCE_MS + 50)
+      await edit('pending')
+      await edit('done')
+      await settle()
+      expect(events.map(t1Status)).toEqual(['blocked', 'done'])
     }, 30_000)
   })
 
