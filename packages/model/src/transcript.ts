@@ -1,7 +1,7 @@
 // One pod agent's transcript read into an AgentRun: who it is, where it works,
 // when it ran, what it cost, and whether it ended. Pure: the server reads the
-// files and hands their text in. No transcript text, tool input, or tool output
-// is ever kept. The rules and why are in pod-docs/feature-details/run-model.md.
+// files and hands their text in. No transcript text, tool input, tool output,
+// or the meta file's description is ever kept. The rules and why are in pod-docs/feature-details/run-model.md.
 
 import type { AgentRun, AgentState } from './board.ts'
 import { readDispatch } from './dispatch.ts'
@@ -10,8 +10,6 @@ import type { Usage } from './pod-flow/types.ts'
 
 /** An agent that wrote nothing for this long, and didn't end, reads as stale. */
 export const STALE_MS = 30 * 60 * 1000
-
-const DESCRIPTION_MAX = 80
 
 /** One agent's files, as text: `agent-<id>.meta.json` and `agent-<id>.jsonl`. */
 export type AgentFile = { id: string; session: string; meta: string; jsonl: string }
@@ -25,7 +23,6 @@ const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0
 export function parseAgentTranscript({ id, session, meta, jsonl }: AgentFile): AgentRun | undefined {
   const info = parseJson(meta)
   if (!isObject(info) || typeof info.agentType !== 'string' || !info.agentType.startsWith('pod:')) return undefined
-  const description = typeof info.description === 'string' ? [...info.description].slice(0, DESCRIPTION_MAX).join('') : ''
 
   let prompt: string | undefined
   let startedAt: number | undefined
@@ -56,7 +53,7 @@ export function parseAgentTranscript({ id, session, meta, jsonl }: AgentFile): A
     }
   }
 
-  const run: AgentRun = { id, session, type: info.agentType, description, tokens: 0, ended: handedBack || lastStop === 'end_turn' }
+  const run: AgentRun = { id, session, type: info.agentType, tokens: 0, ended: handedBack || lastStop === 'end_turn' }
   for (const tokens of usageById.values()) run.tokens += tokens
   if (prompt !== undefined) {
     for (const [key, value] of Object.entries(readDispatch(prompt, info.agentType))) {

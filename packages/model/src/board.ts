@@ -9,7 +9,11 @@ export type AgentRun = {
   id: string
   session: string
   type: string
-  description: string
+  /**
+   * Never set: the dispatcher's Task description is assistant-written text, and no page shows it,
+   * so it stays off the Board. Optional only until the test helpers that still write it drop it.
+   */
+  description?: string
   sprint?: string
   slice?: string
   branch?: string

@@ -202,7 +202,7 @@ describe('parseAgentTranscript', () => {
 })
 
 describe('agentState', () => {
-  const run = (patch: Partial<AgentRun>): AgentRun => ({ id: 'a', session: 's', type: 'pod:engineer', description: '', tokens: 0, ended: false, ...patch })
+  const run = (patch: Partial<AgentRun>): AgentRun => ({ id: 'a', session: 's', type: 'pod:engineer', tokens: 0, ended: false, ...patch })
   const now = T0 + 60 * 60_000
 
   it('agentState edges', () => {
