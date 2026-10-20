@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { buildRepoModel, parseQueue } from '../src/index.ts'
+import { buildPipeline, buildRepoModel, listRuns, parseAgentTranscript, parseQueue, type AgentRun, type BoardRepo, type Claim, type PrStatus } from '../src/index.ts'
 import { loadFixture } from './load-fixture.ts'
 
 const docKeys = (files: Record<string, string>, folder: string) =>
@@ -134,5 +134,97 @@ describe('run model on real-run fixtures', () => {
         queue: [],
       })
     }
+  })
+})
+
+// chess-web's ui-polish close-out at b0351dc: the plan archived, sprint `polish` done, a reporter
+// writing, the claim file still there. The prompt below has the shape of pod's "Plan complete"
+// reporter dispatch (the slug only in prose, a `Plan:` path item), not its text.
+describe('a run in its close-out (chess-web ui-polish)', () => {
+  const NOW = Date.parse('2026-10-20T08:00:00Z')
+  const at = (minutesAgo: number) => new Date(NOW - minutesAgo * 60_000).toISOString()
+  const CLAIM: Claim = { portBase: 3200, repoPath: 'E:\\Projects\\chess-web', plan: 'ui-polish' }
+  const PROMPT = [
+    'Plan complete: write the plan report and feature details for plan `ui-polish` in the parent repo.',
+    '- Plan: pod-docs/plans/ui-polish.md (one sprint, `polish`, archived).',
+    '- Final PR: https://github.com/o/r/pull/1, reviewer verdict `pass`.',
+  ].join('\n')
+
+  const reporter = () => {
+    const record = (r: unknown) => JSON.stringify(r)
+    const run = parseAgentTranscript({
+      id: 'rep',
+      session: 's',
+      meta: JSON.stringify({ agentType: 'pod:reporter' }),
+      jsonl: [
+        record({ type: 'user', timestamp: at(12), message: { role: 'user', content: PROMPT } }),
+        record({ type: 'assistant', timestamp: at(1), message: { id: 'm1', role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'Write', input: {} }] } }),
+      ].join('\n'),
+    })
+    if (!run) throw new Error('not a pod agent')
+    return run
+  }
+
+  /**
+   * The fixture, without the hand-back unless asked (the reporter runs before pod writes it), or with
+   * it resolved, as the human leaves it after the merge.
+   */
+  const repo = (opts: { claims?: Claim[]; handBack?: boolean | 'resolved'; agents?: AgentRun[]; prs?: PrStatus[] } = {}): BoardRepo => {
+    const files = loadFixture('chess-web-ui-polish')
+    const queue = files['pod-docs/handoff-queue.md']!
+    if (!opts.handBack) files['pod-docs/handoff-queue.md'] = '# Handoff Queue\n'
+    if (opts.handBack === 'resolved') files['pod-docs/handoff-queue.md'] = queue.replace('**Resolution:** pending', '**Resolution:** 2026-10-20 — final PR merged')
+    return {
+      id: 'chess-web',
+      name: 'chess-web',
+      path: CLAIM.repoPath,
+      source: 'claim',
+      model: buildRepoModel(files),
+      agents: opts.agents ?? [reporter()],
+      prs: opts.prs ?? [],
+      claims: opts.claims ?? [CLAIM],
+    }
+  }
+  const runs = (r: BoardRepo) => listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW)
+
+  test('the fixture is the close-out: plan archived, its one sprint done, port base 3200', () => {
+    const plan = repo().model.plans.find((p) => p.slug === 'ui-polish')
+    expect(plan).toMatchObject({ status: 'archived', portBase: 3200 })
+    expect(plan?.sprints.map((s) => [s.slug, s.status])).toEqual([['polish', 'done']])
+    expect(plan).not.toHaveProperty('currentSprint')
+  })
+
+  test('the reporter reads its plan from the dispatch', () => {
+    expect(reporter()).toMatchObject({ type: 'pod:reporter', plan: 'ui-polish', ended: false })
+  })
+
+  test('with the claim and the reporter running, the run is closing out, not idle', () => {
+    expect(runs(repo())).toEqual([
+      { repoId: 'chess-web', repo: 'chess-web', plan: 'ui-polish', title: 'UI polish — calmer cards, resign, a clear game end, a compact review', where: 'closing out', state: 'running', portBase: 3200 },
+    ])
+  })
+
+  test("once the hand-back exists, it's the final PR, waiting on you", () => {
+    const r = repo({ handBack: true })
+    expect(runs(r).map((x) => [x.plan, x.where, x.state])).toEqual([['ui-polish', 'final PR', 'needs-you']])
+    const ship = buildPipeline(r, 'ui-polish', NOW)?.stages.find((s) => s.key === 'ship')?.steps
+    expect(ship).toEqual([{ key: 'final-pr', label: 'Final PR', state: 'you', detail: 'PR #91 · you merge' }])
+  })
+
+  test('after the merge, a leftover claim with nothing running leaves the list (hand-back resolved or deleted)', () => {
+    const idle = [{ repoId: 'chess-web', repo: 'chess-web', where: 'no active plan', state: 'idle' }]
+    const merged: PrStatus = { number: 91, state: 'merged', checks: 'pass', checkedAt: NOW }
+    const done = { ...reporter(), ended: true, lastAt: NOW - 3 * 60 * 60_000 }
+    expect(runs(repo({ handBack: 'resolved', agents: [done], prs: [merged] }))).toEqual(idle)
+    expect(runs(repo({ handBack: false, agents: [done], prs: [merged] }))).toEqual(idle)
+    expect(runs(repo({ handBack: 'resolved', agents: [] }))).toEqual(idle)
+  })
+
+  test('a resolved hand-back with the reporter still running stays closing out', () => {
+    expect(runs(repo({ handBack: 'resolved' })).map((x) => [x.plan, x.where, x.state])).toEqual([['ui-polish', 'closing out', 'running']])
+  })
+
+  test('with no claim, the archived plan stays off the list', () => {
+    expect(runs(repo({ claims: [] }))).toEqual([{ repoId: 'chess-web', repo: 'chess-web', where: 'no active plan', state: 'idle' }])
   })
 })

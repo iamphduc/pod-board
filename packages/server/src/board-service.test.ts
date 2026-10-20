@@ -40,10 +40,10 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
-/** A copy of the chess-web fixture at `<root>/repos/<name>`. */
-function copyFixture(name = 'chess-web'): string {
+/** A copy of a model fixture (chess-web by default) at `<root>/repos/<name>`. */
+function copyFixture(name = 'chess-web', fixture = 'chess-web'): string {
   const repo = join(root, 'repos', name)
-  cpSync(FIXTURE, repo, { recursive: true })
+  cpSync(join(dirname(FIXTURE), fixture), repo, { recursive: true })
   return repo
 }
 
@@ -341,6 +341,25 @@ describe('board service', () => {
     expect(new Set(gh.asked)).toEqual(new Set([11, 20]))
     // The hand-back PR comes from the model's rule, not a copy.
     expect(vi.mocked(model.handBackPr)).toHaveBeenCalledWith(expect.objectContaining({ slug: 'p' }))
+  })
+
+  test("refreshGh asks about a claimed archived plan's hand-back PR, and only while it's claimed", async () => {
+    // chess-web's ui-polish close-out: archived, its hand-back links PR #91.
+    const repo = copyFixture('chess-web', 'chess-web-ui-polish')
+    await register(repo)
+    const path = normalizeRepoPath(repo, platform)
+
+    const unclaimed = fakeGh()
+    const before = createBoardService(deps(unclaimed))
+    await before.refreshGh(await before.build())
+    expect(unclaimed.refreshed).toEqual([{ repoPath: path, numbers: [] }])
+
+    await claim(3200, repo, 'ui-polish')
+    const gh = fakeGh({ 91: 'merged' })
+    const service = createBoardService(deps(gh))
+    await service.refreshGh(await service.build())
+    expect(gh.refreshed).toEqual([{ repoPath: path, numbers: [91] }])
+    expect((await service.build()).repos[0]!.prs.map((p) => [p.number, p.state])).toEqual([[91, 'merged']])
   })
 
   test('refreshGh asks for every readable repo, even with no PRs, so gh status is known; it skips repos with an error', async () => {

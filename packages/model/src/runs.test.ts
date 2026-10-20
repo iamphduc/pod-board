@@ -184,6 +184,79 @@ describe('listRuns', () => {
     expect(runsOf(repo('r', planFiles(), { claims: [claims[1]!] }))[0]).not.toHaveProperty('portBase')
   })
 
+  it('a live claim keeps its plan listed through the close-out', () => {
+    const closed = { status: 'archived', sprints: [['one', 'done']] as SprintRow[], board: DONE_BOARD }
+    const claim = { portBase: 3200, repoPath: '/r/r', plan: 'alpha' }
+    const reporter = running({ type: 'pod:reporter', plan: 'alpha' })
+    const handBack = queueLine('PENDING', 'orchestrator → human', 'plan: alpha', 'plan alpha complete — final PR https://github.com/o/r/pull/12, review pass')
+    const merged = { number: 12, state: 'merged' as const, checks: 'pass' as const, checkedAt: NOW }
+    const view = (r: BoardRepo) => runsOf(r).map((x) => [x.plan, x.where, x.state])
+
+    // Archived, every sprint done, the reporter writing, no hand-back yet → closing out, running.
+    expect(view(repo('r', planFiles(closed), { claims: [claim], agents: [reporter] }))).toEqual([['alpha', 'closing out', 'running']])
+    expect(runsOf(repo('r', planFiles(closed), { claims: [claim], agents: [reporter] }))[0]).toMatchObject({ portBase: 3200 })
+    // Once the hand-back exists → final PR, and the hand-back asks for you, with nothing running.
+    expect(view(repo('r', planFiles({ ...closed, queue: [handBack] }), { claims: [claim] }))).toEqual([['alpha', 'final PR', 'needs-you']])
+    // A reviewer still running wins: final review.
+    const reviewer = running({ type: 'pod:reviewer', plan: 'alpha' })
+    expect(view(repo('r', planFiles(closed), { claims: [claim], agents: [reviewer] }))).toEqual([['alpha', 'final review', 'running']])
+    // An archived plan with a sprint left over still reads closing out, not that sprint.
+    const leftOver = { ...closed, sprints: [['one', 'done'], ['two', 'planned']] as SprintRow[] }
+    expect(view(repo('r', planFiles(leftOver), { claims: [claim], agents: [reporter] }))).toEqual([['alpha', 'closing out', 'running']])
+    // A running plan fix engineer keeps it closing out too.
+    const fixer = running({ type: 'pod:engineer', sprint: 'one', slice: 'plan-fix', branch: 'alpha-fix' })
+    expect(view(repo('r', planFiles(closed), { claims: [claim], agents: [fixer] }))).toEqual([['alpha', 'closing out', 'running']])
+    // A halt keeps it listed, blocked.
+    const halt = queueLine('BLOCKED', 'orchestrator → human', 'plan: alpha', 'Gate 2 halted')
+    expect(view(repo('r', planFiles({ ...closed, queue: [halt] }), { claims: [claim] }))).toEqual([['alpha', 'closing out', 'blocked']])
+
+    // No claim, or a claim for another plan: an archived plan stays off the list, even with its reporter running.
+    const none = [{ repoId: 'id-r', repo: 'r', where: 'no active plan', state: 'idle' }]
+    expect(runsOf(repo('r', planFiles(closed), { agents: [reporter] }))).toEqual(none)
+    expect(runsOf(repo('r', planFiles(closed), { claims: [{ ...claim, plan: 'beta' }], agents: [reporter] }))).toEqual(none)
+    expect(runsOf(repo('r', planFiles(closed), { claims: [{ ...claim, plan: 'Alpha' }] }))).toEqual(none)
+
+    // A claimed plan that isn't archived yet, every sprint done and nothing running, stays listed too.
+    const done = { sprints: [['one', 'done']] as SprintRow[], board: DONE_BOARD }
+    expect(view(repo('r', planFiles(done), { claims: [claim] }))).toEqual([['alpha', 'all sprints done', 'idle']])
+    // A claim on a plan mid-sprint changes nothing.
+    expect(view(repo('r', planFiles(), { claims: [claim] }))).toEqual([['alpha', 'one · wave 2/2', 'idle']])
+  })
+
+  it('a leftover claim on a finished plan does not keep it listed', () => {
+    const closed = { status: 'archived', sprints: [['one', 'done']] as SprintRow[], board: DONE_BOARD }
+    const claim = { portBase: 3200, repoPath: '/r/r', plan: 'alpha' }
+    const body = 'plan alpha complete — final PR https://github.com/o/r/pull/12, review pass'
+    const resolved = queueLine('PENDING', 'orchestrator → human', 'plan: alpha', body, false)
+    const pending = queueLine('PENDING', 'orchestrator → human', 'plan: alpha', body)
+    const merged = { number: 12, state: 'merged' as const, checks: 'pass' as const, checkedAt: NOW }
+    const none = [{ repoId: 'id-r', repo: 'r', where: 'no active plan', state: 'idle' }]
+    const view = (r: BoardRepo) => runsOf(r).map((x) => [x.plan, x.where, x.state])
+    const ended = (minutesAgo: number, type = 'pod:reporter') => agent({ type, plan: 'alpha', startedAt: NOW - 60 * MIN, lastAt: NOW - minutesAgo * MIN, ended: true })
+
+    // The claim is still there, nothing of the plan has run for over 30 minutes: finished, off the list.
+    expect(runsOf(repo('r', planFiles({ ...closed, queue: [resolved] }), { claims: [claim] }))).toEqual(none)
+    expect(runsOf(repo('r', planFiles(closed), { claims: [claim] }))).toEqual(none)
+    expect(runsOf(repo('r', planFiles({ ...closed, queue: [resolved] }), { claims: [claim], agents: [ended(31)] }))).toEqual(none)
+    // A hand-back still pending in the queue but its PR known merged: no pending hand-back, so off the list.
+    expect(runsOf(repo('r', planFiles({ ...closed, queue: [pending] }), { claims: [claim], prs: [merged] }))).toEqual(none)
+    // An agent of the plan left running long ago (stale, never ended) doesn't keep it either.
+    const stale = agent({ type: 'pod:reporter', plan: 'alpha', lastAt: NOW - 31 * MIN })
+    expect(runsOf(repo('r', planFiles(closed), { claims: [claim], agents: [stale] }))).toEqual(none)
+
+    // A resolved hand-back with one of its agents running: still closing out.
+    const reporter = running({ type: 'pod:reporter', plan: 'alpha' })
+    expect(view(repo('r', planFiles({ ...closed, queue: [resolved] }), { claims: [claim], agents: [reporter] }))).toEqual([['alpha', 'closing out', 'running']])
+
+    // The gap between steps: the final review ended, the reporter not started yet. An agent of the plan
+    // active within the last 30 minutes keeps it closing out, idle.
+    expect(view(repo('r', planFiles(closed), { claims: [claim], agents: [ended(5, 'pod:reviewer')] }))).toEqual([['alpha', 'closing out', 'idle']])
+    // The reporter just handed back, before pod writes the hand-back entry.
+    expect(view(repo('r', planFiles(closed), { claims: [claim], agents: [ended(1)] }))).toEqual([['alpha', 'closing out', 'idle']])
+    // Another plan's recent agent doesn't count.
+    expect(runsOf(repo('r', planFiles(closed), { claims: [claim], agents: [{ ...ended(1), plan: 'beta' }] }))).toEqual(none)
+  })
+
   it('order and count', () => {
     const halt = queueLine('BLOCKED', 'orchestrator → human', 'plan: alpha', 'Gate 2 halted')
     const ask = queueLine('PENDING', 'engineer → human', 'plan: alpha', 'Pick a name')
