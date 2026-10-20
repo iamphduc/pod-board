@@ -383,3 +383,104 @@ describe('a reviewer, end to end, in the other real shapes', () => {
     expect(roleOf(r.agents[0]!, r.model.plans[0]!)).toEqual({ kind: 'other' })
   })
 })
+
+// ---- Round 4: Windows drive paths and fenced code blocks ----
+
+const DRIVE_PLANNER =
+  'Plan: E:/Projects/ytb-feed/pod-docs/plans/friends-on-a-server.md. Draft the next sprint doc for plan `friends-on-a-server`.'
+
+// A fenced example before the real fields, as pasted findings or instructions show one.
+const FENCED_REVIEWER = [
+  'An example of the old shape:',
+  '',
+  '```md',
+  '- **plan:** beta',
+  '- **round:** 7',
+  '```',
+  '',
+  '~~~',
+  'sprint slug: other · slice code: Z9',
+  '~~~',
+  '',
+  '- **plan:** alpha',
+  '- **round:** 2',
+  '- **sprint slug:** one',
+].join('\n')
+
+describe('readDispatch: drive paths and fenced blocks', () => {
+  it('a Windows drive path is a path and gives nothing', () => {
+    expect(readDispatch('- **plan:** E:/r/pod-docs/plans/alpha.md', 'pod:reviewer').plan).toBeUndefined()
+    expect(readDispatch(String.raw`- **plan:** E:\r\pod-docs\plans\alpha.md`, 'pod:reviewer').plan).toBeUndefined()
+    expect(readDispatch('- **plan:** `E:/r/pod-docs/plans/alpha.md`', 'pod:reviewer').plan).toBeUndefined()
+    expect(readDispatch('Plan: c:/r/alpha.md.', 'pod:reviewer').plan).toBeUndefined()
+    expect(readDispatch('- **branch name:** E:/r/x', 'pod:engineer').branch).toBeUndefined()
+  })
+
+  it('a value followed by a colon that is not a drive path keeps its value', () => {
+    expect(readDispatch('- **plan:** alpha: the first plan', 'pod:reviewer').plan).toBe('alpha')
+    expect(readDispatch('- **slice code:** A1:', 'pod:engineer').slice).toBe('A1')
+  })
+
+  it('a drive-path plan field falls through to the planner prose', () => {
+    expect(readDispatch(DRIVE_PLANNER, 'pod:sprint-planner').plan).toBe('friends-on-a-server')
+    expect(readDispatch(DRIVE_PLANNER, 'pod:reviewer').plan).toBeUndefined()
+  })
+
+  it('a drive-path plan field falls through to a plan slug field', () => {
+    expect(readDispatch('- **plan:** E:/r/pod-docs/plans/alpha.md\n- **plan slug:** alpha', 'pod:reviewer').plan).toBe('alpha')
+    expect(readDispatch('- **plan slug:** E:/r/x\n- **plan:** alpha', 'pod:reviewer').plan).toBe('alpha')
+  })
+
+  it('fields inside fenced code blocks never count', () => {
+    expect(readDispatch(FENCED_REVIEWER, 'pod:reviewer')).toMatchObject({ plan: 'alpha', round: 2, sprint: 'one', slice: undefined })
+  })
+
+  it('a fence closes only on the same fence character, at least as long', () => {
+    const prompt = ['````', '```', 'plan: beta', '~~~', '````', 'plan: alpha'].join('\n')
+    expect(readDispatch(prompt, 'pod:reviewer').plan).toBe('alpha')
+  })
+
+  it('an indented or list-item fence counts as a fence', () => {
+    expect(readDispatch('- example:\n  ```\n  - **plan:** beta\n  ```\n- **plan:** alpha', 'pod:reviewer').plan).toBe('alpha')
+  })
+
+  it('an unclosed fence runs to the end of the prompt', () => {
+    expect(readDispatch('- **round:** 2\n```\n- **plan:** beta', 'pod:reviewer')).toMatchObject({ plan: undefined, round: 2 })
+  })
+
+  it('inline triple backticks on a prose line are not a fence', () => {
+    expect(readDispatch('Quote ```x``` here.\n- **plan:** alpha', 'pod:reviewer').plan).toBe('alpha')
+  })
+
+  it('planner prose inside a fenced block never counts', () => {
+    expect(readDispatch('```\nfor plan `beta`\n```\nDraft the next sprint doc for plan `alpha`.', 'pod:sprint-planner').plan).toBe('alpha')
+  })
+})
+
+describe('drive paths and fenced blocks, end to end', () => {
+  it('a sprint planner given a drive-path plan shows the sprint as drafting', () => {
+    const prompt = DRIVE_PLANNER.replaceAll('friends-on-a-server', 'alpha')
+    const r = repo(planFiles([['one', 'done'], ['two', 'planned']]), 'pod:sprint-planner', prompt)
+    expect(r.agents[0]).toMatchObject({ plan: 'alpha' })
+    expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).map((x) => [x.plan, x.where, x.state])).toEqual([['alpha', 'two · drafting', 'running']])
+    expect(stage(r, 'sprint:two')).toEqual([['two', 'live', 'drafting']])
+  })
+
+  it('a reviewer given a drive-path plan slug and a plan field stays in final review', () => {
+    const prompt = '- **kind:** plan\n- **plan slug:** E:/r/pod-docs/plans/alpha.md\n- **plan:** alpha\n- **round:** 4'
+    const r = repo(planFiles([['one', 'done']]), 'pod:reviewer', prompt)
+    expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).map((x) => [x.plan, x.where, x.state])).toEqual([['alpha', 'final review', 'running']])
+    expect(stage(r, 'check')?.[0]).toEqual(['Final review', 'live', 'round 4'])
+  })
+
+  it('a reviewer given only a drive-path plan gets no plan, not its drive letter', () => {
+    const r = repo(planFiles([['one', 'done']]), 'pod:reviewer', '- **plan:** E:/r/pod-docs/plans/alpha.md\n- **round:** 1')
+    expect(r.agents[0]).not.toHaveProperty('plan')
+  })
+
+  it('a reviewer with a fenced example before its fields keeps the real plan and round', () => {
+    const r = repo(planFiles([['one', 'done']]), 'pod:reviewer', FENCED_REVIEWER)
+    expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).map((x) => [x.plan, x.where, x.state])).toEqual([['alpha', 'final review', 'running']])
+    expect(stage(r, 'check')?.[0]).toEqual(['Final review', 'live', 'round 2'])
+  })
+})
