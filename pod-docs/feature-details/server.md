@@ -31,6 +31,7 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - chokidar 5 doesn't see a watched path that doesn't exist yet, and it runs `ignored` on the watched folder itself; a target's filter must keep its own folder or the watch reports nothing.
 - Keep the cap timer apart from the quiet-spell timer, and never reset it within a burst.
 - Real-file watcher tests must wait out the start-up rebuilds before the edit they time.
+- Real-file watcher tests can't count the boards a burst of edits gives: a runner stall of 300 ms or more between two writes splits the burst into two correct rebuilds. Count boards only with a fake `watch` and fake timers.
 - Every rebuild re-parses every transcript in full; only file text is cached. Fine at 67 MB here, but queued for caching by size and mtime before hosting.
 - Agents on the Board carry no `description`: the meta file's description is assistant-written text no page shows. `AgentRun` still lists it as optional only for old test helpers; never set it.
 - `Claim`, `PrStatus`, and `GhStatus` come from `@pod-board/model`; change the shapes there.
@@ -44,3 +45,4 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - 2026-10-19 · board-engineer wave 2 fix 2: a rebuild waits at most 1.5 s after a burst's first event, so steady edits still reach clients.
 - 2026-10-19 · board-read · plan complete; final PR held at gate 2 for a dispatch bug outside the server · [report](../reports/board-read.html)
 - 2026-10-19 · board-read fix 2: `/api/board` no longer serves agent descriptions.
+- 2026-10-19 · board-read fix 5: the board count for a quick burst is tested with a fake watch over real files; the real-file test checks only the 5 s bound and the last board.

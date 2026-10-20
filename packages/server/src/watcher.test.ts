@@ -164,19 +164,21 @@ describe('board watcher', () => {
       expect(Date.now() - started).toBeLessThan(5000)
       expect(watcher.board()).toBe(got)
 
-      // Three quick edits give one event, carrying the last one. First let the
-      // watcher finish with the edit above, so a late rebuild for it can't
-      // land in the middle of the three edits.
+      // Three quick edits reach clients, and the last board carries the last
+      // one. How many boards they give is pinned in 'a burst of real edits':
+      // here a runner stall between two writes can split them, correctly.
       await quiet(poll ? 1500 : 800)
       const before = events.length
+      const burst = Date.now()
       await setT1(repo, 'blocked')
-      // A slow runner can stall this long between two writes (CI saw it on ubuntu).
-      await sleep(DEBOUNCE_MS + 50)
       await setT1(repo, 'pending')
       await setT1(repo, 'done')
       await next((b) => t1Status(b) === 'done', 5000)
+      expect(Date.now() - burst).toBeLessThan(5000)
       await sleep(poll ? 2500 : 1000)
-      expect(events.length - before).toBe(1)
+      expect(events.length).toBeGreaterThan(before)
+      expect(t1Status(events.at(-1)!)).toBe('done')
+      expect(watcher.board()).toBe(events.at(-1))
     }, 15_000) // The 5 s bound is checked above; the whole test, with its waits, takes longer.
   }
 
@@ -343,7 +345,21 @@ describe('board watcher', () => {
       const repo = copyFixture('chess-web')
       await register(repo)
       const { fakes, watch: fakeWatch } = fakeWatches()
-      const w = createBoardWatcher({ service: service(), configFile, portsDir, claudeDir, poll, watch: fakeWatch, tickMs: 1e9 })
+      // Counts builds still reading, so a test can let one finish before its next write.
+      const real = service()
+      let reading = 0
+      const svc: BoardService = {
+        build: async () => {
+          reading++
+          try {
+            return await real.build()
+          } finally {
+            reading--
+          }
+        },
+        refreshGh: real.refreshGh,
+      }
+      const w = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, poll, watch: fakeWatch, tickMs: 1e9 })
       watcher = w
       const first = await w.start()
       expect(t1Status(first)).toBe('pending')
@@ -352,6 +368,11 @@ describe('board watcher', () => {
       await w.rebuild()
       expect(fakes.length).toBeGreaterThan(0)
       const { events } = collect(w)
+      /** Moves fake time forward, then lets any rebuild it started finish reading. */
+      const wait = async (ms: number) => {
+        await advance(ms)
+        while (reading > 0) await realYield()
+      }
       /** Writes T1's status for real, then tells the watcher. */
       const edit = async (status: string) => {
         await setT1(repo, status)
@@ -362,7 +383,7 @@ describe('board watcher', () => {
         await advance(MAX_WAIT_MS + 1000)
         await w.rebuild()
       }
-      return { w, events, edit, settle }
+      return { w, events, edit, wait, settle }
     }
 
     for (const [poll, gap] of [
@@ -371,11 +392,11 @@ describe('board watcher', () => {
       [true, 450],
     ] as const) {
       test(`quick edits give one board, carrying the last${poll ? ' (polling)' : ''}`, async () => {
-        const { w, events, edit, settle } = await editWatcher(poll)
+        const { w, events, edit, wait, settle } = await editWatcher(poll)
         await edit('blocked')
-        await advance(gap)
+        await wait(gap)
         await edit('pending')
-        await advance(gap)
+        await wait(gap)
         await edit('done')
         await settle()
         expect(events.map(t1Status)).toEqual(['done'])
@@ -384,11 +405,10 @@ describe('board watcher', () => {
     }
 
     test('edits farther apart than the quiet spell give one board each', async () => {
-      const { w, events, edit, settle } = await editWatcher(false)
+      const { events, edit, wait, settle } = await editWatcher(false)
       await edit('blocked')
       // The quiet spell ends and its rebuild runs before the next write.
-      await advance(DEBOUNCE_MS + 50)
-      await w.rebuild()
+      await wait(DEBOUNCE_MS + 50)
       await edit('pending')
       await edit('done')
       await settle()
