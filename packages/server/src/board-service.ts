@@ -113,7 +113,7 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
     } catch (err) {
       return { ...base, error: folderError(err), model: buildRepoModel({}), agents: [], prs: [] }
     }
-    const prs = livePrNumbers(model)
+    const prs = livePrNumbers(model, entry.claims)
       .map((n) => deps.gh.get(entry.path, n))
       .filter((pr): pr is PrStatus => pr !== undefined)
     return { ...base, model, agents: await agentsOf(entry.path), prs }
@@ -135,7 +135,7 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
       // One repo at a time: the first call settles `gh auth status` for the rest.
       for (const repo of board.repos) {
         if (repo.error !== undefined) continue
-        if (await deps.gh.refresh(repo.path, livePrNumbers(repo.model))) changed = true
+        if (await deps.gh.refresh(repo.path, livePrNumbers(repo.model, repo.claims))) changed = true
       }
       return changed
     },
@@ -144,12 +144,17 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
 
 /**
  * The PRs the board asks gh about: per plan that isn't archived, the open PRs
- * of its current sprint's slices, plus its hand-back PR (the model's `handBackPr`). In first-seen order.
+ * of its current sprint's slices, plus its hand-back PR (the model's `handBackPr`). An archived plan a
+ * claim names (pod archives it before the final merge) gives its hand-back PR too. In first-seen order.
  */
-export function livePrNumbers(model: RepoModel): number[] {
+export function livePrNumbers(model: RepoModel, claims: Pick<Claim, 'plan'>[] = []): number[] {
   const numbers = new Set<number>()
   for (const plan of model.plans) {
-    if (plan.status === 'archived') continue
+    if (plan.status === 'archived') {
+      const handBack = claims.some((c) => c.plan === plan.slug) ? handBackPr(plan) : undefined
+      if (handBack !== undefined) numbers.add(handBack)
+      continue
+    }
     const sprint = plan.sprints.find((s) => s.slug === plan.currentSprint)
     for (const slice of sprint?.waves.flatMap((w) => w.slices) ?? []) {
       if (slice.pr.state === 'open' && slice.pr.number !== undefined) numbers.add(slice.pr.number)

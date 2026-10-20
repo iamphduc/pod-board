@@ -149,11 +149,21 @@ function buildPlan(doc: PlanDoc, md: string, files: SprintFile[], queue: QueueIt
     status: doc.status,
     ...planExtras(md),
     sprints,
-    queue: queue.filter((e) => (e.plan ? e.plan === doc.slug : e.sprint !== undefined && slugs.has(e.sprint))),
+    queue: queue.filter((e) => (e.plan ? e.plan === doc.slug : e.sprint !== undefined ? slugs.has(e.sprint) : isHandBackOf(e, doc.slug))),
   }
   const current = doc.status === 'archived' ? undefined : sprints.find((s) => s.status !== 'done')
   if (current) plan.currentSprint = current.slug
   return plan
+}
+
+/**
+ * An entry with no `plan:` or `sprint:` that is the orchestrator's hand-back of plan `slug`: its body starts
+ * `plan <slug> complete` (the slug may be in backticks). pod writes the hand-back that way, often untagged.
+ */
+function isHandBackOf(e: QueueItem, slug: string): boolean {
+  if (!/^orchestrator\b/i.test(e.route.trim())) return false
+  const head = /^plan\s+`?([\w.-]+)`?\s+complete\b/i.exec(e.body.trim())
+  return head?.[1] === slug
 }
 
 type PlanRow = PlanDoc['sprints'][number]

@@ -1,6 +1,6 @@
 // The board's read of one pod dispatch prompt: sprint, slice, branch, plan, and
 // round, read only from the prompt's fields (a name that starts a line, a list
-// item, or a `·`-separated part), plus the sprint planner's plan prose. Pure.
+// item, or a `·`-separated part), plus the sprint planner's and reporter's plan prose. Pure.
 // The rules and why are in pod-docs/feature-details/run-model.md.
 
 import type { parseDispatch } from './pod-flow/model.ts'
@@ -91,15 +91,18 @@ function field(lines: string[], name: string): string | undefined {
   return undefined
 }
 
-/** The sprint planner's prose: "… sprint doc for plan `<slug>`". */
+/** The prose sprint planners and reporters are dispatched with: "… sprint doc for plan `<slug>`", "… feature details for plan `<slug>` in …". */
 const PLAN_PROSE = /\bfor plan `([\w.-]+)`/
 
 const isType = (type: string, role: string) => new RegExp(`(^|:)${role}$`).test(type)
 
+/** The roles whose plan pod names only in prose: the sprint planner, and the reporter at plan complete. */
+const readsPlanProse = (type: string) => isType(type, 'sprint-planner') || isType(type, 'reporter')
+
 /**
  * The dispatch fields of an agent of type `agentType`, each from its field only.
  * Fenced code blocks never count. Plan, the first source that gives a value: a `plan slug`
- * field, a `plan` field, then (sprint planners only) the exact prose form
+ * field, a `plan` field, then (sprint planners and reporters only) the exact prose form
  * ``for plan `<slug>` ``. A source that gives nothing (no field, or a path) never blocks
  * the next one. Engineers get no plan.
  */
@@ -110,7 +113,7 @@ export function readDispatch(prompt: string, agentType: string): DispatchFields 
     ? undefined
     : (field(lines, 'plan slug') ??
       field(lines, 'plan') ??
-      (isType(agentType, 'sprint-planner') ? PLAN_PROSE.exec(lines.join('\n'))?.[1] : undefined))
+      (readsPlanProse(agentType) ? PLAN_PROSE.exec(lines.join('\n'))?.[1] : undefined))
   return {
     sprint: field(lines, 'sprint slug'),
     slice: field(lines, 'slice code'),
