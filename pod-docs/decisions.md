@@ -53,3 +53,8 @@ Consequences: autopilot resumes after the fix merges into PR #12.
 Context: gate 2 on PR #15: round 2 found that the loose `plan slug` match reads prose, so a reviewer prompt quoting "`plan slug:` field" reads `plan=field`.
 Decision: option A: one more fix engineer on `board-read`, then a round 3 review, and merge only when everything checks out. The fix also drops the dispatch `description` from `/api/board` (the reviewer's "now" hardening item).
 Consequences: autopilot resumes; the final merge waits for a passing round 3.
+
+## 2026-10-19 — fix the dispatch-field regression, with a corpus check
+Context: round 3 on PR #15 found that #17 reads dispatch fields only from dash-list items, so 104 of 444 real pod transcripts lost fields they read before (engineers show as not started).
+Decision: option A: one more fix. A field counts when its name starts a line, a list item, or a `·`-separated part, with or without bold; never mid-sentence or inside backticks. Before it is accepted, every real `pod:*` transcript on this machine is read before (#17's parent, 5d785be) and after, and every change must be explained as intended. Then a round 4 review.
+Consequences: autopilot resumes; the merge waits for a passing round 4.
