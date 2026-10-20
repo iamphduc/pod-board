@@ -58,3 +58,8 @@ Consequences: autopilot resumes; the final merge waits for a passing round 3.
 Context: round 3 on PR #15 found that #17 reads dispatch fields only from dash-list items, so 104 of 444 real pod transcripts lost fields they read before (engineers show as not started).
 Decision: option A: one more fix. A field counts when its name starts a line, a list item, or a `·`-separated part, with or without bold; never mid-sentence or inside backticks. Before it is accepted, every real `pod:*` transcript on this machine is read before (#17's parent, 5d785be) and after, and every change must be explained as intended. Then a round 4 review.
 Consequences: autopilot resumes; the merge waits for a passing round 4.
+
+## 2026-10-19 — one last fix: drive paths and fenced blocks
+Context: round 4 on PR #15 found that `Plan: E:/…/plans/x.md` reads `plan: "E"` (a drive letter isn't treated as a path), and that fenced code blocks aren't skipped like inline backticks.
+Decision: option A: one more small fix for both, with the same corpus check against the current reader, then round 5 and the merge.
+Consequences: chess-web's own engineer prompt shape stays unread for now (a separate product choice, still in the queue).
