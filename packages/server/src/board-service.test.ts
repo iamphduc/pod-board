@@ -58,10 +58,10 @@ async function claim(port: number, repoPath: string, plan: string): Promise<void
 
 const ts = (min: number) => new Date(NOW - 10 * 60_000 + min * 60_000).toISOString()
 
-async function transcript(repoPath: string, id: string, agentType: string, prompt: string): Promise<void> {
+async function transcript(repoPath: string, id: string, agentType: string, prompt: string, description = `Build ${id}`): Promise<void> {
   const sub = join(claudeDir, 'projects', projectDirName(repoPath), 'session-1', 'subagents')
   await mkdir(sub, { recursive: true })
-  await writeFile(join(sub, `agent-${id}.meta.json`), JSON.stringify({ agentType, description: `Build ${id}` }))
+  await writeFile(join(sub, `agent-${id}.meta.json`), JSON.stringify({ agentType, description }))
   const lines = [
     { type: 'user', timestamp: ts(0), message: { role: 'user', content: prompt } },
     {
@@ -126,6 +126,20 @@ describe('board service', () => {
     expect(r!.agents[0]).toMatchObject({ id: 'eng1', type: 'pod:engineer', sprint: 'ladder', slice: 'T1', tokens: 150 })
     expect(r!.claims).toEqual([{ portBase: 3100, repoPath: path, plan: 'sparring-ladder' }])
     expect(r!.prs).toEqual([])
+  })
+
+  test('serves no agent description, so a secret in the meta file appears nowhere on the Board', async () => {
+    const repo = copyFixture()
+    await register(repo)
+    const secret = `desc-secret-${Math.random().toString(36).slice(2)}`
+    await transcript(repo, 'eng1', 'pod:engineer', ENGINEER_PROMPT, secret)
+    await transcript(repo, 'rev1', 'pod:reviewer', '- **plan:** sparring-ladder\n- **round:** 1\n', `Review ${secret}`)
+
+    const board = await createBoardService(deps()).build()
+    const agents = board.repos.flatMap((r) => r.agents)
+    expect(agents.map((a) => a.id).sort()).toEqual(['eng1', 'rev1'])
+    for (const a of agents) expect(a).not.toHaveProperty('description')
+    expect(JSON.stringify(board)).not.toContain(secret)
   })
 
   test('a claim alone gives a claim repo; a registered repo alone a registered one; sorted by name', async () => {

@@ -68,7 +68,6 @@ describe('parseAgentTranscript', () => {
       id: 'a1',
       session: 's1',
       type: 'pod:engineer',
-      description: 'Build M1: board types and transcript parser',
       sprint: 'server-runs',
       slice: 'M1',
       branch: 'server-runs-M1',
@@ -99,11 +98,12 @@ describe('parseAgentTranscript', () => {
     expect(run).not.toHaveProperty('slice')
   })
 
-  it('cuts the description to 80 characters', () => {
-    const long = 'x'.repeat(100)
-    expect(parse(meta('pod:engineer', long), jsonl(user(0, PROMPT)))?.description).toBe('x'.repeat(80))
-    const noDescription = parse(JSON.stringify({ agentType: 'pod:scout' }), jsonl(user(0, PROMPT)))
-    expect(noDescription?.description).toBe('')
+  it('never carries the meta file description', () => {
+    const secret = `desc-${Math.random().toString(36).slice(2)}`
+    const run = parse(meta('pod:engineer', secret), jsonl(user(0, PROMPT)))
+    expect(run).toBeDefined()
+    expect(run).not.toHaveProperty('description')
+    expect(JSON.stringify(run)).not.toContain(secret)
   })
 
   it('tokens count each message once', () => {
@@ -162,7 +162,7 @@ describe('parseAgentTranscript', () => {
 
     // Empty text: a run with nothing known yet.
     const empty = parse(meta('pod:engineer'), '')
-    expect(empty).toEqual({ id: 'a1', session: 's1', type: 'pod:engineer', description: 'Build M1', tokens: 0, ended: false })
+    expect(empty).toEqual({ id: 'a1', session: 's1', type: 'pod:engineer', tokens: 0, ended: false })
 
     // Bad lines, records missing fields, odd values, and a partial last line are skipped.
     const lines = [

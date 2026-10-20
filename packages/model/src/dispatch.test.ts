@@ -20,6 +20,32 @@ const REVIEWER = [
   '- **round:** 1',
 ].join('\n')
 
+// A round-2 reviewer: the fix summary it quotes names fields in prose, before and after the real list.
+const REVIEWER_ROUND_2 = [
+  'Dispatched by /pod:autopilot for round 2 of the final review of plan alpha.',
+  '',
+  'The fix pass made `readDispatch` read a `plan slug:` field, a `- **plan:**` list field, then',
+  'the planner prose. Earlier rounds quoted `round: 1` and `slice code: Z9`.',
+  '',
+  '- **kind:** plan',
+  '- **merge-target:** alpha',
+  '- **plan:** alpha',
+  '- **round:** 2',
+  '',
+  'Context: the summary also said the plan slug: field wins.',
+].join('\n')
+
+// A plan fix engineer: list fields for where it works, and pasted findings that name fields in prose.
+const FIX_ENGINEER = [
+  'Dispatched by /pod:autopilot after a gate 2 halt. Findings quote `sprint slug: other`,',
+  '`slice code: Z9`, `branch name: wrong-branch`, `round: 3`, and a plan slug: label. in prose.',
+  '',
+  '- **sprint slug:** one',
+  '- **slice code:** plan-fix',
+  '- **branch name:** alpha-fix (cut from origin/alpha)',
+  '- **merge-target branch:** alpha',
+].join('\n')
+
 const PLANNER = 'Draft the next sprint doc for plan `alpha`. Read pod-docs/plans/alpha.md first.'
 
 const ENGINEER = [
@@ -53,6 +79,42 @@ describe('readDispatch', () => {
     expect(readDispatch('Fix the plan: alpha is late.', 'pod:reviewer').plan).toBeUndefined()
     expect(readDispatch('`[2026-10-18 · PENDING · engineer → human · plan: alpha]` text', 'pod:reviewer').plan).toBeUndefined()
     expect(readDispatch('Plan `alpha` is next; see the plan `beta` doc.', 'pod:sprint-planner').plan).toBeUndefined()
+  })
+
+  it('a plan list field beats a plan slug quoted in prose', () => {
+    expect(readDispatch(REVIEWER_ROUND_2, 'pod:reviewer')).toMatchObject({ plan: 'alpha', round: 2 })
+  })
+
+  it('a plan slug counts only as a list field, never from prose', () => {
+    expect(readDispatch('Read the plan slug: alpha from the doc.', 'pod:reviewer').plan).toBeUndefined()
+    expect(readDispatch('- **plan slug:** gamma', 'pod:reviewer').plan).toBe('gamma')
+  })
+
+  it('a fix engineer keeps its list fields and gets no plan from prose', () => {
+    const d = readDispatch(FIX_ENGINEER, 'pod:engineer')
+    expect(d).toEqual({ sprint: 'one', slice: 'plan-fix', branch: 'alpha-fix', plan: undefined, round: undefined })
+  })
+
+  it('a field quoted in prose never beats the real list field', () => {
+    const prose = 'Quoted: sprint slug: other, slice code: Z9, branch name: wrong, round: 7.\n'
+    const list = '- **sprint slug:** one\n- **slice code:** A1\n- **branch name:** one-A1\n- **round:** 2\n'
+    expect(readDispatch(prose + list, 'pod:reviewer')).toMatchObject({ sprint: 'one', slice: 'A1', branch: 'one-A1', round: 2 })
+  })
+
+  it('reads no field from prose alone', () => {
+    const prose = 'Quoted: sprint slug: other, slice code: Z9, branch name: wrong, round: 7, plan: x.'
+    expect(readDispatch(prose, 'pod:engineer')).toEqual({ sprint: undefined, slice: undefined, branch: undefined, plan: undefined, round: undefined })
+  })
+
+  it('a merge-target branch list field is not the branch', () => {
+    expect(readDispatch('- **merge-target branch:** alpha\n- **branch:** one-A1', 'pod:engineer').branch).toBe('one-A1')
+    expect(readDispatch('- **merge-target branch:** alpha', 'pod:engineer').branch).toBeUndefined()
+  })
+
+  it('a round list field must be a whole number above 0', () => {
+    expect(readDispatch('- **round:** 0', 'pod:reviewer').round).toBeUndefined()
+    expect(readDispatch('- **round:** two', 'pod:reviewer').round).toBeUndefined()
+    expect(readDispatch('- **round:** 3', 'pod:reviewer').round).toBe(3)
   })
 
   it('accepts a backticked value', () => {
@@ -144,6 +206,20 @@ describe('a real-shaped dispatch, end to end', () => {
     const r = repo(planFiles([['one', 'done']]), 'pod:reviewer', REVIEWER)
     expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).map((x) => [x.plan, x.where, x.state])).toEqual([['alpha', 'final review', 'running']])
     expect(stage(r, 'check')?.[0]).toEqual(['Final review', 'live', 'round 1'])
+  })
+
+  it('keeps a plan in final review while its round 2 reviewer runs, with prose naming fields', () => {
+    const r = repo(planFiles([['one', 'done']]), 'pod:reviewer', REVIEWER_ROUND_2)
+    expect(r.agents[0]).toMatchObject({ plan: 'alpha', round: 2 })
+    expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).map((x) => [x.plan, x.where, x.state])).toEqual([['alpha', 'final review', 'running']])
+    expect(stage(r, 'check')?.[0]).toEqual(['Final review', 'live', 'round 2'])
+  })
+
+  it('a running plan fix engineer gets its fields from the list, not the prose', () => {
+    const r = repo(planFiles([['one', 'done']]), 'pod:engineer', FIX_ENGINEER)
+    expect(r.agents[0]).toMatchObject({ sprint: 'one', slice: 'plan-fix', branch: 'alpha-fix' })
+    expect(r.agents[0]).not.toHaveProperty('plan')
+    expect(r.agents[0]).not.toHaveProperty('round')
   })
 
   it('shows a running sprint planner as drafting', () => {
