@@ -249,6 +249,23 @@ describe('continued agents (SendMessage after a hand-back)', () => {
     ])
   })
 
+  it('a task notification or a nudge after the hand-back re-opens the same turn: working again, but no new turn', () => {
+    const notice = (minutes: number) => ({ ...user(minutes, 'SECRET-NOTICE'), isMeta: true, origin: { kind: 'task-notification' } })
+    const nudge = (minutes: number) => ({ ...user(minutes, 'SECRET-NUDGE'), isMeta: true })
+    const working = parse(meta('pod:engineer'), jsonl(user(0, PROMPT), handback(5, 'm1'), toolResult(5), notice(6), assistant(7, 'm2')))
+    expect(working?.ended).toBe(false)
+    expect(working).not.toHaveProperty('turns')
+    const again = parse(meta('pod:engineer'), jsonl(user(0, PROMPT), assistant(4, 'm1', { stop: 'end_turn' }), nudge(4), handback(5, 'm2')))
+    expect(again?.ended).toBe(true)
+    expect(again).not.toHaveProperty('turns')
+    // With a real resume later, the notice stays in turn 1, which ends at its last hand-back.
+    const later = parse(meta('pod:engineer'), jsonl(user(0, PROMPT), handback(5, 'm1'), notice(6), handback(7, 'm2'), resume(10), assistant(11, 'm3')))
+    expect(later?.turns?.map((t) => [t.startedAt, t.endedAt])).toEqual([
+      [Date.parse(at(0)), Date.parse(at(7))],
+      [Date.parse(at(10)), undefined],
+    ])
+  })
+
   it('a meta prompt beside the first one, and tool results, start no turn; an agent never resumed has no turns', () => {
     const r = parse(meta('pod:engineer'), jsonl(user(0, PROMPT), { ...user(0, 'reminder'), isMeta: true }, assistant(1, 'm1'), toolResult(2), handback(3, 'm2'), toolResult(3)))
     expect(r?.ended).toBe(true)
