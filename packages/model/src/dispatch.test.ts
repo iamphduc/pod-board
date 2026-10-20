@@ -75,7 +75,7 @@ describe('readDispatch', () => {
     expect(readDispatch(PLANNER, 'pod:sprint-planner').plan).toBe('alpha')
   })
 
-  it('reads the prose form only for sprint planners', () => {
+  it('reads the planner prose only for sprint planners and reporters, not engineers or reviewers', () => {
     expect(readDispatch(ENGINEER, 'pod:engineer')).toMatchObject({ plan: undefined, sprint: 'one', slice: 'A1', branch: 'one-A1' })
     expect(readDispatch(PLANNER, 'pod:reviewer').plan).toBeUndefined()
   })
