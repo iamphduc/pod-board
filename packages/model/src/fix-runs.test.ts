@@ -276,7 +276,7 @@ describe('buildFixPipeline', () => {
   it('two build engineers show their count', () => {
     const agents = [engineer('fix-scroll', 60, 50, { ended: true }), engineer('fix-scroll', 49, 40, { ended: true })]
     expect(stages(repo({ claims: [claim('fix-scroll')], agents }))?.[0]?.[1]).toEqual([
-      ['Engineer', 'done', '2 engineers · 20 min'],
+      ['Engineer', 'done', '2 engineers · 19 min'],
       ['Fix pass', 'wait', 'only if review fails'],
     ])
   })

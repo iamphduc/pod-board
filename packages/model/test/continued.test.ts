@@ -96,7 +96,8 @@ describe('continued agents in a real fix run', () => {
 test('the engineer resumed again after round 2 is a second fix pass: fix pass · running, 2 passes', () => {
   expect(rowAt('2026-10-20T23:38:00Z')).toEqual([['fix pass', 'running']])
   const fixPass = pipeAt('2026-10-20T23:38:00Z').stages[0]!.steps[1]!
-  expect([fixPass.state, fixPass.detail.split(' · ')[0]]).toEqual(['live', '2 passes'])
+  // 18:19:37–18:54:19 plus 23:37:19–23:38:00: each turn's own time, not the idle hours between them.
+  expect([fixPass.state, fixPass.detail]).toEqual(['live', '2 passes · 35 min so far'])
   expect(shipAt('2026-10-20T23:38:00Z')).toBe('PR #23 · after review')
 })
 
