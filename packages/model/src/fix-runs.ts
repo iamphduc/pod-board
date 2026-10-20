@@ -140,7 +140,14 @@ const COUNT_WORD: Record<string, string> = { Engineer: 'engineer', 'Fix pass': '
 function agentStep(key: string, label: string, xs: FixAgent[], waiting: string, now: number): Step {
   if (xs.length === 0) return { key, label, state: 'wait', detail: waiting }
   const live = xs.some((x) => x.state === 'running')
-  const { minutes, tokens } = spend(xs, live, now)
+  // Each turn's own time, added up: a fix pass resumed hours later doesn't count the hours between.
+  const { tokens } = spend(xs, live, now)
+  const ms = xs.reduce((sum, x) => {
+    const start = x.a.startedAt
+    const end = x.state === 'running' ? now : x.a.lastAt
+    return start === undefined || end === undefined ? sum : sum + Math.max(0, end - start)
+  }, 0)
+  const minutes = xs.some((x) => x.a.startedAt !== undefined) ? Math.round(ms / 60_000) : undefined
   const parts: string[] = []
   if (xs.length > 1) parts.push(plural(xs.length, COUNT_WORD[label] ?? 'run'))
   if (minutes !== undefined) parts.push(live ? `${minutes} min so far` : `${minutes} min`)
