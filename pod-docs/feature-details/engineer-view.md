@@ -2,7 +2,7 @@
 
 ## What it is
 
-Screen 3. With a slice open on the wave board (`#/<repoId>/<plan>/board/<code>`), the engineer view sits under the board frame: the slice's engineer, its details (branch, files owned, tests first, last active, model, tokens), and a live tool timeline of tool names and short summaries. Covers the features.md rows Engineer view and Engineer view shows no secrets. Rules in `packages/web/src/screens/engineer/view.ts`, fetching in `timeline-loader.ts`; the timeline itself is built by the model's `parseAgentTimeline` and served by `GET /api/agents/:repoId/:agentId/timeline`.
+Screen 3. With a slice open on the wave board (`#/<repoId>/<plan>/board/<code>`), the engineer view sits under the board frame: the slice's engineer, its details (branch, files owned, tests first, last active, model, tokens), and a live tool timeline of tool names and short summaries. Covers the features.md rows Engineer view and Engineer view shows no secrets. A fix run's engineers open the same view under its agent log (`#/<repoId>/fix-<slug>/agent/<id>`), headed by their role and the slug, with Files owned `not listed` (a fix has no slice). Rules in `packages/web/src/screens/engineer/view.ts`, fetching in `timeline-loader.ts`; the timeline itself is built by the model's `parseAgentTimeline` and served by `GET /api/agents/:repoId/:agentId/timeline`.
 
 ## How it works
 
@@ -34,4 +34,5 @@ Screen 3. With a slice open on the wave board (`#/<repoId>/<plan>/board/<code>`)
 - 2026-10-19 · board-read · plan complete; review found the planted secret in no page, timeline, or Board JSON · [report](../reports/board-read.html)
 - 2026-10-19 · board-read fix 2: agent descriptions dropped from `/api/board` · [#17](https://github.com/iamphduc/pod-board/pull/17)
 - 2026-10-19 · board-read fix 3: engineers dispatched with unmarked or `·`-joined fields show on their slice again · [#18](https://github.com/iamphduc/pod-board/pull/18)
+- 2026-10-20 · fix-show-fix-runs: a fix run's engineers open this view from its agent log; the view takes a heading and an optional slice instead of a wave board card.
 - 2026-10-20 · board-read · final review passed at round 5; the planted secret was absent again · [report](../reports/board-read.html)
