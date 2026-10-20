@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BoardRepo } from './board.ts'
-import { buildPipeline, listRuns, parseAgentTranscript, readDispatch } from './index.ts'
+import { buildPipeline, listRuns, parseAgentTranscript, readDispatch, roleOf } from './index.ts'
 import { buildRepoModel, type RepoFiles } from './run-model.ts'
 
 // Prompts and transcripts are built inline in the shape real pod dispatches use:
@@ -122,6 +122,107 @@ describe('readDispatch', () => {
   })
 })
 
+// ---- Every field shape real pod dispatches use (round 3: #17 read only list items) ----
+
+// One field per line, no list marker: how most engineer dispatches look.
+const PLAIN_LINES = ['Dispatched by /pod:code for wave 1.', '', 'sprint slug: two', 'slice code: B1', 'branch name: two-B1', 'merge-target branch: alpha'].join('\n')
+// Several fields on one list item, joined with `·`.
+const DOT_LIST = '- **sprint slug:** two · **slice code:** B1 · **branch name:** two-B1\n- **merge-target branch:** alpha'
+// The same on a plain line, as claude-pod's own register test sends it.
+const DOT_LINE = 'sprint slug: two · slice code: B1 · branch: two-B1'
+// Bold field names with no list marker.
+const BOLD_LINES = '**sprint slug:** two\n**slice code:** B1\n**branch name:** two-B1\n**merge-target branch:** alpha'
+const DASH_LIST = '- sprint slug: two\n- slice code: B1\n- branch name: two-B1\n- merge-target branch: alpha'
+
+describe('readDispatch reads every real field shape', () => {
+  const engineer = { sprint: 'two', slice: 'B1', branch: 'two-B1', plan: undefined, round: undefined }
+
+  it('one field per plain line', () => {
+    expect(readDispatch(PLAIN_LINES, 'pod:engineer')).toEqual(engineer)
+  })
+
+  it('fields joined with · on one list item', () => {
+    expect(readDispatch(DOT_LIST, 'pod:engineer')).toEqual(engineer)
+  })
+
+  it('fields joined with · on a plain line', () => {
+    expect(readDispatch(DOT_LINE, 'pod:engineer')).toEqual(engineer)
+  })
+
+  it('bold field names with no list marker', () => {
+    expect(readDispatch(BOLD_LINES, 'pod:engineer')).toEqual(engineer)
+  })
+
+  it('a dash list still works', () => {
+    expect(readDispatch(DASH_LIST, 'pod:engineer')).toEqual(engineer)
+  })
+
+  it('bold with the colon outside the bold', () => {
+    expect(readDispatch('**sprint slug**: two\n- **slice code**: B1', 'pod:engineer')).toMatchObject({ sprint: 'two', slice: 'B1' })
+  })
+
+  it('a kind list item with the round after ·', () => {
+    expect(readDispatch('- kind: plan · round: 2\n- plan slug: alpha', 'pod:reviewer')).toMatchObject({ plan: 'alpha', round: 2 })
+  })
+
+  it('a plan slug name with a bracketed note', () => {
+    expect(readDispatch('- **plan slug (= plan branch):** alpha', 'pod:reporter').plan).toBe('alpha')
+    expect(readDispatch('**plan slug (= plan branch):** alpha', 'pod:reviewer').plan).toBe('alpha')
+  })
+
+  it('a plan path is not a plan slug', () => {
+    expect(readDispatch('- **plan:** pod-docs/plans/alpha.md', 'pod:reviewer').plan).toBeUndefined()
+    expect(readDispatch('- **plan:** `pod-docs/plans/alpha.md`', 'pod:reviewer').plan).toBeUndefined()
+  })
+
+  it('a value stops before a trailing dot', () => {
+    expect(readDispatch('plan slug: alpha.\nround: 2.', 'pod:reviewer')).toMatchObject({ plan: 'alpha', round: 2 })
+  })
+
+  it('a · part counts only on a line that starts with a field, outside backticks', () => {
+    expect(readDispatch('[2026-10-18 · PENDING · engineer → human · plan: alpha] text', 'pod:reviewer').plan).toBeUndefined()
+    expect(readDispatch('- sprint slug: two · `slice code: Z9` · branch: two-B1', 'pod:engineer')).toMatchObject({ slice: undefined, branch: 'two-B1' })
+    expect(readDispatch('Quote: `- sprint slug: X · slice code: Y`', 'pod:engineer').sprint).toBeUndefined()
+  })
+
+  it('a field mid-sentence or in backticks never counts, on any shape', () => {
+    expect(readDispatch('See `plan slug: beta` and the round: 4 note.\nplan: alpha', 'pod:reviewer')).toMatchObject({ plan: 'alpha', round: undefined })
+    expect(readDispatch('`sprint slug: other`\n`slice code: Z9`', 'pod:engineer')).toMatchObject({ sprint: undefined, slice: undefined })
+  })
+
+  it('first match wins across shapes', () => {
+    expect(readDispatch('sprint slug: two\n- **sprint slug:** other', 'pod:engineer').sprint).toBe('two')
+  })
+
+  it('a merge-target branch is not the branch, in any shape', () => {
+    expect(readDispatch('merge-target branch: alpha\n**merge-target branch:** alpha · branch name: two-B1', 'pod:engineer').branch).toBe('two-B1')
+    expect(readDispatch('merge-target branch: alpha', 'pod:engineer').branch).toBeUndefined()
+  })
+
+  it('engineers never get a plan, even from a plan field', () => {
+    expect(readDispatch('sprint slug: two\nplan: alpha\n- **plan slug:** alpha', 'pod:engineer').plan).toBeUndefined()
+  })
+
+  it('a field that starts a sentence, as sprint planner prompts write them', () => {
+    const planner = 'Dispatched by /pod:autopilot. Repo: /r (branch `alpha`). Plan slug: alpha. Draft the next sprint. Sprint slug: `two`.'
+    expect(readDispatch(planner, 'pod:sprint-planner')).toMatchObject({ plan: 'alpha', sprint: 'two' })
+    expect(readDispatch('Plan: alpha (pod-docs/plans/alpha.md). Draft the next sprint.', 'pod:sprint-planner').plan).toBe('alpha')
+  })
+
+  it('a field that is one whole bold span, anywhere outside backticks', () => {
+    expect(readDispatch('Review the final plan PR, dispatched by /pod:autopilot — **round: 2**.', 'pod:reviewer').round).toBe(2)
+    expect(readDispatch('Quoted `**round: 2**` here.', 'pod:reviewer').round).toBeUndefined()
+  })
+
+  it('a bold field name mid-sentence still never counts', () => {
+    expect(readDispatch('The reviewer reads the **plan:** alpha field and a lower-case sentence. plan slug: beta', 'pod:reviewer').plan).toBeUndefined()
+  })
+
+  it('the round 2 prose case still reads the real plan field', () => {
+    expect(readDispatch(REVIEWER_ROUND_2, 'pod:reviewer')).toMatchObject({ plan: 'alpha', round: 2 })
+  })
+})
+
 // ---- End to end: a transcript through parseAgentTranscript, listRuns, and buildPipeline ----
 
 const NOW = Date.UTC(2026, 9, 18, 12)
@@ -226,5 +327,59 @@ describe('a real-shaped dispatch, end to end', () => {
     const r = repo(planFiles([['one', 'done'], ['two', 'planned']]), 'pod:sprint-planner', PLANNER)
     expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).map((x) => [x.plan, x.where, x.state])).toEqual([['alpha', 'two · drafting', 'running']])
     expect(stage(r, 'sprint:two')).toEqual([['two', 'live', 'drafting']])
+  })
+})
+
+// ---- End to end: an engineer on an active sprint's slice, in each real shape ----
+
+const SPRINT_TWO = [
+  '# Sprint: two',
+  '',
+  '_From plan: pod-docs/plans/alpha.md · Slug: two · Status: active · Generated: 2026-10-18_',
+  '',
+  '## Status board',
+  '',
+  '| Wave | Slice | Title | Branch | PR | Status | Confidence | Depends on |',
+  '|------|-------|-------|--------|----|--------|------------|------------|',
+  '| 1 | B1 | Title B1 | two-B1 | — | in progress | — | — |',
+  '',
+].join('\n')
+
+const activeFiles = (): RepoFiles => ({ ...planFiles([['one', 'done'], ['two', 'active']]), 'pod-docs/sprints/two.md': SPRINT_TWO })
+
+describe('a running engineer, end to end, in every real shape', () => {
+  const shapes: [string, string][] = [
+    ['plain lines', PLAIN_LINES],
+    ['· on a list item', DOT_LIST],
+    ['· on a plain line', DOT_LINE],
+    ['bold, no marker', BOLD_LINES],
+    ['dash list', DASH_LIST],
+  ]
+  it.each(shapes)('%s: the engineer runs its slice', (_name, prompt) => {
+    const r = repo(activeFiles(), 'pod:engineer', prompt)
+    const plan = r.model.plans.find((p) => p.slug === 'alpha')!
+    expect(roleOf(r.agents[0]!, plan)).toEqual({ kind: 'slice', sprint: 'two', code: 'B1' })
+    expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).map((x) => [x.plan, x.state])).toEqual([['alpha', 'running']])
+    const row = buildPipeline(r, 'alpha', NOW)?.log.find((g) => g.sprint === 'two')?.rows[0]
+    expect(row).toMatchObject({ code: 'B1', live: true, minutes: 10 })
+  })
+})
+
+describe('a reviewer, end to end, in the other real shapes', () => {
+  it('a reviewer with kind and round on one · line keeps its round', () => {
+    const r = repo(planFiles([['one', 'done']]), 'pod:reviewer', '- kind: plan · round: 2\n- plan slug: alpha')
+    expect(stage(r, 'check')?.[0]).toEqual(['Final review', 'live', 'round 2'])
+  })
+
+  it('a reviewer with a bold plan slug note keeps its plan', () => {
+    const r = repo(planFiles([['one', 'done']]), 'pod:reviewer', '**plan slug (= plan branch):** alpha\nround: 3')
+    expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).map((x) => [x.plan, x.where, x.state])).toEqual([['alpha', 'final review', 'running']])
+    expect(stage(r, 'check')?.[0]).toEqual(['Final review', 'live', 'round 3'])
+  })
+
+  it('a reviewer given a plan path gets no plan from it', () => {
+    const r = repo(planFiles([['one', 'done']]), 'pod:reviewer', '- **plan:** pod-docs/plans/alpha.md\n- **round:** 1')
+    expect(r.agents[0]).not.toHaveProperty('plan')
+    expect(roleOf(r.agents[0]!, r.model.plans[0]!)).toEqual({ kind: 'other' })
   })
 })
