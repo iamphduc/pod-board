@@ -155,6 +155,13 @@ describe('fix runs on the runs list', () => {
     expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))).toEqual([['fix-scroll', 'scroll', 'review', 'idle']])
   })
 
+  it('an engineer continued for the fix pass (same transcript) that wrote after the review ended un-reviews the PR', () => {
+    // One engineer, started before the review, wrote again after it: the review no longer covers the PR.
+    const agents = [engineer('fix-scroll', 120, 5, { ended: true }), reviewer(90, 60, { ended: true })]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))[0]?.slice(3)).toEqual(['idle'])
+    expect(buildFixPipeline(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }), 'fix-scroll', NOW)?.stages[2]?.steps[0]?.detail).toBe('PR #36 · after review')
+  })
+
   it('a newest reviewer that went quiet without ending is no finished review', () => {
     const agents = [engineer('fix-scroll', 120, 100, { ended: true }), reviewer(99, 60)]
     expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))[0]?.slice(2)).toEqual(['review', 'idle'])
