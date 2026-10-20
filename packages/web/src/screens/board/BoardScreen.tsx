@@ -151,7 +151,16 @@ export function BoardScreen({ repo, plan, slice, now }: Props) {
       </div>
       {openCard && (
         <div ref={viewRef}>
-          <EngineerView key={openCard.code} repo={repo} card={openCard} agent={engineer} now={now} />
+          <EngineerView
+            key={openCard.code}
+            repo={repo}
+            code={openCard.code}
+            title={openCard.title}
+            chip={cardChip(openCard.state)}
+            slice={openCard.slice}
+            agent={engineer}
+            now={now}
+          />
         </div>
       )}
     </section>

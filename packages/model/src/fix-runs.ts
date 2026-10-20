@@ -1,15 +1,171 @@
-// Fix runs: a /pod:fix run, read from its port claim and its agents. Stub.
-import type { AgentRun, AgentState, BoardRepo } from './board.ts'
-import type { Stage } from './pipeline.ts'
+// Fix runs: a /pod:fix run, read from its port claim (`<repo> fix-<slug>`) and its agents.
+// Its pipeline (Build → Review → Ship), its agent log, and the repo's other activity:
+// agents tied to no run. Pure. The rules and why are in
+// pod-docs/feature-details/runs-and-pipeline.md.
 
+import type { AgentRun, AgentState, BoardRepo, PrStatus } from './board.ts'
+import { isPlanAgent, spend, type Stage, type Step, type StepState } from './pipeline.ts'
+import { formatTokens } from './pod-flow/model.ts'
+import { agentState, STALE_MS } from './transcript.ts'
+
+/** How far back the Other activity strip looks, and how many agents it shows at most. */
 export const OTHER_WINDOW_MS = 2 * 60 * 60 * 1000
 export const OTHER_CAP = 8
 
-export type FixLogRow = { agentId: string; role: 'engineer' | 'fix pass' | 'reviewer'; round?: number; startedAt?: number; endedAt?: number; state: AgentState; engineer: boolean }
+const FIX_PREFIX = 'fix-'
+
+export type FixRole = 'engineer' | 'fix pass' | 'reviewer'
+export type FixLogRow = { agentId: string; role: FixRole; round?: number; startedAt?: number; endedAt?: number; state: AgentState; engineer: boolean }
 export type FixPipeline = { slug: string; stages: Stage[]; log: FixLogRow[] }
 export type OtherAgent = { id: string; role: string; detail?: string; startedAt?: number; lastAt?: number; state: AgentState }
 
-export const fixRunNames = (_repo: BoardRepo): string[] => []
-export const buildFixPipeline = (_repo: BoardRepo, _name: string, _now: number): FixPipeline | undefined => undefined
-export const otherActivity = (_repo: BoardRepo, _now: number): OtherAgent[] => []
-export type { AgentRun }
+type FixAgent = { a: AgentRun; role: FixRole; round?: number; state: AgentState }
+
+const isType = (a: AgentRun, role: string) => new RegExp(`(^|:)${role}$`).test(a.type)
+const byStart = (x: { a: AgentRun }, y: { a: AgentRun }) => (x.a.startedAt ?? 0) - (y.a.startedAt ?? 0)
+
+/** The claims named `fix-<slug>` that name no plan of the repo, once each, in claim order. */
+export function fixRunNames(repo: Pick<BoardRepo, 'model' | 'claims'>): string[] {
+  const plans = new Set(repo.model.plans.map((p) => p.slug))
+  const names = repo.claims.map((c) => c.plan).filter((n) => n.startsWith(FIX_PREFIX) && n.length > FIX_PREFIX.length && !plans.has(n))
+  return [...new Set(names)]
+}
+
+/** The PR gh found by the run's head branch. */
+export const fixPr = (repo: BoardRepo, name: string): PrStatus | undefined => repo.prs.find((p) => p.branch === name)
+
+/**
+ * The run's agents, oldest first. Engineers by their dispatch branch; reviewers by `kind: fix`
+ * plus the branch or the PR number. An engineer that started after the first review is the fix
+ * pass. A reviewer's round is its `round` field, else 2 when it started after a fix pass, else 1.
+ */
+function fixAgents(repo: BoardRepo, name: string, now: number): FixAgent[] {
+  const pr = fixPr(repo, name)?.number
+  const isReviewer = (a: AgentRun) =>
+    isType(a, 'reviewer') && a.kind === 'fix' && (a.branch === name || (a.pr !== undefined && a.pr === pr))
+  const reviewers = repo.agents.filter(isReviewer)
+  const engineers = repo.agents.filter((a) => isType(a, 'engineer') && a.branch === name)
+  const firstReview = Math.min(...reviewers.map((a) => a.startedAt ?? Number.POSITIVE_INFINITY))
+  const builds = engineers.map((a): FixAgent => ({ a, role: (a.startedAt ?? 0) > firstReview ? 'fix pass' : 'engineer', state: agentState(a, now) }))
+  const firstPass = Math.min(...builds.filter((x) => x.role === 'fix pass').map((x) => x.a.startedAt ?? Number.POSITIVE_INFINITY))
+  const reviews = reviewers.map((a): FixAgent => ({ a, role: 'reviewer', round: a.round ?? ((a.startedAt ?? 0) > firstPass ? 2 : 1), state: agentState(a, now) }))
+  return [...builds, ...reviews].sort(byStart)
+}
+
+/** Listed while its claim exists, unless its PR merged and none of its agents wrote in the last STALE_MS (a leftover claim). */
+function isListed(repo: BoardRepo, name: string, agents: FixAgent[], now: number): boolean {
+  if (fixPr(repo, name)?.state !== 'merged') return true
+  return agents.some(({ a }) => a.lastAt !== undefined && now - a.lastAt < STALE_MS)
+}
+
+/** The listed fix runs' names. */
+export const listedFixRuns = (repo: BoardRepo, now: number): string[] =>
+  fixRunNames(repo).filter((n) => isListed(repo, n, fixAgents(repo, n, now), now))
+
+const phase = (x: FixAgent): string => (x.role === 'reviewer' ? (x.round !== undefined && x.round >= 2 ? 'review round 2' : 'review') : x.role === 'engineer' ? 'build' : 'fix pass')
+
+export type FixRunSummary = { plan: string; fix: string; where: string; state: 'running' | 'needs-you' | 'idle'; portBase?: number }
+
+/**
+ * Where: the newest running agent's step; else `PR` once there is one; else the newest agent's
+ * step; else `build` (pod claims the ports before it dispatches the engineer).
+ * State, first match: an agent running → `running`; the PR open → `needs-you`; else `idle`.
+ */
+function summary(repo: BoardRepo, name: string, agents: FixAgent[]): FixRunSummary {
+  const pr = fixPr(repo, name)
+  const running = agents.filter((x) => x.state === 'running')
+  const where = running.length > 0 ? phase(running.at(-1)!) : pr ? 'PR' : agents.length > 0 ? phase(agents.at(-1)!) : 'build'
+  const state = running.length > 0 ? 'running' : pr?.state === 'open' ? 'needs-you' : 'idle'
+  const run: FixRunSummary = { plan: name, fix: name.slice(FIX_PREFIX.length), where, state }
+  const portBase = repo.claims.find((c) => c.plan === name)?.portBase
+  if (portBase !== undefined) run.portBase = portBase
+  return run
+}
+
+/** The repo's listed fix runs, in claim order. */
+export function fixRuns(repo: BoardRepo, now: number): FixRunSummary[] {
+  return fixRunNames(repo).flatMap((name) => {
+    const agents = fixAgents(repo, name, now)
+    return isListed(repo, name, agents, now) ? [summary(repo, name, agents)] : []
+  })
+}
+
+const plural = (n: number, word: string) => `${n} ${n === 1 ? word : `${word}s`}`
+
+/** One step from the agents that did it: live while one runs, done once any did, else waiting. */
+function agentStep(key: string, label: string, xs: FixAgent[], waiting: string, now: number): Step {
+  if (xs.length === 0) return { key, label, state: 'wait', detail: waiting }
+  const live = xs.some((x) => x.state === 'running')
+  const { minutes, tokens } = spend(xs, live, now)
+  const parts: string[] = []
+  if (xs.length > 1) parts.push(plural(xs.length, label === 'Engineer' ? 'engineer' : 'agent'))
+  if (minutes !== undefined) parts.push(live ? `${minutes} min so far` : `${minutes} min`)
+  if (!live && tokens !== undefined) parts.push(`${formatTokens(tokens)} tok`)
+  return { key, label, state: live ? 'live' : 'done', detail: parts.join(' · ') || (live ? 'running' : 'done') }
+}
+
+const PR_STEP: Record<PrStatus['state'], { state: StepState; text: string }> = {
+  open: { state: 'you', text: 'you merge' },
+  merged: { state: 'done', text: 'merged' },
+  closed: { state: 'blocked', text: 'closed' },
+}
+
+/** The fix run's pipeline (Build, Review, Ship) and agent log; undefined when `name` is no fix run of the repo. */
+export function buildFixPipeline(repo: BoardRepo, name: string, now: number): FixPipeline | undefined {
+  if (!fixRunNames(repo).includes(name)) return undefined
+  const agents = fixAgents(repo, name, now)
+  const of = (pred: (x: FixAgent) => boolean) => agents.filter(pred)
+  const pr = fixPr(repo, name)
+  const ship: Step = pr
+    ? { key: 'pr', label: 'PR', state: PR_STEP[pr.state].state, detail: `PR #${pr.number} · ${PR_STEP[pr.state].text}` }
+    : { key: 'pr', label: 'PR', state: 'wait', detail: 'not open yet' }
+  const stages: Stage[] = [
+    {
+      key: 'build',
+      caption: 'Build',
+      steps: [
+        agentStep('engineer', 'Engineer', of((x) => x.role === 'engineer'), 'not started', now),
+        agentStep('fix-pass', 'Fix pass', of((x) => x.role === 'fix pass'), 'only if review fails', now),
+      ],
+    },
+    {
+      key: 'review',
+      caption: 'Review',
+      steps: [
+        agentStep('round-1', 'Round 1', of((x) => x.role === 'reviewer' && x.round === 1), 'not started', now),
+        agentStep('round-2', 'Round 2', of((x) => x.role === 'reviewer' && x.round !== 1), 'only after a fix pass', now),
+      ],
+    },
+    { key: 'ship', caption: 'Ship', steps: [ship] },
+  ]
+  const log = agents.map((x): FixLogRow => {
+    const row: FixLogRow = { agentId: x.a.id, role: x.role, state: x.state, engineer: x.role !== 'reviewer' }
+    if (x.round !== undefined) row.round = x.round
+    if (x.a.startedAt !== undefined) row.startedAt = x.a.startedAt
+    if (x.state !== 'running' && x.a.lastAt !== undefined) row.endedAt = x.a.lastAt
+    return row
+  })
+  return { slug: name.slice(FIX_PREFIX.length), stages, log }
+}
+
+/**
+ * The repo's agents tied to no run, newest first: not an agent of any plan in the repo, and not
+ * one of a listed fix run's. Only those that wrote in the last OTHER_WINDOW_MS, OTHER_CAP at most.
+ * Each has its role (the type without `pod:`) and one dispatch field (branch, else plan, else sprint), never text.
+ */
+export function otherActivity(repo: BoardRepo, now: number): OtherAgent[] {
+  const fixIds = new Set(listedFixRuns(repo, now).flatMap((n) => fixAgents(repo, n, now).map((x) => x.a.id)))
+  return repo.agents
+    .filter((a) => a.lastAt !== undefined && now - a.lastAt < OTHER_WINDOW_MS)
+    .filter((a) => !fixIds.has(a.id) && !repo.model.plans.some((p) => isPlanAgent(a, p)))
+    .sort((x, y) => (y.lastAt ?? 0) - (x.lastAt ?? 0))
+    .slice(0, OTHER_CAP)
+    .map((a) => {
+      const out: OtherAgent = { id: a.id, role: a.type.replace(/^pod:/, ''), state: agentState(a, now) }
+      const detail = a.branch ?? a.plan ?? a.sprint
+      if (detail !== undefined) out.detail = detail
+      if (a.startedAt !== undefined) out.startedAt = a.startedAt
+      if (a.lastAt !== undefined) out.lastAt = a.lastAt
+      return out
+    })
+}

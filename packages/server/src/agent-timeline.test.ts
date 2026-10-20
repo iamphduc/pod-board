@@ -11,7 +11,7 @@ import { projectDirName } from './transcript-files.ts'
 const platform = process.platform
 const NOW = Date.parse('2026-10-19T12:00:00Z')
 const ts = (min: number) => new Date(NOW - 10 * 60_000 + min * 60_000).toISOString()
-const gh: GhReader = { status: () => 'unknown', checkedAt: () => undefined, get: () => undefined, refresh: async () => false }
+const gh: GhReader = { status: () => 'unknown', checkedAt: () => undefined, get: () => undefined, getBranch: () => undefined, refresh: async () => false }
 
 const PROMPT = '- **sprint slug:** board-engineer\n- **slice code:** T1\n- **branch name:** board-engineer-T1\n'
 

@@ -1,9 +1,11 @@
-import { activeRuns, buildPipeline, type Board, type RunSummary } from '@pod-board/model'
+import { activeRuns, buildFixPipeline, buildPipeline, otherActivity, type Board, type RunSummary } from '@pod-board/model'
 import type { StreamState } from '../../board-stream.ts'
 import { hashFor, type View } from '../../selection.ts'
 import { BoardScreen } from '../board/BoardScreen.tsx'
 import { AddRepoForm } from './AddRepoForm.tsx'
 import { Chip } from './Chip.tsx'
+import { FixRun } from './FixRun.tsx'
+import { OtherActivity } from './OtherActivity.tsx'
 import { Pipeline } from './Pipeline.tsx'
 import { RunsList } from './RunsList.tsx'
 import { SliceLog } from './SliceLog.tsx'
@@ -18,6 +20,8 @@ type Props = {
   selected: RunSummary | undefined
   view: View
   slice: string | undefined
+  /** The open agent of a fix run. */
+  agent?: string | undefined
   now: number
 }
 
@@ -26,10 +30,14 @@ const VIEWS: { view: View; label: string }[] = [
   { view: 'board', label: 'Wave board' },
 ]
 
-export function RunsScreen({ board, stream, runs, selected, view, slice, now }: Props) {
+export function RunsScreen({ board, stream, runs, selected, view, slice, agent, now }: Props) {
   const repo = selected && board?.repos.find((r) => r.id === selected.repoId)
-  const pipeline = repo && selected?.plan !== undefined ? buildPipeline(repo, selected.plan, now) : undefined
+  const isFix = selected?.fix !== undefined
+  const fixPipeline = repo && isFix && selected?.plan !== undefined ? buildFixPipeline(repo, selected.plan, now) : undefined
+  const pipeline = repo && !isFix && selected?.plan !== undefined ? buildPipeline(repo, selected.plan, now) : undefined
+  // A fix run has no wave board, so no tabs.
   const tabs = selected?.plan !== undefined && pipeline !== undefined
+  const others = repo ? otherActivity(repo, now) : []
   const notices = banners(board, stream)
   return (
     <div className="screen">
@@ -74,6 +82,8 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, now }: 
             <h2>No repos yet</h2>
             <p className="muted">Add a repo's folder with the Add a repo form to see its pod runs.</p>
           </div>
+        ) : fixPipeline && repo ? (
+          <FixRun repo={repo} run={selected} pipeline={fixPipeline} agent={view === 'agent' ? agent : undefined} now={now} />
         ) : pipeline && repo && view === 'board' && selected.plan !== undefined ? (
           <BoardScreen repo={repo} plan={selected.plan} {...(slice === undefined ? {} : { slice })} now={now} />
         ) : pipeline ? (
@@ -84,6 +94,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, now }: 
         ) : (
           <p className="muted">{emptyMessage(selected, repo)}</p>
         )}
+        {board && selected && <OtherActivity list={others} />}
       </main>
     </div>
   )

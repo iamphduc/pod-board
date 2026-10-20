@@ -109,6 +109,27 @@
   overflow-wrap: anywhere;
 }
 
+/* The repo name, then a kind tag (`fix`) for a /pod:fix run. */
+.run-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* A quiet kind tag: an outlined chip with no state dot, so it never reads as a state. */
+.chip.tag {
+  padding: 2px 7px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.chip.tag::before {
+  display: none;
+}
+
 /* Add a repo */
 
 .add-repo {
@@ -441,6 +462,64 @@
   background: var(--panel-2);
   font: var(--size-small) / 1 var(--mono);
   overflow-wrap: anywhere;
+}
+
+/* A fix run's agent log: the slice log's table, each engineer a link to its view. */
+.agent-log a {
+  color: var(--accent-ink);
+  font-weight: 600;
+  text-underline-offset: 2px;
+}
+
+.agent-log tr[aria-current="true"] td {
+  background: var(--accent-soft);
+}
+
+/* Other activity: agents tied to no run, kept quiet under the main view. */
+.other {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+  min-width: 0;
+}
+
+.other .eyebrow .note {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.other-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.other-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  font-size: var(--size-small);
+  color: var(--muted);
+  min-width: 0;
+}
+
+.other-list .mono {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.other-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Narrow: the runs list stacks above the main view. */

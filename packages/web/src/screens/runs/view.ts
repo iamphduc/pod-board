@@ -1,8 +1,20 @@
 // What screen 1 shows for each state: chip classes and labels, the slice log's
-// figures, and the message for a run with no pipeline. Components only render these.
+// figures, a fix run's agent log, the Other activity strip, and the message for a
+// run with no pipeline. Components only render these.
 
-import { formatTokens, type Board, type BoardRepo, type LogRow, type RunState, type RunSummary } from '@pod-board/model'
+import {
+  formatTokens,
+  type AgentState,
+  type Board,
+  type BoardRepo,
+  type FixLogRow,
+  type LogRow,
+  type OtherAgent,
+  type RunState,
+  type RunSummary,
+} from '@pod-board/model'
 import type { StreamState } from '../../board-stream.ts'
+import { hashFor } from '../../selection.ts'
 
 export type ChipClass = 's-run' | 's-ok' | 's-you' | 's-bad' | 's-idle'
 export type Chip = { cls: ChipClass; label: string }
@@ -49,7 +61,8 @@ export function rowFigures(row: LogRow): string {
   return parts.join(' · ')
 }
 
-export const barTitle = (r: RunSummary) => (r.plan === undefined ? r.repo : `${r.repo} · ${r.plan}`)
+export const barTitle = (r: RunSummary) =>
+  r.fix !== undefined ? `${r.repo} · fix · ${r.fix}` : r.plan === undefined ? r.repo : `${r.repo} · ${r.plan}`
 
 /** Why a run has no pipeline, and what to do about it. `repo` gives an unsupported repo's docs version. */
 export function emptyMessage(r: RunSummary, repo?: BoardRepo): string {
@@ -132,8 +145,44 @@ export function titleParts(text: string): TitlePart[] {
   return parts
 }
 
-// Fix runs and other activity. Stubs.
-export const runLine = (_r: RunSummary): string => ''
-export const agentChip = (_s: string): Chip => ({ cls: 's-idle', label: '' })
-export const agentLogRows = (_r: RunSummary, _log: unknown[]): unknown[] => []
-export const otherRows = (_list: unknown[]): unknown[] => []
+// ---- Fix runs and other activity ----
+
+/** The runs list's second line: `fix · <slug> · <where>`, `<plan> · <where>`, or the where alone. */
+export function runLine(r: RunSummary): string {
+  if (r.fix !== undefined) return `fix · ${r.fix} · ${r.where}`
+  return r.plan === undefined ? r.where : `${r.plan} · ${r.where}`
+}
+
+const AGENT_CHIPS: Record<AgentState, Chip> = {
+  running: { cls: 's-run', label: 'running' },
+  ended: { cls: 's-ok', label: 'ended' },
+  stale: { cls: 's-idle', label: 'stale' },
+}
+
+export const agentChip = (s: AgentState): Chip => AGENT_CHIPS[s]
+
+export type AgentLogView = { key: string; label: string; time: string; chip: Chip; href?: string }
+
+/** The fix run's agent log: role and round, `HH:MM → HH:MM` (or `→ now` while running), and a link to each engineer's view. */
+export function agentLogRows(run: RunSummary, log: FixLogRow[]): AgentLogView[] {
+  return log.map((x) => {
+    const label = x.round === undefined ? x.role : `${x.role} · round ${x.round}`
+    const end = x.endedAt !== undefined ? clock(x.endedAt) : x.state === 'running' ? 'now' : undefined
+    const time = x.startedAt === undefined ? '—' : `${clock(x.startedAt)} → ${end ?? '—'}`
+    const row: AgentLogView = { key: x.agentId, label, time, chip: agentChip(x.state) }
+    if (x.engineer) row.href = hashFor(run, 'agent', x.agentId)
+    return row
+  })
+}
+
+export type OtherView = { key: string; text: string; time: string; chip: Chip }
+
+/** The Other activity strip: `<role> · <field>`, the last write as `HH:MM`, and a state chip. */
+export function otherRows(list: OtherAgent[]): OtherView[] {
+  return list.map((x) => ({
+    key: x.id,
+    text: x.detail === undefined ? x.role : `${x.role} · ${x.detail}`,
+    time: x.lastAt === undefined ? '—' : clock(x.lastAt),
+    chip: agentChip(x.state),
+  }))
+}

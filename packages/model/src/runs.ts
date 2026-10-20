@@ -3,6 +3,7 @@
 // Pure. The rules and why are in pod-docs/feature-details/runs-and-pipeline.md.
 
 import type { Board, BoardRepo } from './board.ts'
+import { fixRuns } from './fix-runs.ts'
 import { isBlockedSlice, isDrafting, isHalted, isPlanAgent, isRunning, pendingHandBack, roleOf } from './pipeline.ts'
 import type { PlanModel } from './run-model.ts'
 import { STALE_MS } from './transcript.ts'
@@ -12,7 +13,10 @@ export type RunState = 'blocked' | 'needs-you' | 'running' | 'idle' | 'unsupport
 export type RunSummary = {
   repoId: string
   repo: string
+  /** The plan slug; for a fix run, its claim name `fix-<slug>`, which names no plan. */
   plan?: string
+  /** Set on a /pod:fix run: its slug. */
+  fix?: string
   title?: string
   where: string
   state: RunState
@@ -35,6 +39,7 @@ function repoRuns(repo: BoardRepo, now: number): RunSummary[] {
   if (repo.error !== undefined) return [{ ...base, where: repo.error || 'cannot read repo', state: 'error' }]
   if (!repo.model.docs.supported) return [{ ...base, where: 'update pod', state: 'unsupported' }]
   const runs = repo.model.plans.filter((p) => isRun(repo, p, now)).map((p) => planRun(repo, p, now))
+  runs.push(...fixRuns(repo, now).map((f) => ({ ...base, ...f })))
   return runs.length > 0 ? runs : [{ ...base, where: 'no active plan', state: 'idle' }]
 }
 

@@ -1,11 +1,13 @@
 // The board's read of one pod dispatch prompt: sprint, slice, branch, plan, and
-// round, read only from the prompt's fields (a name that starts a line, a list
-// item, or a `·`-separated part), plus the sprint planner's and reporter's plan prose. Pure.
+// round, plus a reviewer's kind and PR, read only from the prompt's fields (a name
+// that starts a line, a list item, or a `·`-separated part), plus the sprint
+// planner's and reporter's plan prose. Pure.
 // The rules and why are in pod-docs/feature-details/run-model.md.
 
 import type { parseDispatch } from './pod-flow/model.ts'
 
-export type DispatchFields = ReturnType<typeof parseDispatch>
+/** The ported fields, plus a reviewer's `kind` (`plan` or `fix`) and PR number. */
+export type DispatchFields = ReturnType<typeof parseDispatch> & { kind: string | undefined; pr: number | undefined }
 
 /** A line's start: indent, then an optional list marker (`-`, `*`, `+`, `1.`, `1)`). */
 const LINE_START = /^[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?/
@@ -91,6 +93,27 @@ function field(lines: string[], name: string): string | undefined {
   return undefined
 }
 
+/** A GitHub pull URL, optionally in backticks or angle brackets: its number. */
+const PULL_URL = /^`?<?https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/(\d+)(?![\w/])/i
+
+/**
+ * The PR number of the first `PR URL` or `PR` field, read where `field` reads a field
+ * (not a whole bold span). A value that isn't a GitHub pull URL gives nothing, and that
+ * still ends the search, as in `field`.
+ */
+function prField(lines: string[]): number | undefined {
+  const head = new RegExp(`^${fieldHead('pr(?: url)?')}[ \\t]*`, 'i')
+  for (const line of lines) {
+    for (const start of fieldStarts(line)) {
+      const m = start.whole ? null : head.exec(start.text)
+      if (!m) continue
+      const n = PULL_URL.exec(start.text.slice(m[0].length))?.[1]
+      return n === undefined ? undefined : Number(n)
+    }
+  }
+  return undefined
+}
+
 /** The prose sprint planners and reporters are dispatched with: "… sprint doc for plan `<slug>`", "… feature details for plan `<slug>` in …". */
 const PLAN_PROSE = /\bfor plan `([\w.-]+)`/
 
@@ -104,7 +127,7 @@ const readsPlanProse = (type: string) => isType(type, 'sprint-planner') || isTyp
  * Fenced code blocks never count. Plan, the first source that gives a value: a `plan slug`
  * field, a `plan` field, then (sprint planners and reporters only) the exact prose form
  * ``for plan `<slug>` ``. A source that gives nothing (no field, or a path) never blocks
- * the next one. Engineers get no plan.
+ * the next one. Engineers get no plan. Reviewers alone get `kind` and `pr`.
  */
 export function readDispatch(prompt: string, agentType: string): DispatchFields {
   const lines = unfencedLines(prompt)
@@ -114,11 +137,14 @@ export function readDispatch(prompt: string, agentType: string): DispatchFields 
     : (field(lines, 'plan slug') ??
       field(lines, 'plan') ??
       (readsPlanProse(agentType) ? PLAN_PROSE.exec(lines.join('\n'))?.[1] : undefined))
+  const reviewer = isType(agentType, 'reviewer')
   return {
     sprint: field(lines, 'sprint slug'),
     slice: field(lines, 'slice code'),
     branch: field(lines, 'branch(?: name)?'),
     plan,
     round: Number.isInteger(round) && round > 0 ? round : undefined,
+    kind: reviewer ? field(lines, 'kind') : undefined,
+    pr: reviewer ? prField(lines) : undefined,
   }
 }

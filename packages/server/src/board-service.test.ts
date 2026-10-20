@@ -398,10 +398,15 @@ describe('board service', () => {
 
   test('a PR found by branch that is also a numbered live PR is on the Board once', async () => {
     const repo = copyFixture()
+    // A hand-back linking #77 makes #77 a live PR by number too.
+    const queue = join(repo, 'pod-docs', 'handoff-queue.md')
+    const handBack = '- `[2026-10-20 · PENDING · orchestrator → human · plan: sparring-ladder]` plan sparring-ladder complete — final PR https://github.com/o/r/pull/77 **Resolution:** pending'
+    await writeFile(queue, `${await readFile(queue, 'utf8')}\n${handBack}\n`)
     await claim(3200, repo, 'fix-clock')
     const pr: PrStatus = { number: 77, state: 'open', checks: 'none', checkedAt: NOW, branch: 'fix-clock' }
     const gh = fakeGh({ 77: 'open' }, 'ok', { 'fix-clock': pr })
     const board = await createBoardService(deps(gh)).build()
+    expect(gh.asked).toContain(77)
     expect(board.repos[0]!.prs.filter((p) => p.number === 77)).toEqual([pr])
   })
 

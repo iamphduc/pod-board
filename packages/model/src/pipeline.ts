@@ -60,9 +60,12 @@ export type AgentRole =
 
 const hasCode = (s: SprintModel, code: string) => s.waves.some((w) => w.slices.some((x) => x.code === code))
 
-/** What an agent does for a plan: a review round, the fix pass, a wave's fix, a slice, or nothing of it. */
+/**
+ * What an agent does for a plan: a review round, the fix pass, a wave's fix, a slice, or nothing of it.
+ * A reviewer dispatched with `kind: fix` reviews a /pod:fix PR, never a plan's round.
+ */
 export function roleOf(a: AgentRun, plan: PlanModel): AgentRole {
-  if (isType(a, 'reviewer')) return a.plan === plan.slug ? { kind: 'review' } : { kind: 'other' }
+  if (isType(a, 'reviewer')) return a.plan === plan.slug && a.kind !== 'fix' ? { kind: 'review' } : { kind: 'other' }
   const branch = a.branch ?? ''
   if (isType(a, 'engineer')) {
     if (branch === `${plan.slug}-fix`) return { kind: 'fix-pass' }
@@ -165,7 +168,7 @@ function isWaveLive(ctx: Ctx, s: SprintModel, w: WaveModel): boolean {
 }
 
 /** Minutes from the earliest start to the latest record (or now while live), and tokens. Nothing with no agents. */
-function spend(agents: { a: AgentRun }[], live: boolean, now: number): { minutes?: number; tokens?: number } {
+export function spend(agents: { a: AgentRun }[], live: boolean, now: number): { minutes?: number; tokens?: number } {
   if (agents.length === 0) return {}
   const out: { minutes?: number; tokens?: number } = {}
   const finite = (v: number | undefined): v is number => v !== undefined && Number.isFinite(v)

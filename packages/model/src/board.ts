@@ -19,6 +19,10 @@ export type AgentRun = {
   branch?: string
   plan?: string
   round?: number
+  /** A reviewer's `kind` field: `plan` or `fix`. */
+  kind?: string
+  /** A reviewer's PR number, from its `PR URL` or `PR` field's GitHub pull URL. */
+  pr?: number
   model?: string
   startedAt?: number
   lastAt?: number
@@ -34,6 +38,8 @@ export type PrStatus = {
   checks: 'pass' | 'fail' | 'pending' | 'none'
   url?: string
   checkedAt: number
+  /** The head branch, set when the PR was found by its branch (a fix run's `fix-<slug>`). */
+  branch?: string
 }
 
 export type GhStatus = 'ok' | 'missing' | 'logged-out' | 'unknown'

@@ -127,7 +127,7 @@ describe('add repo route', () => {
   let watcher: BoardWatcher
   let app: Hono
 
-  const gh: GhReader = { status: () => 'unknown', checkedAt: () => undefined, get: () => undefined, refresh: async () => false }
+  const gh: GhReader = { status: () => 'unknown', checkedAt: () => undefined, get: () => undefined, getBranch: () => undefined, refresh: async () => false }
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'pod-board-a1-app-'))

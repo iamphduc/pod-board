@@ -6,6 +6,7 @@
 import path from 'node:path'
 import {
   buildRepoModel,
+  fixRunNames,
   handBackPr,
   parseAgentTranscript,
   type AgentRun,
@@ -113,9 +114,14 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
     } catch (err) {
       return { ...base, error: folderError(err), model: buildRepoModel({}), agents: [], prs: [] }
     }
-    const prs = livePrNumbers(model, entry.claims)
+    const numbered = livePrNumbers(model, entry.claims)
       .map((n) => deps.gh.get(entry.path, n))
       .filter((pr): pr is PrStatus => pr !== undefined)
+    // A fix run's PR, found by its head branch; it replaces the same PR found by number.
+    const byBranch = fixRunNames({ model, claims: entry.claims })
+      .map((b) => deps.gh.getBranch(entry.path, b))
+      .filter((pr): pr is PrStatus => pr !== undefined)
+    const prs = [...numbered.filter((p) => !byBranch.some((b) => b.number === p.number)), ...byBranch]
     return { ...base, model, agents: await agentsOf(entry.path), prs }
   }
 
@@ -135,7 +141,7 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
       // One repo at a time: the first call settles `gh auth status` for the rest.
       for (const repo of board.repos) {
         if (repo.error !== undefined) continue
-        if (await deps.gh.refresh(repo.path, livePrNumbers(repo.model, repo.claims))) changed = true
+        if (await deps.gh.refresh(repo.path, livePrNumbers(repo.model, repo.claims), fixRunNames(repo))) changed = true
       }
       return changed
     },
