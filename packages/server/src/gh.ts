@@ -111,12 +111,16 @@ export function createGhReader(opts: { exec?: GhExec; now?: () => number } = {})
     return !prev || prev.number !== next.number || prev.state !== next.state || prev.checks !== next.checks || prev.url !== next.url
   }
 
-  /** Fetches an entry when it's due: not final (merged or closed), and not fetched in the last PR_CACHE_MS. */
-  const refreshEntry = (key: string, fetch: (entry: Entry) => Promise<boolean>): Promise<boolean> => {
+  /**
+   * Fetches an entry when it's due: not final, and not fetched in the last PR_CACHE_MS. By number,
+   * merged and closed are final. By branch, only merged is: a closed PR can be reopened, or a new PR
+   * opened on the same branch, while the fix run's claim lasts.
+   */
+  const refreshEntry = (key: string, fetch: (entry: Entry) => Promise<boolean>, isFinal: (pr: PrStatus) => boolean): Promise<boolean> => {
     let entry = cache.get(key)
     if (!entry) cache.set(key, (entry = {}))
     if (entry.inflight) return entry.inflight
-    if (entry.value && entry.value.state !== 'open') return Promise.resolve(false)
+    if (entry.value && isFinal(entry.value)) return Promise.resolve(false)
     if (entry.fetchedAt !== undefined && now() - entry.fetchedAt < PR_CACHE_MS) return Promise.resolve(false)
     const e = entry
     e.inflight = fetch(e).finally(() => {
@@ -126,15 +130,20 @@ export function createGhReader(opts: { exec?: GhExec; now?: () => number } = {})
   }
 
   const refreshPr = (repoPath: string, n: number) =>
-    refreshEntry(keyOf(repoPath, n), (e) =>
-      fetchInto(['pr', 'view', String(n), '--json', PR_FIELDS], repoPath, e, (out, at) => parsePrView(out, n, at)),
+    refreshEntry(
+      keyOf(repoPath, n),
+      (e) => fetchInto(['pr', 'view', String(n), '--json', PR_FIELDS], repoPath, e, (out, at) => parsePrView(out, n, at)),
+      (pr) => pr.state !== 'open',
     )
 
   const refreshBranch = (repoPath: string, branch: string) =>
-    refreshEntry(branchKey(repoPath, branch), (e) =>
-      fetchInto(['pr', 'list', '--head', branch, '--state', 'all', '--json', LIST_FIELDS, '--limit', '10'], repoPath, e, (out, at) =>
-        parsePrList(out, branch, at),
-      ),
+    refreshEntry(
+      branchKey(repoPath, branch),
+      (e) =>
+        fetchInto(['pr', 'list', '--head', branch, '--state', 'all', '--json', LIST_FIELDS, '--limit', '10'], repoPath, e, (out, at) =>
+          parsePrList(out, branch, at),
+        ),
+      (pr) => pr.state === 'merged',
     )
 
   return {

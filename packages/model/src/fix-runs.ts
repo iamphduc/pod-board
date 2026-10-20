@@ -67,15 +67,35 @@ const phase = (x: FixAgent): string => (x.role === 'reviewer' ? (x.round !== und
 export type FixRunSummary = { plan: string; fix: string; where: string; state: 'running' | 'needs-you' | 'idle'; portBase?: number }
 
 /**
- * Where: the newest running agent's step; else `PR` once there is one; else the newest agent's
- * step; else `build` (pod claims the ports before it dispatches the engineer).
- * State, first match: an agent running → `running`; the PR open → `needs-you`; else `idle`.
+ * The review is done: the agent that wrote last is a reviewer that ended. Last write, not start: an
+ * engineer continued for the fix pass keeps its first start but writes after the review. Until then
+ * an open PR isn't the human's to merge (pod hands it back only after the review), like a plan's final PR.
+ */
+const isReviewed = (agents: FixAgent[]) => {
+  const last = agents.reduce<FixAgent | undefined>((x, y) => (x === undefined || (y.a.lastAt ?? 0) >= (x.a.lastAt ?? 0) ? y : x), undefined)
+  return last !== undefined && last.role === 'reviewer' && last.state === 'ended'
+}
+
+/**
+ * Where: the newest running agent's step; else `review` for an open PR whose review hasn't
+ * run since the last build; else `PR` once there is one; else the newest agent's step; else
+ * `build` (pod claims the ports before it dispatches the engineer).
+ * State, first match: an agent running → `running`; the PR open and reviewed → `needs-you`; else `idle`.
  */
 function summary(repo: BoardRepo, name: string, agents: FixAgent[]): FixRunSummary {
   const pr = fixPr(repo, name)
   const running = agents.filter((x) => x.state === 'running')
-  const where = running.length > 0 ? phase(running.at(-1)!) : pr ? 'PR' : agents.length > 0 ? phase(agents.at(-1)!) : 'build'
-  const state = running.length > 0 ? 'running' : pr?.state === 'open' ? 'needs-you' : 'idle'
+  const where =
+    running.length > 0
+      ? phase(running.at(-1)!)
+      : pr?.state === 'open' && !isReviewed(agents) && agents.length > 0
+        ? 'review'
+        : pr
+          ? 'PR'
+          : agents.length > 0
+            ? phase(agents.at(-1)!)
+            : 'build'
+  const state = running.length > 0 ? 'running' : pr?.state === 'open' && isReviewed(agents) ? 'needs-you' : 'idle'
   const run: FixRunSummary = { plan: name, fix: name.slice(FIX_PREFIX.length), where, state }
   const portBase = repo.claims.find((c) => c.plan === name)?.portBase
   if (portBase !== undefined) run.portBase = portBase
@@ -116,9 +136,11 @@ export function buildFixPipeline(repo: BoardRepo, name: string, now: number): Fi
   const agents = fixAgents(repo, name, now)
   const of = (pred: (x: FixAgent) => boolean) => agents.filter(pred)
   const pr = fixPr(repo, name)
-  const ship: Step = pr
-    ? { key: 'pr', label: 'PR', state: PR_STEP[pr.state].state, detail: `PR #${pr.number} · ${PR_STEP[pr.state].text}` }
-    : { key: 'pr', label: 'PR', state: 'wait', detail: 'not open yet' }
+  const ship: Step = !pr
+    ? { key: 'pr', label: 'PR', state: 'wait', detail: 'not open yet' }
+    : pr.state === 'open' && !isReviewed(agents)
+      ? { key: 'pr', label: 'PR', state: 'wait', detail: `PR #${pr.number} · after review` }
+      : { key: 'pr', label: 'PR', state: PR_STEP[pr.state].state, detail: `PR #${pr.number} · ${PR_STEP[pr.state].text}` }
   const stages: Stage[] = [
     {
       key: 'build',
