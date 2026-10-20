@@ -8,7 +8,7 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 
 - **Repos.** Paths in the config file (`POD_BOARD_CONFIG_DIR`, else the OS config folder) plus every repo a claim file in the ports folder names (`POD_BOARD_PORTS_DIR`, else `<os temp>/pod-ports`). They merge by repo identity: normalized path, compared without case when that folder's file system ignores case (probed once per repo). `source` is `registered`, `claim`, or `both`; a registered spelling wins.
 - **Each repo.** Pod docs → `buildRepoModel`; transcripts changed within `POD_BOARD_TRANSCRIPT_DAYS` (default 30) → `parseAgentTranscript`, pod agents only; PRs from `gh`'s cache. A missing or unreadable folder sets `error` and the other repos still build.
-- **`gh`.** Asked only about each live plan's open current-sprint PRs and its hand-back PR (the model's `handBackPr`). `build` never waits on `gh`; a refresh runs every 30 s and at start.
+- **`gh`.** Asked only about each live plan's open current-sprint PRs and its hand-back PR (the model's `handBackPr`), plus the hand-back PR of an archived plan a claim names (pod archives the plan before the final merge). `build` never waits on `gh`; a refresh runs every 30 s and at start.
 - **Watching.** One chokidar watcher per folder: the config folder, the ports folder, each repo's `pod-docs/` (`.md` only), and each repo's Claude project folder (subagent transcripts and meta only). A folder that doesn't exist yet is watched through its nearest parent. `POD_BOARD_POLL=1` polls every 500 ms.
 - **Rebuilds.** After 300 ms with no events (800 ms when polling), but never later than 1.5 s after a burst's first event. One at a time; a rebuild that throws keeps the last Board.
 - **Sending.** Subscribers get a Board only when its JSON changed, ignoring `generatedAt`, each PR's `checkedAt`, and `ghCheckedAt` while `gh` is `ok`.
@@ -41,6 +41,7 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - 2026-10-18 · server-runs A1: board service, watcher, SSE, and repo routes.
 - 2026-10-19 · board-engineer T1: agent timeline route.
 - 2026-10-19 · board-engineer X1: `configError` on the Board; `livePrNumbers` uses the model's `handBackPr`; the server imports the model's contract types.
+- 2026-10-20 · fix-closeout-idle: `livePrNumbers` also asks about a claimed archived plan's hand-back PR, so its Ship step can read merged.
 - 2026-10-19 · board-engineer wave 2 fix: config edits reach the board through the watcher; poll mode waits one poll interval longer before a rebuild; a new `ghCheckedAt` counts as a change while `gh` isn't `ok`.
 - 2026-10-19 · board-engineer wave 2 fix 2: a rebuild waits at most 1.5 s after a burst's first event, so steady edits still reach clients.
 - 2026-10-19 · board-read · plan complete; final PR held at gate 2 for a dispatch bug outside the server · [report](../reports/board-read.html)
