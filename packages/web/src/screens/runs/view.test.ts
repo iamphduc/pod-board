@@ -202,9 +202,22 @@ describe('fix runs and other activity', () => {
       { agentId: 'e2', role: 'fix pass', state: 'stale', engineer: true },
     ])
     expect(rows).toEqual([
-      { key: 'e1', label: 'engineer', time: '10:33 → 11:02', chip: { cls: 's-ok', label: 'ended' }, href: '#/r/fix-scroll/agent/e1' },
-      { key: 'r1', label: 'reviewer · round 1', time: '11:05 → now', chip: { cls: 's-run', label: 'running' } },
-      { key: 'e2', label: 'fix pass', time: '—', chip: { cls: 's-idle', label: 'stale' }, href: '#/r/fix-scroll/agent/e2' },
+      { key: 'e1', agentId: 'e1', label: 'engineer', time: '10:33 → 11:02', chip: { cls: 's-ok', label: 'ended' }, href: '#/r/fix-scroll/agent/e1' },
+      { key: 'r1', agentId: 'r1', label: 'reviewer · round 1', time: '11:05 → now', chip: { cls: 's-run', label: 'running' } },
+      { key: 'e2', agentId: 'e2', label: 'fix pass', time: '—', chip: { cls: 's-idle', label: 'stale' }, href: '#/r/fix-scroll/agent/e2' },
+    ])
+  })
+
+  it('a continued agent gives one row per turn, each with its own key and the same agent', () => {
+    const rows = agentLogRows(fixRun, [
+      { agentId: 'e1', role: 'engineer', turn: 0, startedAt: at(10, 25), endedAt: at(11, 8), state: 'ended', engineer: true },
+      { agentId: 'r1', role: 'reviewer', round: 1, startedAt: at(11, 10), endedAt: at(11, 19), state: 'ended', engineer: false },
+      { agentId: 'e1', role: 'fix pass', turn: 1, startedAt: at(11, 19), state: 'running', engineer: true },
+    ])
+    expect(rows.map((r) => [r.key, r.agentId, r.label, r.time, r.href])).toEqual([
+      ['e1:0', 'e1', 'engineer', '10:25 → 11:08', '#/r/fix-scroll/agent/e1'],
+      ['r1', 'r1', 'reviewer · round 1', '11:10 → 11:19', undefined],
+      ['e1:1', 'e1', 'fix pass', '11:19 → now', '#/r/fix-scroll/agent/e1'],
     ])
   })
 
