@@ -10,7 +10,8 @@ type Props = { repo: BoardRepo; run: RunSummary; pipeline: FixPipeline; agent: s
 /** A fix run: its pipeline, its agent log, and the open engineer's view below them. */
 export function FixRun({ repo, run, pipeline, agent, now }: Props) {
   const rows = agentLogRows(run, pipeline.log)
-  const open = pipeline.log.find((x) => x.agentId === agent && x.engineer)
+  // A resumed engineer has a row per turn; its view shows the latest one.
+  const open = pipeline.log.findLast((x) => x.agentId === agent && x.engineer)
   const engineer = open && repo.agents.find((a) => a.id === open.agentId)
 
   const viewRef = useRef<HTMLDivElement>(null)
@@ -32,7 +33,7 @@ export function FixRun({ repo, run, pipeline, agent, now }: Props) {
                 <td />
               </tr>
               {rows.map((r) => (
-                <tr key={r.key} aria-current={r.key === open?.agentId ? 'true' : undefined}>
+                <tr key={r.key} aria-current={r.agentId === open?.agentId ? 'true' : undefined}>
                   <td>{r.href ? <a href={r.href}>{r.label}</a> : r.label}</td>
                   <td>
                     <Chip chip={r.chip} />

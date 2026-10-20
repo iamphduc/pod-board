@@ -5,7 +5,7 @@
 // agents a0b2da9a7a9669669 (pod:reviewer: round 1, then continued for round 2) and
 // a31b714fcabe030d3 (pod:engineer: the build, then continued for the fix pass, then again).
 
-type Rec = { type: string; timestamp: string; message: { content: unknown } } & Record<string, unknown>
+type Rec = { type: string; timestamp: string; message: { content: unknown } & Record<string, unknown> } & Record<string, unknown>
 
 const REVIEWER_DISPATCH = ['kind: fix', 'round: 1', 'PR: https://github.com/o/r/pull/23', 'Branch: fix-show-fix-runs', 'Merge-target: pod-staging'].join('\n')
 const ENGINEER_DISPATCH = ['Standalone /pod:fix slice.', '', '- Merge target: pod-staging', '- Branch: fix-show-fix-runs'].join('\n')

@@ -15,11 +15,11 @@ export const OTHER_CAP = 8
 const FIX_PREFIX = 'fix-'
 
 export type FixRole = 'engineer' | 'fix pass' | 'reviewer'
-export type FixLogRow = { agentId: string; role: FixRole; round?: number; startedAt?: number; endedAt?: number; state: AgentState; engineer: boolean }
+export type FixLogRow = { agentId: string; role: FixRole; turn?: number; round?: number; startedAt?: number; endedAt?: number; state: AgentState; engineer: boolean }
 export type FixPipeline = { slug: string; stages: Stage[]; log: FixLogRow[] }
 export type OtherAgent = { id: string; role: string; detail?: string; startedAt?: number; lastAt?: number; state: AgentState }
 
-type FixAgent = { a: AgentRun; role: FixRole; round?: number; state: AgentState }
+type FixAgent = { a: AgentRun; turn?: number; role: FixRole; round?: number; state: AgentState }
 
 const isType = (a: AgentRun, role: string) => new RegExp(`(^|:)${role}$`).test(a.type)
 const byStart = (x: { a: AgentRun }, y: { a: AgentRun }) => (x.a.startedAt ?? 0) - (y.a.startedAt ?? 0)
@@ -34,21 +34,42 @@ export function fixRunNames(repo: Pick<BoardRepo, 'model' | 'claims'>): string[]
 /** The PR gh found by the run's head branch. */
 export const fixPr = (repo: BoardRepo, name: string): PrStatus | undefined => repo.prs.find((p) => p.branch === name)
 
+type Turn = { a: AgentRun; turn?: number; state: AgentState }
+
 /**
- * The run's agents, oldest first. Engineers by their dispatch branch; reviewers by `kind: fix`
- * plus the branch or the PR number. An engineer that started after the first review is the fix
- * pass. A reviewer's round is its `round` field, else 2 when it started after a fix pass, else 1.
+ * An agent's turns, each as the agent with that turn's start, last write, and tokens. An agent
+ * resumed after a hand-back (SendMessage) has several; earlier turns ended at their hand-back.
+ */
+function turnsOf(a: AgentRun, now: number): Turn[] {
+  const turns = a.turns
+  if (!turns || turns.length < 2) return [{ a, state: agentState(a, now) }]
+  return turns.map((t, i) => ({
+    a: { ...a, startedAt: t.startedAt, lastAt: t.lastAt, tokens: t.tokens },
+    turn: i,
+    state: i === turns.length - 1 ? agentState(a, now) : 'ended',
+  }))
+}
+
+/**
+ * The run's agents, one entry per turn, oldest first. Engineers by their dispatch branch;
+ * reviewers by `kind: fix` plus the branch or the PR number. An engineer turn that started after
+ * the first review is a fix pass, whether a new agent or the same one resumed. A reviewer's first
+ * turn takes its `round` field; else, and for a resumed turn, 2 when it started after a fix pass, else 1.
  */
 function fixAgents(repo: BoardRepo, name: string, now: number): FixAgent[] {
   const pr = fixPr(repo, name)?.number
   const isReviewer = (a: AgentRun) =>
     isType(a, 'reviewer') && a.kind === 'fix' && (a.branch === name || (a.pr !== undefined && a.pr === pr))
-  const reviewers = repo.agents.filter(isReviewer)
-  const engineers = repo.agents.filter((a) => isType(a, 'engineer') && a.branch === name)
-  const firstReview = Math.min(...reviewers.map((a) => a.startedAt ?? Number.POSITIVE_INFINITY))
-  const builds = engineers.map((a): FixAgent => ({ a, role: (a.startedAt ?? 0) > firstReview ? 'fix pass' : 'engineer', state: agentState(a, now) }))
+  const reviewers = repo.agents.filter(isReviewer).flatMap((a) => turnsOf(a, now))
+  const engineers = repo.agents.filter((a) => isType(a, 'engineer') && a.branch === name).flatMap((a) => turnsOf(a, now))
+  const start = (x: Turn) => x.a.startedAt ?? 0
+  const firstReview = Math.min(...reviewers.map((x) => x.a.startedAt ?? Number.POSITIVE_INFINITY))
+  const builds = engineers.map((x): FixAgent => ({ ...x, role: start(x) > firstReview ? 'fix pass' : 'engineer' }))
   const firstPass = Math.min(...builds.filter((x) => x.role === 'fix pass').map((x) => x.a.startedAt ?? Number.POSITIVE_INFINITY))
-  const reviews = reviewers.map((a): FixAgent => ({ a, role: 'reviewer', round: a.round ?? ((a.startedAt ?? 0) > firstPass ? 2 : 1), state: agentState(a, now) }))
+  const reviews = reviewers.map((x): FixAgent => {
+    const field = x.turn === undefined || x.turn === 0 ? x.a.round : undefined
+    return { ...x, role: 'reviewer', round: field ?? (start(x) > firstPass ? 2 : 1) }
+  })
   return [...builds, ...reviews].sort(byStart)
 }
 
@@ -110,7 +131,10 @@ export function fixRuns(repo: BoardRepo, now: number): FixRunSummary[] {
   })
 }
 
-const plural = (n: number, word: string) => `${n} ${n === 1 ? word : `${word}s`}`
+const plural = (n: number, word: string) => `${n} ${n === 1 ? word : word.endsWith('s') ? `${word}es` : `${word}s`}`
+
+/** What several turns of one step are called: engineers, fix passes, or review runs. */
+const COUNT_WORD: Record<string, string> = { Engineer: 'engineer', 'Fix pass': 'pass' }
 
 /** One step from the agents that did it: live while one runs, done once any did, else waiting. */
 function agentStep(key: string, label: string, xs: FixAgent[], waiting: string, now: number): Step {
@@ -118,7 +142,7 @@ function agentStep(key: string, label: string, xs: FixAgent[], waiting: string, 
   const live = xs.some((x) => x.state === 'running')
   const { minutes, tokens } = spend(xs, live, now)
   const parts: string[] = []
-  if (xs.length > 1) parts.push(plural(xs.length, label === 'Engineer' ? 'engineer' : 'agent'))
+  if (xs.length > 1) parts.push(plural(xs.length, COUNT_WORD[label] ?? 'run'))
   if (minutes !== undefined) parts.push(live ? `${minutes} min so far` : `${minutes} min`)
   if (!live && tokens !== undefined) parts.push(`${formatTokens(tokens)} tok`)
   return { key, label, state: live ? 'live' : 'done', detail: parts.join(' · ') || (live ? 'running' : 'done') }
@@ -162,6 +186,7 @@ export function buildFixPipeline(repo: BoardRepo, name: string, now: number): Fi
   ]
   const log = agents.map((x): FixLogRow => {
     const row: FixLogRow = { agentId: x.a.id, role: x.role, state: x.state, engineer: x.role !== 'reviewer' }
+    if (x.turn !== undefined) row.turn = x.turn
     if (x.round !== undefined) row.round = x.round
     if (x.a.startedAt !== undefined) row.startedAt = x.a.startedAt
     if (x.state !== 'running' && x.a.lastAt !== undefined) row.endedAt = x.a.lastAt

@@ -161,7 +161,8 @@ const AGENT_CHIPS: Record<AgentState, Chip> = {
 
 export const agentChip = (s: AgentState): Chip => AGENT_CHIPS[s]
 
-export type AgentLogView = { key: string; label: string; time: string; chip: Chip; href?: string }
+/** One row per agent turn: `key` is unique (agent, then turn for a resumed agent); `agentId` the agent the row opens. */
+export type AgentLogView = { key: string; agentId: string; label: string; time: string; chip: Chip; href?: string }
 
 /** The fix run's agent log: role and round, `HH:MM → HH:MM` (or `→ now` while running), and a link to each engineer's view. */
 export function agentLogRows(run: RunSummary, log: FixLogRow[]): AgentLogView[] {
@@ -169,7 +170,8 @@ export function agentLogRows(run: RunSummary, log: FixLogRow[]): AgentLogView[] 
     const label = x.round === undefined ? x.role : `${x.role} · round ${x.round}`
     const end = x.endedAt !== undefined ? clock(x.endedAt) : x.state === 'running' ? 'now' : undefined
     const time = x.startedAt === undefined ? '—' : `${clock(x.startedAt)} → ${end ?? '—'}`
-    const row: AgentLogView = { key: x.agentId, label, time, chip: agentChip(x.state) }
+    const key = x.turn === undefined ? x.agentId : `${x.agentId}:${x.turn}`
+    const row: AgentLogView = { key, agentId: x.agentId, label, time, chip: agentChip(x.state) }
     if (x.engineer) row.href = hashFor(run, 'agent', x.agentId)
     return row
   })

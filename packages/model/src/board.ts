@@ -27,8 +27,16 @@ export type AgentRun = {
   startedAt?: number
   lastAt?: number
   tokens: number
+  /** Its last turn handed back (or ended its turn) after its last prompt. */
   ended: boolean
+  /** Set only on an agent resumed after a hand-back (SendMessage): when its last turn's prompt came. A time only. */
+  resumedAt?: number
+  /** Set only with `resumedAt`: each turn, from its prompt to its hand-back (absent while it works). Times and tokens only. */
+  turns?: AgentTurn[]
 }
+
+/** One turn of a continued agent. `lastAt` is its last record; `tokens` the messages that finished in it. */
+export type AgentTurn = { startedAt: number; endedAt?: number; lastAt: number; tokens: number }
 
 export type AgentState = 'running' | 'ended' | 'stale'
 

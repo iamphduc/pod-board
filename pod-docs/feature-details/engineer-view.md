@@ -27,6 +27,7 @@ Screen 3. With a slice open on the wave board (`#/<repoId>/<plan>/board/<code>`)
 - The timeline follows `lastAt`, which moves only on records with a timestamp.
 - An engineer shows only when `readDispatch` reads its sprint and slice from the dispatch (see `run-model.md`). chess-web's own prompt shape (``Build slice R1 of sprint `refresh` ``, `- Slice: R1, …`) reads nothing, so those slices say no engineer has started. The board reads only pod's field names by an agent default ([decision](../decisions.md#2026-10-20--engineer-dispatch-fields-pods-names-only-agent-default--override-anytime)); a new shape goes in `dispatch.ts` with a corpus check.
 - Agents on the Board carry no `description` since plan fix 2; never show or add it back.
+- An agent continued with SendMessage reads `ended` only after it hands back again, so its Last active and live timeline follow its newest turn.
 
 ## History
 
@@ -34,5 +35,6 @@ Screen 3. With a slice open on the wave board (`#/<repoId>/<plan>/board/<code>`)
 - 2026-10-19 · board-read · plan complete; review found the planted secret in no page, timeline, or Board JSON · [report](../reports/board-read.html)
 - 2026-10-19 · board-read fix 2: agent descriptions dropped from `/api/board` · [#17](https://github.com/iamphduc/pod-board/pull/17)
 - 2026-10-19 · board-read fix 3: engineers dispatched with unmarked or `·`-joined fields show on their slice again · [#18](https://github.com/iamphduc/pod-board/pull/18)
+- 2026-10-20 · fix-show-fix-runs round 2: a continued engineer reads running again while it works, so the view's Last active and timeline follow it.
 - 2026-10-20 · fix-show-fix-runs: a fix run's engineers open this view from its agent log; the view takes a heading and an optional slice instead of a wave board card.
 - 2026-10-20 · board-read · final review passed at round 5; the planted secret was absent again · [report](../reports/board-read.html)
