@@ -203,6 +203,21 @@ describe('readDispatch reads every real field shape', () => {
     expect(readDispatch('sprint slug: two\nplan: alpha\n- **plan slug:** alpha', 'pod:engineer').plan).toBeUndefined()
   })
 
+  it('a field that starts a sentence, as sprint planner prompts write them', () => {
+    const planner = 'Dispatched by /pod:autopilot. Repo: /r (branch `alpha`). Plan slug: alpha. Draft the next sprint. Sprint slug: `two`.'
+    expect(readDispatch(planner, 'pod:sprint-planner')).toMatchObject({ plan: 'alpha', sprint: 'two' })
+    expect(readDispatch('Plan: alpha (pod-docs/plans/alpha.md). Draft the next sprint.', 'pod:sprint-planner').plan).toBe('alpha')
+  })
+
+  it('a field that is one whole bold span, anywhere outside backticks', () => {
+    expect(readDispatch('Review the final plan PR, dispatched by /pod:autopilot — **round: 2**.', 'pod:reviewer').round).toBe(2)
+    expect(readDispatch('Quoted `**round: 2**` here.', 'pod:reviewer').round).toBeUndefined()
+  })
+
+  it('a bold field name mid-sentence still never counts', () => {
+    expect(readDispatch('The reviewer reads the **plan:** alpha field and a lower-case sentence. plan slug: beta', 'pod:reviewer').plan).toBeUndefined()
+  })
+
   it('the round 2 prose case still reads the real plan field', () => {
     expect(readDispatch(REVIEWER_ROUND_2, 'pod:reviewer')).toMatchObject({ plan: 'alpha', round: 2 })
   })
