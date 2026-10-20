@@ -46,3 +46,4 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - 2026-10-19 · board-read · plan complete; final PR held at gate 2 for a dispatch bug outside the server · [report](../reports/board-read.html)
 - 2026-10-19 · board-read fix 2: `/api/board` no longer serves agent descriptions.
 - 2026-10-19 · board-read fix 5: the board count for a quick burst is tested with a fake watch over real files; the real-file test checks only the 5 s bound and the last board.
+- 2026-10-20 · board-read · final review passed at round 5; every server row driven live · [report](../reports/board-read.html)

@@ -25,9 +25,13 @@ Screen 3. With a slice open on the wave board (`#/<repoId>/<plan>/board/<code>`)
 - Any new word added to a summary list must be safe to show. A program not on the list never shows a subcommand and never counts as a test run; `pnpm run test:unit` and `npx -p pkg vitest` don't count.
 - An error isn't retried for the same key: an ended agent with a failed load stays on the note until reload or reopening the slice.
 - The timeline follows `lastAt`, which moves only on records with a timestamp.
-- `AgentRun.description` must never be shown here; it's still in `/api/board` and queued to be dropped.
+- An engineer shows only when `readDispatch` reads its sprint and slice from the dispatch (see `run-model.md`). chess-web's own prompt shape (``Build slice R1 of sprint `refresh` ``, `- Slice: R1, …`) reads nothing, so those slices say no engineer has started. The board reads only pod's field names by an agent default ([decision](../decisions.md#2026-10-20--engineer-dispatch-fields-pods-names-only-agent-default--override-anytime)); a new shape goes in `dispatch.ts` with a corpus check.
+- Agents on the Board carry no `description` since plan fix 2; never show or add it back.
 
 ## History
 
 - 2026-10-19: added in sprint board-engineer (slice E1).
 - 2026-10-19 · board-read · plan complete; review found the planted secret in no page, timeline, or Board JSON · [report](../reports/board-read.html)
+- 2026-10-19 · board-read fix 2: agent descriptions dropped from `/api/board` · [#17](https://github.com/iamphduc/pod-board/pull/17)
+- 2026-10-19 · board-read fix 3: engineers dispatched with unmarked or `·`-joined fields show on their slice again · [#18](https://github.com/iamphduc/pod-board/pull/18)
+- 2026-10-20 · board-read · final review passed at round 5; the planted secret was absent again · [report](../reports/board-read.html)

@@ -25,9 +25,10 @@ The frame around every screen: the web app at `http://127.0.0.1:<web>/`, the bar
 - The approved design is `docs/design/preview.html`; build to it. Its critical path is drawn in yellow, but the plan's Look says accent, and the board follows the plan.
 - `tokens.test.ts` keeps the 4.5:1 contrast check; changing a light ink color must still pass it.
 - The boot script and the app share `THEME_KEY`; rename both or neither.
-- "Chrome reports installable" wasn't run in the final review; S1 saw the install offer only in headless Chrome.
+- "Chrome reports installable" wasn't run in any of the five review rounds; S1 saw the install offer only in headless Chrome.
 - agent-browser hangs when run from Git Bash on Windows; see [known-issues/agent-browser-git-bash.md](../known-issues/agent-browser-git-bash.md).
 
 ## History
 
 - 2026-10-19 · board-read · added: the bootstrap page (B1), the look foundation (server-runs L1), screen 1's theme control and PWA (S1), and theme boot (board-engineer X1) · [report](../reports/board-read.html)
+- 2026-10-20 · board-read · final review passed at round 5; Theme, Theme boot, and PWA rows driven live · [report](../reports/board-read.html)

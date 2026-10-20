@@ -25,8 +25,8 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 
 ## Watch out
 
-- A plan's reviewers and planners join it only through `AgentRun.plan`, read by `readDispatch` (see `run-model.md`) from list fields only. A field read from prose once gave a round 2 reviewer plan `field`, and the plan dropped off the runs list (`no active plan · idle`) during its own review. Don't bring back a loose match.
-- The planner's plan comes from the prose ``for plan `<slug>` ``; it holds only while pod's prompt says exactly that.
+- A plan's reviewers and planners join it only through `AgentRun.plan`, read by `readDispatch` (see `run-model.md`): a `plan slug` field, then a `plan` field, then, for sprint planners only, the prose ``for plan `<slug>` ``. A loose match once read a round 2 reviewer's plan as `field` from quoted prose, so the plan dropped off the runs list (`no active plan · idle`) during its own review; reading only list items then lost most running engineers' slice and branch. Any change to these rules needs the corpus check over real transcripts ([decision](../decisions.md#2026-10-19--fix-the-dispatch-field-regression-with-a-corpus-check)).
+- The planner's prose fallback holds only while pod's prompt says exactly ``for plan `<slug>` ``. A planner that names its plan only as a path mid-sentence reads no plan and shows `not drafted`.
 - A pending `→ human` entry stays pending after its wave merges: the wave reads `done`, the run `needs-you`. Don't move this rule into `runs.ts`.
 - Fix branches not named `<sprint>-w<N>-fix` (such as `-w2-starve`) aren't counted in their wave's time and tokens.
 - `blocked` and `you` wave steps show done-style detail with tokens (queued, someday).
@@ -40,3 +40,6 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - 2026-10-19: reviewers and sprint planners now carry their plan from real dispatches (`readDispatch`, see run-model.md), so `final review`, the Check stage's live round, and `drafting` show for real runs (plan board-read fix pass).
 - 2026-10-19 · board-read · plan complete; theme boot moved to `app-shell.md`; round 2 found the prose `plan slug` bug, still open · [report](../reports/board-read.html)
 - 2026-10-19: a dispatch field quoted in prose never beats the real list field, so a round 2 reviewer keeps its plan in `final review` and the Check stage shows `round 2` live (plan board-read fix 2).
+- 2026-10-19: dispatch fields count at a line, list item, sentence, or ` · ` part start again, so running engineers keep their slice row and the run reads `running` (plan board-read fix 3).
+- 2026-10-19: a `Plan: E:/…` drive path no longer hides a planner's prose plan, so it shows `drafting`; fenced examples never count (plan board-read fix 4).
+- 2026-10-20 · board-read · final review passed at round 5, with every row driven live · [report](../reports/board-read.html)

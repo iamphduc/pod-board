@@ -63,3 +63,8 @@ Consequences: autopilot resumes; the merge waits for a passing round 4.
 Context: round 4 on PR #15 found that `Plan: E:/…/plans/x.md` reads `plan: "E"` (a drive letter isn't treated as a path), and that fenced code blocks aren't skipped like inline backticks.
 Decision: option A: one more small fix for both, with the same corpus check against the current reader, then round 5 and the merge.
 Consequences: chess-web's own engineer prompt shape stays unread for now (a separate product choice, still in the queue).
+
+## 2026-10-20 — engineer dispatch fields: pod's names only (agent default — override anytime)
+Context: chess-web's `ui-refresh` orchestrator wrote its own engineer prompt shape (``Build slice R1 of sprint `refresh` (plan `ui-refresh`)``, `- Slice: R1, branch `refresh-R1``), so the board reads no fields for its 11 engineers and the run shows `idle` (round 4 and 5 reviews on PR #15).
+Decision: the board reads only the field names pod's `agents/engineer.md` defines (`sprint slug`, `slice code`, `branch name`, plus the plan fields). Hand-written shapes aren't guessed.
+Consequences: runs dispatched in another shape show their engineers as not started. To change it, add that shape to `packages/model/src/dispatch.ts` with a corpus check, or fix the dispatching side to use pod's names.
