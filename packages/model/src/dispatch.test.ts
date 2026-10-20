@@ -512,3 +512,70 @@ describe('drive paths and fenced blocks, end to end', () => {
     expect(stage(r, 'check')?.[0]).toEqual(['Final review', 'live', 'round 2'])
   })
 })
+
+// /pod:fix reviewer shapes, as real ones write them (made-up values).
+const FIX_REVIEWER_LINES = [
+  'kind: fix',
+  'round: 1',
+  '',
+  'Task as given: make the clock test use fake timers.',
+  '',
+  'PR: https://github.com/o/r/pull/45',
+  'Branch: fix-clock',
+  'Merge-target: main',
+].join('\n')
+const FIX_REVIEWER_SENTENCES =
+  'kind: fix. Task as given: break the import cycle.\nPR: https://github.com/o/r/pull/96. Branch: fix-cycle. Merge-target: main. Parent repo: E:/r.'
+const FIX_REVIEWER_BOLD = 'kind: fix — one-pass review of a standalone /pod:fix PR.\n\n## Required dispatch context\n- **Task as given:** x\n- **PR:** https://github.com/o/r/pull/22\n- **Branch:** fix-idle'
+// A hand-written shape: the PR and branch only in prose, so neither is read.
+const FIX_REVIEWER_PROSE = 'kind: fix. Review PR https://github.com/o/r/pull/36, branch fix-scroll → merge-target main. Parent repo: E:\r.'
+
+describe('readDispatch reads a fix reviewer kind and PR', () => {
+  it('reads kind, PR number, and branch from line fields', () => {
+    expect(readDispatch(FIX_REVIEWER_LINES, 'pod:reviewer')).toMatchObject({ kind: 'fix', pr: 45, branch: 'fix-clock', round: 1 })
+  })
+
+  it('reads them from sentence fields and bold list fields', () => {
+    expect(readDispatch(FIX_REVIEWER_SENTENCES, 'pod:reviewer')).toMatchObject({ kind: 'fix', pr: 96, branch: 'fix-cycle' })
+    expect(readDispatch(FIX_REVIEWER_BOLD, 'pod:reviewer')).toMatchObject({ kind: 'fix', pr: 22, branch: 'fix-idle' })
+  })
+
+  it('reads a plan reviewer kind and its PR URL field', () => {
+    expect(readDispatch(REVIEWER, 'pod:reviewer')).toMatchObject({ kind: 'plan', pr: 15, plan: 'alpha' })
+  })
+
+  it('reads a PR URL followed by a note', () => {
+    expect(readDispatch('kind: fix\nPR: https://github.com/o/r/pull/34 (fix-a → main)', 'pod:reviewer').pr).toBe(34)
+  })
+
+  it('reads no PR or branch from prose', () => {
+    const d = readDispatch(FIX_REVIEWER_PROSE, 'pod:reviewer')
+    expect(d).toMatchObject({ kind: 'fix' })
+    expect(d.pr).toBeUndefined()
+    expect(d.branch).toBeUndefined()
+  })
+
+  it('a PR field that is not a GitHub pull URL gives nothing, and ends the search', () => {
+    expect(readDispatch('PR: #22\nPR URL: https://github.com/o/r/pull/9', 'pod:reviewer').pr).toBeUndefined()
+    expect(readDispatch('PR: https://example.com/o/r/pull/9', 'pod:reviewer').pr).toBeUndefined()
+    expect(readDispatch('PR: `https://github.com/o/r/pull/9`', 'pod:reviewer').pr).toBe(9)
+  })
+
+  it('reads no kind or PR in backticks, fences, or mid-sentence', () => {
+    expect(readDispatch('Use `kind: fix` and `PR: https://github.com/o/r/pull/9`.', 'pod:reviewer')).toMatchObject({ kind: undefined, pr: undefined })
+    expect(readDispatch('```\nkind: fix\nPR: https://github.com/o/r/pull/9\n```', 'pod:reviewer')).toMatchObject({ kind: undefined, pr: undefined })
+    expect(readDispatch('the kind: fix one, see the PR: https://github.com/o/r/pull/9', 'pod:reviewer')).toMatchObject({ kind: undefined, pr: undefined })
+  })
+
+  it('reads kind and PR for reviewers only', () => {
+    for (const type of ['pod:engineer', 'pod:sprint-planner', 'pod:reporter', 'pod:researcher']) {
+      const d = readDispatch(FIX_REVIEWER_LINES, type)
+      expect([d.kind, d.pr], type).toEqual([undefined, undefined])
+    }
+  })
+
+  it('a fix engineer reads its branch from a sentence field', () => {
+    const prompt = 'Standalone /pod:fix slice. Parent repo: E:\r. Merge-target: main. Branch: fix-scroll. Ports: 3110/3111.'
+    expect(readDispatch(prompt, 'pod:engineer')).toEqual({ sprint: undefined, slice: undefined, branch: 'fix-scroll', plan: undefined, round: undefined })
+  })
+})

@@ -113,7 +113,8 @@ export function createGhReader(opts: { exec?: GhExec; now?: () => number } = {})
   return {
     status: () => status,
     checkedAt: () => authAt,
-    get: (repoPath, n) => cache.get(keyOf(repoPath, n))?.value,
+    getBranch: () => undefined,
+    get:(repoPath, n) => cache.get(keyOf(repoPath, n))?.value,
     async refresh(repoPath, numbers) {
       let changed = await checkAuth(repoPath)
       if (status !== 'ok') return changed

@@ -131,3 +131,9 @@ export function titleParts(text: string): TitlePart[] {
   push(text.slice(at), false)
   return parts
 }
+
+// Fix runs and other activity. Stubs.
+export const runLine = (_r: RunSummary): string => ''
+export const agentChip = (_s: string): Chip => ({ cls: 's-idle', label: '' })
+export const agentLogRows = (_r: RunSummary, _log: unknown[]): unknown[] => []
+export const otherRows = (_list: unknown[]): unknown[] => []

@@ -148,3 +148,17 @@ describe('engineer details', () => {
     expect(JSON.stringify(engineerDetails(slice(), agent(), NOW))).not.toContain('SECRET-ISH')
   })
 })
+
+describe('engineer details with no slice (a fix run’s engineer)', () => {
+  it('the agent’s branch and model; files owned not listed', () => {
+    const d = engineerDetails(undefined, agent({ branch: 'fix-scroll', model: 'claude-opus-5-5', lastAt: NOW - 40 * SEC }), NOW)
+    expect(d).toEqual([
+      { label: 'Branch', value: 'fix-scroll', mono: true },
+      { label: 'Files owned', value: 'not listed', mono: false },
+      { label: 'Tests first', value: 'no test runs yet', mono: false },
+      { label: 'Last active', value: '40 s ago', mono: false },
+      { label: 'Model', value: 'claude-opus-5-5', mono: true },
+      { label: 'Tokens', value: '248k', mono: true },
+    ])
+  })
+})
