@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { buildPipeline, buildRepoModel, listRuns, parseAgentTranscript, parseQueue, type BoardRepo, type Claim } from '../src/index.ts'
+import { buildPipeline, buildRepoModel, listRuns, parseAgentTranscript, parseQueue, type AgentRun, type BoardRepo, type Claim, type PrStatus } from '../src/index.ts'
 import { loadFixture } from './load-fixture.ts'
 
 const docKeys = (files: Record<string, string>, folder: string) =>
@@ -165,18 +165,23 @@ describe('a run in its close-out (chess-web ui-polish)', () => {
     return run
   }
 
-  /** The fixture, without the hand-back unless asked: the reporter runs before pod writes it. */
-  const repo = (opts: { claims?: Claim[]; handBack?: boolean } = {}): BoardRepo => {
+  /**
+   * The fixture, without the hand-back unless asked (the reporter runs before pod writes it), or with
+   * it resolved, as the human leaves it after the merge.
+   */
+  const repo = (opts: { claims?: Claim[]; handBack?: boolean | 'resolved'; agents?: AgentRun[]; prs?: PrStatus[] } = {}): BoardRepo => {
     const files = loadFixture('chess-web-ui-polish')
+    const queue = files['pod-docs/handoff-queue.md']!
     if (!opts.handBack) files['pod-docs/handoff-queue.md'] = '# Handoff Queue\n'
+    if (opts.handBack === 'resolved') files['pod-docs/handoff-queue.md'] = queue.replace('**Resolution:** pending', '**Resolution:** 2026-10-20 — final PR merged')
     return {
       id: 'chess-web',
       name: 'chess-web',
       path: CLAIM.repoPath,
       source: 'claim',
       model: buildRepoModel(files),
-      agents: [reporter()],
-      prs: [],
+      agents: opts.agents ?? [reporter()],
+      prs: opts.prs ?? [],
       claims: opts.claims ?? [CLAIM],
     }
   }
@@ -204,6 +209,19 @@ describe('a run in its close-out (chess-web ui-polish)', () => {
     expect(runs(r).map((x) => [x.plan, x.where, x.state])).toEqual([['ui-polish', 'final PR', 'needs-you']])
     const ship = buildPipeline(r, 'ui-polish', NOW)?.stages.find((s) => s.key === 'ship')?.steps
     expect(ship).toEqual([{ key: 'final-pr', label: 'Final PR', state: 'you', detail: 'PR #91 · you merge' }])
+  })
+
+  test('after the merge, a leftover claim with nothing running leaves the list (hand-back resolved or deleted)', () => {
+    const idle = [{ repoId: 'chess-web', repo: 'chess-web', where: 'no active plan', state: 'idle' }]
+    const merged: PrStatus = { number: 91, state: 'merged', checks: 'pass', checkedAt: NOW }
+    const done = { ...reporter(), ended: true, lastAt: NOW - 3 * 60 * 60_000 }
+    expect(runs(repo({ handBack: 'resolved', agents: [done], prs: [merged] }))).toEqual(idle)
+    expect(runs(repo({ handBack: false, agents: [done], prs: [merged] }))).toEqual(idle)
+    expect(runs(repo({ handBack: 'resolved', agents: [] }))).toEqual(idle)
+  })
+
+  test('a resolved hand-back with the reporter still running stays closing out', () => {
+    expect(runs(repo({ handBack: 'resolved' })).map((x) => [x.plan, x.where, x.state])).toEqual([['ui-polish', 'closing out', 'running']])
   })
 
   test('with no claim, the archived plan stays off the list', () => {
