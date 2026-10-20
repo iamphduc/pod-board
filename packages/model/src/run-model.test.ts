@@ -326,6 +326,31 @@ describe('buildRepoModel', () => {
     expect(alpha?.queue[0]?.needsYou).toBe(true)
   })
 
+  it("an orchestrator's untagged hand-back joins the plan it names as complete", () => {
+    const entry = (route: string, tags: string, body: string) => `- \`[2026-10-20 · PENDING · ${route}${tags}]\` ${body} **Resolution:** pending`
+    const queue = [
+      '# Handoff Queue',
+      '',
+      entry('orchestrator → human', '', 'plan alpha complete — final PR https://github.com/o/r/pull/9, review pass, 2 open entries.'),
+      entry('orchestrator → human', '', 'Plan `beta` complete — final PR https://github.com/o/r/pull/8, review pass.'),
+      // Not a hand-back of alpha: another slug that starts with it, the words mid-body, another sender, or tagged elsewhere.
+      entry('orchestrator → human', '', 'plan alpha-two complete — final PR https://github.com/o/r/pull/7.'),
+      entry('orchestrator → human', '', 'note: plan alpha complete soon.'),
+      entry('engineer → human', '', 'plan alpha complete — final PR https://github.com/o/r/pull/6.'),
+      entry('orchestrator → human', ' · plan: beta', 'plan alpha complete — final PR https://github.com/o/r/pull/5.'),
+      entry('orchestrator → human', ' · sprint: b-one', 'plan alpha complete — final PR https://github.com/o/r/pull/4.'),
+    ].join('\n')
+    const files: RepoFiles = {
+      'pod-docs/README.md': README,
+      'pod-docs/plans/alpha.md': plan('Alpha', [['a-one', 'g', 'done', '—']]),
+      'pod-docs/plans/beta.md': plan('Beta', [['b-one', 'g', 'done', '—']]),
+      'pod-docs/handoff-queue.md': queue,
+    }
+    const [alpha, beta] = buildRepoModel(files).plans
+    expect(alpha?.queue.map((e) => e.body)).toEqual(['plan alpha complete — final PR https://github.com/o/r/pull/9, review pass, 2 open entries.'])
+    expect(beta?.queue.map((e) => /pull\/(\d+)/.exec(e.body)?.[1])).toEqual(['8', '5', '4'])
+  })
+
   it('a missing queue file gives an empty queue', () => {
     const files: RepoFiles = { 'pod-docs/README.md': README, 'pod-docs/plans/alpha.md': plan('Alpha', []) }
     const repo = buildRepoModel(files)

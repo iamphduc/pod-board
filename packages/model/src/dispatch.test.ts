@@ -57,6 +57,15 @@ const ENGINEER = [
   'Context: the sprint planner was told to draft the next sprint doc for plan `beta`.',
 ].join('\n')
 
+// The reporter's "Plan complete" shape from /pod:code: the slug only in ``for plan `<slug>` `` prose,
+// and a `Plan:` item that is a path, so it gives nothing.
+const REPORTER = [
+  'Plan complete: write the plan report and feature details for plan `alpha` in /r.',
+  '- Plan: pod-docs/plans/alpha.md (one sprint, `one`, archived at pod-docs/sprints/archive/one.md).',
+  '- Final PR: https://github.com/o/r/pull/9 (`alpha` → `main`), reviewer verdict `pass` on round 1.',
+  '- Merge-target: main.',
+].join('\n')
+
 describe('readDispatch', () => {
   it('reads the plan and round from a reviewer dispatch', () => {
     expect(readDispatch(REVIEWER, 'pod:reviewer')).toMatchObject({ plan: 'alpha', round: 1 })
@@ -69,6 +78,25 @@ describe('readDispatch', () => {
   it('reads the prose form only for sprint planners', () => {
     expect(readDispatch(ENGINEER, 'pod:engineer')).toMatchObject({ plan: undefined, sprint: 'one', slice: 'A1', branch: 'one-A1' })
     expect(readDispatch(PLANNER, 'pod:reviewer').plan).toBeUndefined()
+  })
+
+  it('reads the plan from a reporter prompt that names it only in prose', () => {
+    expect(readDispatch(REPORTER, 'pod:reporter').plan).toBe('alpha')
+  })
+
+  it('reads the reporter prose for reporters only, not engineers, reviewers, or other roles', () => {
+    for (const type of ['pod:engineer', 'pod:reviewer', 'pod:researcher', 'pod:scout']) {
+      expect(readDispatch(REPORTER, type).plan, type).toBeUndefined()
+    }
+  })
+
+  it("keeps a reporter's plan slug field ahead of its prose", () => {
+    const prompt = '- **plan slug:** gamma\n\nWrite the report for plan `alpha`.'
+    expect(readDispatch(prompt, 'pod:reporter').plan).toBe('gamma')
+  })
+
+  it("never reads a reporter's prose from a fenced block", () => {
+    expect(readDispatch('```\nWrite the report for plan `alpha`.\n```', 'pod:reporter').plan).toBeUndefined()
   })
 
   it('keeps a plan slug field first', () => {

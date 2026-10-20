@@ -184,6 +184,40 @@ describe('listRuns', () => {
     expect(runsOf(repo('r', planFiles(), { claims: [claims[1]!] }))[0]).not.toHaveProperty('portBase')
   })
 
+  it('a live claim keeps its plan listed through the close-out', () => {
+    const closed = { status: 'archived', sprints: [['one', 'done']] as SprintRow[], board: DONE_BOARD }
+    const claim = { portBase: 3200, repoPath: '/r/r', plan: 'alpha' }
+    const reporter = running({ type: 'pod:reporter', plan: 'alpha' })
+    const handBack = queueLine('PENDING', 'orchestrator → human', 'plan: alpha', 'plan alpha complete — final PR https://github.com/o/r/pull/12, review pass')
+    const merged = { number: 12, state: 'merged' as const, checks: 'pass' as const, checkedAt: NOW }
+    const view = (r: BoardRepo) => runsOf(r).map((x) => [x.plan, x.where, x.state])
+
+    // Archived, every sprint done, the reporter writing, no hand-back yet → closing out, running.
+    expect(view(repo('r', planFiles(closed), { claims: [claim], agents: [reporter] }))).toEqual([['alpha', 'closing out', 'running']])
+    expect(runsOf(repo('r', planFiles(closed), { claims: [claim] }))[0]).toMatchObject({ plan: 'alpha', where: 'closing out', state: 'idle', portBase: 3200 })
+    // Once the hand-back exists → final PR, and the hand-back asks for you; still final PR after its PR merges.
+    expect(view(repo('r', planFiles({ ...closed, queue: [handBack] }), { claims: [claim] }))).toEqual([['alpha', 'final PR', 'needs-you']])
+    expect(view(repo('r', planFiles({ ...closed, queue: [handBack] }), { claims: [claim], prs: [merged] }))[0]?.[1]).toBe('final PR')
+    // A reviewer still running wins: final review.
+    const reviewer = running({ type: 'pod:reviewer', plan: 'alpha' })
+    expect(view(repo('r', planFiles(closed), { claims: [claim], agents: [reviewer] }))).toEqual([['alpha', 'final review', 'running']])
+    // An archived plan with a sprint left over still reads closing out, not that sprint.
+    const leftOver = { ...closed, sprints: [['one', 'done'], ['two', 'planned']] as SprintRow[] }
+    expect(view(repo('r', planFiles(leftOver), { claims: [claim] }))).toEqual([['alpha', 'closing out', 'idle']])
+
+    // No claim, or a claim for another plan: an archived plan stays off the list, even with its reporter running.
+    const none = [{ repoId: 'id-r', repo: 'r', where: 'no active plan', state: 'idle' }]
+    expect(runsOf(repo('r', planFiles(closed), { agents: [reporter] }))).toEqual(none)
+    expect(runsOf(repo('r', planFiles(closed), { claims: [{ ...claim, plan: 'beta' }], agents: [reporter] }))).toEqual(none)
+    expect(runsOf(repo('r', planFiles(closed), { claims: [{ ...claim, plan: 'Alpha' }] }))).toEqual(none)
+
+    // A claimed plan that isn't archived yet, every sprint done and nothing running, stays listed too.
+    const done = { sprints: [['one', 'done']] as SprintRow[], board: DONE_BOARD }
+    expect(view(repo('r', planFiles(done), { claims: [claim] }))).toEqual([['alpha', 'all sprints done', 'idle']])
+    // A claim on a plan mid-sprint changes nothing.
+    expect(view(repo('r', planFiles(), { claims: [claim] }))).toEqual([['alpha', 'one · wave 2/2', 'idle']])
+  })
+
   it('order and count', () => {
     const halt = queueLine('BLOCKED', 'orchestrator → human', 'plan: alpha', 'Gate 2 halted')
     const ask = queueLine('PENDING', 'engineer → human', 'plan: alpha', 'Pick a name')
