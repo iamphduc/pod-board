@@ -469,6 +469,27 @@ describe('PRs found by head branch (fix runs)', () => {
     expect(gh.lists_()).toBe(2)
   })
 
+  test('a closed PR found by branch is asked about again, so a reopen or a new PR shows', async () => {
+    const gh = listGh()
+    const c = clock()
+    gh.lists.set('fix-scroll', ok(JSON.stringify([item(36, 'CLOSED')])))
+    const reader = createGhReader({ exec: gh.exec, now: c.now })
+    await reader.refresh(REPO, [], ['fix-scroll'])
+    expect(reader.getBranch(REPO, 'fix-scroll')?.state).toBe('closed')
+    gh.lists.set('fix-scroll', ok(JSON.stringify([item(36, 'OPEN')])))
+    c.advance(10_000)
+    await reader.refresh(REPO, [], ['fix-scroll'])
+    expect(gh.lists_()).toBe(1) // still within the 30 s cache
+    c.advance(110_000)
+    expect(await reader.refresh(REPO, [], ['fix-scroll'])).toBe(true)
+    expect(reader.getBranch(REPO, 'fix-scroll')?.state).toBe('open')
+    // A new PR on the branch after a closed one shows too.
+    gh.lists.set('fix-scroll', ok(JSON.stringify([item(36, 'CLOSED'), item(37, 'OPEN')])))
+    c.advance(30_000)
+    await reader.refresh(REPO, [], ['fix-scroll'])
+    expect(reader.getBranch(REPO, 'fix-scroll')?.number).toBe(37)
+  })
+
   test('a failed or unreadable list keeps the last value', async () => {
     const gh = listGh()
     const c = clock()

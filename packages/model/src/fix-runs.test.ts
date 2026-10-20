@@ -140,9 +140,24 @@ describe('fix runs on the runs list', () => {
   })
 
   it('an open or closed PR keeps the claim listed however old its agents are', () => {
-    const agents = [engineer('fix-scroll', 600, 500, { ended: true })]
-    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))[0]?.[3]).toBe('needs-you')
+    const agents = [engineer('fix-scroll', 600, 500, { ended: true }), reviewer(499, 450, { ended: true })]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))[0]?.slice(2)).toEqual(['PR', 'needs-you'])
     expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'closed')] }))[0]?.slice(2)).toEqual(['PR', 'idle'])
+  })
+
+  it('an open PR waits for its review: an ended engineer with no reviewer reads review · idle, not needs you', () => {
+    const agents = [engineer('fix-scroll', 60, 40, { ended: true })]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))).toEqual([['fix-scroll', 'scroll', 'review', 'idle']])
+  })
+
+  it('an open PR after an ended fix pass with no round 2 yet reads review · idle', () => {
+    const agents = [engineer('fix-scroll', 60, 50, { ended: true }), reviewer(49, 45, { ended: true }), engineer('fix-scroll', 44, 35, { ended: true })]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))).toEqual([['fix-scroll', 'scroll', 'review', 'idle']])
+  })
+
+  it('a newest reviewer that went quiet without ending is no finished review', () => {
+    const agents = [engineer('fix-scroll', 120, 100, { ended: true }), reviewer(99, 60)]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))[0]?.slice(2)).toEqual(['review', 'idle'])
   })
 
   it('a PR found for another branch is not this run’s', () => {
@@ -240,6 +255,15 @@ describe('buildFixPipeline', () => {
     const ended = [agents[0]!, { ...agents[1]!, ...span(39, 10), ended: true }]
     expect(stages(repo({ claims: [claim('fix-scroll')], agents: ended, prs: [pr(36, 'merged')] }))?.[2]).toEqual(['Ship', [['PR', 'done', 'PR #36 · merged']]])
     expect(stages(repo({ claims: [claim('fix-scroll')], agents: ended, prs: [pr(36, 'closed')] }))?.[2]).toEqual(['Ship', [['PR', 'blocked', 'PR #36 · closed']]])
+  })
+
+  it('Ship waits for the review: an open PR reads after review until the newest agent is an ended reviewer', () => {
+    const built = [engineer('fix-scroll', 60, 40, { ended: true })]
+    expect(stages(repo({ claims: [claim('fix-scroll')], agents: built, prs: [pr(36, 'open')] }))?.[2]).toEqual(['Ship', [['PR', 'wait', 'PR #36 · after review']]])
+    const passed = [...built, reviewer(39, 30, { ended: true }), engineer('fix-scroll', 29, 20, { ended: true })]
+    expect(stages(repo({ claims: [claim('fix-scroll')], agents: passed, prs: [pr(36, 'open')] }))?.[2]).toEqual(['Ship', [['PR', 'wait', 'PR #36 · after review']]])
+    const reviewed = [...built, reviewer(39, 30, { ended: true })]
+    expect(stages(repo({ claims: [claim('fix-scroll')], agents: reviewed, prs: [pr(36, 'open')] }))?.[2]).toEqual(['Ship', [['PR', 'you', 'PR #36 · you merge']]])
   })
 
   it('two build engineers show their count', () => {
