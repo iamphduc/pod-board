@@ -1,0 +1,377 @@
+import { describe, expect, it } from 'vitest'
+import type { AgentRun, Board, BoardRepo, Claim, PrStatus } from './board.ts'
+import { buildFixPipeline, fixRunNames, otherActivity, OTHER_CAP, OTHER_WINDOW_MS } from './fix-runs.ts'
+import { roleOf } from './pipeline.ts'
+import { buildRepoModel, type RepoFiles } from './run-model.ts'
+import { activeRuns, listRuns } from './runs.ts'
+
+// Every snapshot is built inline: test/no-io.test.ts scans this folder, so no file reads here.
+// Agents carry only the fields readDispatch reads from real /pod:fix dispatches (made-up values).
+
+const NOW = Date.UTC(2026, 9, 20, 12)
+const MIN = 60_000
+const README = '# pod docs\n\npod docs: 2\n'
+
+const NO_PLANS: RepoFiles = { 'pod-docs/README.md': README }
+
+function planDoc(slug: string, sprints: [string, string][]): string {
+  return [
+    `# Plan: ${slug}`,
+    '',
+    '_Generated: 2026-10-20 · Status: active · Grilled-with: grilling_',
+    '',
+    '## Sprint sequence',
+    '',
+    '| Sprint | Goal | Status | Depends on |',
+    '|--------|------|--------|------------|',
+    ...sprints.map(([s, status]) => `| ${s} | goal | ${status} | — |`),
+    '',
+  ].join('\n')
+}
+
+const withPlan = (slug: string): RepoFiles => ({ ...NO_PLANS, [`pod-docs/plans/${slug}.md`]: planDoc(slug, [['one', 'planned']]) })
+
+const claim = (plan: string, portBase = 3100): Claim => ({ portBase, repoPath: '/r/web', plan })
+
+let seq = 0
+function agent(over: Partial<AgentRun>): AgentRun {
+  seq += 1
+  return { id: `a${seq}`, session: 's', type: 'pod:engineer', tokens: 0, ended: false, ...over }
+}
+
+/** Started `from` minutes ago, last wrote `to` minutes ago. */
+const span = (from: number, to: number) => ({ startedAt: NOW - from * MIN, lastAt: NOW - to * MIN })
+const engineer = (branch: string, from: number, to: number, over: Partial<AgentRun> = {}) => agent({ branch, ...span(from, to), ...over })
+const reviewer = (from: number, to: number, over: Partial<AgentRun> = {}) =>
+  agent({ type: 'pod:reviewer', kind: 'fix', branch: 'fix-scroll', ...span(from, to), ...over })
+
+const pr = (number: number, state: PrStatus['state'], branch = 'fix-scroll'): PrStatus => ({ number, state, checks: 'none', checkedAt: NOW, branch })
+
+function repo(extra: Partial<BoardRepo> = {}, files: RepoFiles = NO_PLANS): BoardRepo {
+  return { id: 'id-web', name: 'web', path: '/r/web', source: 'claim', model: buildRepoModel(files), agents: [], prs: [], claims: [], ...extra }
+}
+
+const board = (...repos: BoardRepo[]): Board => ({ generatedAt: NOW, gh: 'ok', repos })
+const rows = (r: BoardRepo) => listRuns(board(r), NOW).map((x) => [x.plan, x.fix, x.where, x.state])
+
+describe('fix runs on the runs list', () => {
+  it('a claim fix-<slug> that names no plan is a fix run with its port base', () => {
+    const r = repo({ claims: [claim('fix-scroll', 3100)], agents: [engineer('fix-scroll', 10, 1)] })
+    expect(listRuns(board(r), NOW)).toEqual([
+      { repoId: 'id-web', repo: 'web', plan: 'fix-scroll', fix: 'scroll', where: 'build', state: 'running', portBase: 3100 },
+    ])
+  })
+
+  it('a fix claim with no agent yet reads build · idle (the claim comes before the dispatch)', () => {
+    expect(rows(repo({ claims: [claim('fix-scroll')] }))).toEqual([['fix-scroll', 'scroll', 'build', 'idle']])
+  })
+
+  it('a claim whose name matches a plan keeps the plan behaviour', () => {
+    const r = repo({ claims: [claim('fix-thing')] }, withPlan('fix-thing'))
+    const runs = listRuns(board(r), NOW)
+    expect(runs.map((x) => [x.plan, x.fix, x.where])).toEqual([['fix-thing', undefined, 'one · not drafted']])
+  })
+
+  it('a claim not named fix-… that names no plan is not a run', () => {
+    expect(rows(repo({ claims: [claim('somename')] }))).toEqual([[undefined, undefined, 'no active plan', 'idle']])
+  })
+
+  it('an engineer on a fix branch with no claim is not a run, and the count stays 0', () => {
+    const r = repo({ agents: [engineer('fix-scroll', 10, 1)] })
+    const runs = listRuns(board(r), NOW)
+    expect(runs.map((x) => [x.plan, x.where, x.state])).toEqual([[undefined, 'no active plan', 'idle']])
+    expect(activeRuns(runs)).toBe(0)
+  })
+
+  it('fix runs sit beside plan runs, the repo row gives way, and they count as active', () => {
+    const files = withPlan('alpha')
+    const r = repo({ claims: [claim('fix-a', 3200), claim('fix-b', 3300)], agents: [engineer('fix-a', 5, 1), engineer('fix-b', 5, 1)] }, files)
+    const runs = listRuns(board(r), NOW)
+    expect(runs.map((x) => [x.plan, x.state])).toEqual([
+      ['fix-a', 'running'],
+      ['fix-b', 'running'],
+      ['alpha', 'idle'],
+    ])
+    expect(activeRuns(runs)).toBe(2)
+    expect(rows(repo({ claims: [claim('fix-a')] }))).toEqual([['fix-a', 'a', 'build', 'idle']])
+  })
+
+  it('the same fix name claimed twice is one run', () => {
+    expect(rows(repo({ claims: [claim('fix-scroll', 3100), claim('fix-scroll', 3200)] }))).toEqual([['fix-scroll', 'scroll', 'build', 'idle']])
+  })
+
+  it('where follows the newest running agent: build → review → fix pass → review round 2', () => {
+    const build = engineer('fix-scroll', 60, 1)
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents: [build] }))[0]?.[2]).toBe('build')
+    const ended = { ...build, ...span(60, 40), ended: true }
+    const r1 = reviewer(39, 1)
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents: [ended, r1] }))[0]?.[2]).toBe('review')
+    const r1done = { ...r1, ...span(39, 30), ended: true }
+    const pass = engineer('fix-scroll', 29, 1)
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents: [ended, r1done, pass] }))[0]?.[2]).toBe('fix pass')
+    const passDone = { ...pass, ...span(29, 20), ended: true }
+    // Round 2 by its round field, and by order after a fix pass when the field is missing.
+    const r2 = reviewer(19, 1, { round: 2 })
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents: [ended, r1done, passDone, r2] }))[0]?.[2]).toBe('review round 2')
+    const r2NoField = reviewer(19, 1)
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents: [ended, r1done, passDone, r2NoField] }))[0]?.[2]).toBe('review round 2')
+  })
+
+  it('a PR open with nothing running needs you; a running reviewer keeps it running', () => {
+    const done = [engineer('fix-scroll', 60, 40, { ended: true }), reviewer(39, 30, { ended: true })]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents: done, prs: [pr(36, 'open')] }))).toEqual([['fix-scroll', 'scroll', 'PR', 'needs-you']])
+    const reviewing = [done[0]!, reviewer(39, 1)]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents: reviewing, prs: [pr(36, 'open')] }))).toEqual([['fix-scroll', 'scroll', 'review', 'running']])
+  })
+
+  it('nothing running and no PR: the last step reached, idle', () => {
+    const agents = [engineer('fix-scroll', 60, 40, { ended: true })]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents }))).toEqual([['fix-scroll', 'scroll', 'build', 'idle']])
+  })
+
+  it('a merged PR with no agent in the last 30 minutes is a leftover claim: the run drops off', () => {
+    const agents = [engineer('fix-scroll', 120, 40, { ended: true })]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'merged')] }))).toEqual([[undefined, undefined, 'no active plan', 'idle']])
+    // Within 30 minutes it stays, at PR.
+    const recent = [engineer('fix-scroll', 120, 10, { ended: true })]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents: recent, prs: [pr(36, 'merged')] }))).toEqual([['fix-scroll', 'scroll', 'PR', 'idle']])
+    // No agent at all and a merged PR: gone.
+    expect(rows(repo({ claims: [claim('fix-scroll')], prs: [pr(36, 'merged')] }))).toEqual([[undefined, undefined, 'no active plan', 'idle']])
+  })
+
+  it('an open or closed PR keeps the claim listed however old its agents are', () => {
+    const agents = [engineer('fix-scroll', 600, 500, { ended: true }), reviewer(499, 450, { ended: true })]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))[0]?.slice(2)).toEqual(['PR', 'needs-you'])
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'closed')] }))[0]?.slice(2)).toEqual(['PR', 'idle'])
+  })
+
+  it('an open PR waits for its review: an ended engineer with no reviewer reads review · idle, not needs you', () => {
+    const agents = [engineer('fix-scroll', 60, 40, { ended: true })]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))).toEqual([['fix-scroll', 'scroll', 'review', 'idle']])
+  })
+
+  it('an open PR after an ended fix pass with no round 2 yet reads review · idle', () => {
+    const agents = [engineer('fix-scroll', 60, 50, { ended: true }), reviewer(49, 45, { ended: true }), engineer('fix-scroll', 44, 35, { ended: true })]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))).toEqual([['fix-scroll', 'scroll', 'review', 'idle']])
+  })
+
+  it('an engineer continued for the fix pass (same transcript) that wrote after the review ended un-reviews the PR', () => {
+    // One engineer, started before the review, wrote again after it: the review no longer covers the PR.
+    const agents = [engineer('fix-scroll', 120, 5, { ended: true }), reviewer(90, 60, { ended: true })]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))[0]?.slice(3)).toEqual(['idle'])
+    expect(buildFixPipeline(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }), 'fix-scroll', NOW)?.stages[2]?.steps[0]?.detail).toBe('PR #36 · after review')
+  })
+
+  it('a newest reviewer that went quiet without ending is no finished review', () => {
+    const agents = [engineer('fix-scroll', 120, 100, { ended: true }), reviewer(99, 60)]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))[0]?.slice(2)).toEqual(['review', 'idle'])
+  })
+
+  it('a PR found for another branch is not this run’s', () => {
+    const agents = [engineer('fix-scroll', 60, 40, { ended: true })]
+    expect(rows(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open', 'fix-other')] }))[0]?.slice(2)).toEqual(['build', 'idle'])
+  })
+})
+
+describe('which agents a fix run has', () => {
+  const stepsOf = (r: BoardRepo) => buildFixPipeline(r, 'fix-scroll', NOW)?.log.map((x) => [x.role, x.round])
+
+  it('engineers by branch; reviewers by kind fix plus branch or PR number', () => {
+    const agents = [
+      engineer('fix-scroll', 60, 40, { ended: true }),
+      reviewer(39, 30, { ended: true, branch: undefined, pr: 36 }),
+      engineer('fix-other', 50, 1),
+      reviewer(20, 1, { kind: 'plan' }),
+      reviewer(20, 1, { kind: undefined }),
+      reviewer(20, 1, { branch: 'fix-other' }),
+      reviewer(20, 1, { branch: undefined, pr: 99 }),
+    ]
+    expect(stepsOf(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))).toEqual([
+      ['engineer', undefined],
+      ['reviewer', 1],
+    ])
+  })
+
+  it('a second engineer before any review is still the build; after a review it is the fix pass', () => {
+    const redo = [engineer('fix-scroll', 60, 50, { ended: true }), engineer('fix-scroll', 49, 40, { ended: true })]
+    expect(stepsOf(repo({ claims: [claim('fix-scroll')], agents: redo }))).toEqual([
+      ['engineer', undefined],
+      ['engineer', undefined],
+    ])
+    const pass = [engineer('fix-scroll', 60, 50, { ended: true }), reviewer(49, 45, { ended: true }), engineer('fix-scroll', 44, 1)]
+    expect(stepsOf(repo({ claims: [claim('fix-scroll')], agents: pass }))).toEqual([
+      ['engineer', undefined],
+      ['reviewer', 1],
+      ['fix pass', undefined],
+    ])
+  })
+
+  it('a reviewer re-dispatched before any fix pass is still round 1', () => {
+    const agents = [engineer('fix-scroll', 60, 50, { ended: true }), reviewer(49, 45, { ended: true }), reviewer(44, 1)]
+    expect(stepsOf(repo({ claims: [claim('fix-scroll')], agents }))).toEqual([
+      ['engineer', undefined],
+      ['reviewer', 1],
+      ['reviewer', 1],
+    ])
+  })
+
+  it('a fix reviewer is never a plan’s review round, even with a plan field', () => {
+    const files = withPlan('alpha')
+    const plan = buildRepoModel(files).plans[0]!
+    expect(roleOf(reviewer(10, 1, { plan: 'alpha' }), plan)).toEqual({ kind: 'other' })
+    expect(roleOf(reviewer(10, 1, { plan: 'alpha', kind: 'plan' }), plan)).toEqual({ kind: 'review' })
+    expect(roleOf(reviewer(10, 1, { plan: 'alpha', kind: undefined }), plan)).toEqual({ kind: 'review' })
+  })
+
+  it('fixRunNames: claims named fix-… that match no plan, once each, in claim order', () => {
+    const r = repo({ claims: [claim('fix-b', 3100), claim('alpha', 3200), claim('fix-a', 3300), claim('fix-b', 3400), claim('fix-alpha', 3500)] }, withPlan('fix-alpha'))
+    expect(fixRunNames(r)).toEqual(['fix-b', 'fix-a'])
+  })
+})
+
+describe('buildFixPipeline', () => {
+  const stages = (r: BoardRepo, name = 'fix-scroll') =>
+    buildFixPipeline(r, name, NOW)?.stages.map((s) => [s.caption, s.steps.map((x) => [x.label, x.state, x.detail])])
+
+  it('a building engineer: Build live, the rest waiting', () => {
+    const r = repo({ claims: [claim('fix-scroll')], agents: [engineer('fix-scroll', 10, 1)] })
+    expect(stages(r)).toEqual([
+      ['Build', [['Engineer', 'live', '10 min so far'], ['Fix pass', 'wait', 'only if review fails']]],
+      ['Review', [['Round 1', 'wait', 'not started'], ['Round 2', 'wait', 'only after a fix pass']]],
+      ['Ship', [['PR', 'wait', 'not open yet']]],
+    ])
+  })
+
+  it('the whole flow done with the PR open: every step done, Ship you merge', () => {
+    const agents = [
+      engineer('fix-scroll', 100, 80, { ended: true, tokens: 1500 }),
+      reviewer(79, 70, { ended: true }),
+      engineer('fix-scroll', 69, 60, { ended: true }),
+      reviewer(59, 50, { ended: true, round: 2 }),
+    ]
+    expect(stages(repo({ claims: [claim('fix-scroll')], agents, prs: [pr(36, 'open')] }))).toEqual([
+      ['Build', [['Engineer', 'done', '20 min · 1.5k tok'], ['Fix pass', 'done', '9 min']]],
+      ['Review', [['Round 1', 'done', '9 min'], ['Round 2', 'done', '9 min']]],
+      ['Ship', [['PR', 'you', 'PR #36 · you merge']]],
+    ])
+  })
+
+  it('a review running, then a merged PR, then a closed one', () => {
+    const agents = [engineer('fix-scroll', 60, 40, { ended: true }), reviewer(39, 1)]
+    expect(stages(repo({ claims: [claim('fix-scroll')], agents }))?.[1]).toEqual(['Review', [['Round 1', 'live', '39 min so far'], ['Round 2', 'wait', 'only after a fix pass']]])
+    const ended = [agents[0]!, { ...agents[1]!, ...span(39, 10), ended: true }]
+    expect(stages(repo({ claims: [claim('fix-scroll')], agents: ended, prs: [pr(36, 'merged')] }))?.[2]).toEqual(['Ship', [['PR', 'done', 'PR #36 · merged']]])
+    expect(stages(repo({ claims: [claim('fix-scroll')], agents: ended, prs: [pr(36, 'closed')] }))?.[2]).toEqual(['Ship', [['PR', 'blocked', 'PR #36 · closed']]])
+  })
+
+  it('Ship waits for the review: an open PR reads after review until the newest agent is an ended reviewer', () => {
+    const built = [engineer('fix-scroll', 60, 40, { ended: true })]
+    expect(stages(repo({ claims: [claim('fix-scroll')], agents: built, prs: [pr(36, 'open')] }))?.[2]).toEqual(['Ship', [['PR', 'wait', 'PR #36 · after review']]])
+    const passed = [...built, reviewer(39, 30, { ended: true }), engineer('fix-scroll', 29, 20, { ended: true })]
+    expect(stages(repo({ claims: [claim('fix-scroll')], agents: passed, prs: [pr(36, 'open')] }))?.[2]).toEqual(['Ship', [['PR', 'wait', 'PR #36 · after review']]])
+    const reviewed = [...built, reviewer(39, 30, { ended: true })]
+    expect(stages(repo({ claims: [claim('fix-scroll')], agents: reviewed, prs: [pr(36, 'open')] }))?.[2]).toEqual(['Ship', [['PR', 'you', 'PR #36 · you merge']]])
+  })
+
+  it('two build engineers show their count', () => {
+    const agents = [engineer('fix-scroll', 60, 50, { ended: true }), engineer('fix-scroll', 49, 40, { ended: true })]
+    expect(stages(repo({ claims: [claim('fix-scroll')], agents }))?.[0]?.[1]).toEqual([
+      ['Engineer', 'done', '2 engineers · 19 min'],
+      ['Fix pass', 'wait', 'only if review fails'],
+    ])
+  })
+
+  it('the agent log: role, round, start, end, state, oldest first; the engineer view can open each engineer', () => {
+    const e = engineer('fix-scroll', 60, 40, { ended: true })
+    const rv = reviewer(39, 1)
+    const log = buildFixPipeline(repo({ claims: [claim('fix-scroll')], agents: [rv, e] }), 'fix-scroll', NOW)?.log
+    expect(log).toEqual([
+      { agentId: e.id, role: 'engineer', startedAt: NOW - 60 * MIN, endedAt: NOW - 40 * MIN, state: 'ended', engineer: true },
+      { agentId: rv.id, role: 'reviewer', round: 1, startedAt: NOW - 39 * MIN, state: 'running', engineer: false },
+    ])
+  })
+
+  it('a stale agent shows its last write as its end', () => {
+    const e = engineer('fix-scroll', 120, 60)
+    expect(buildFixPipeline(repo({ claims: [claim('fix-scroll')], agents: [e] }), 'fix-scroll', NOW)?.log[0]).toMatchObject({ state: 'stale', endedAt: NOW - 60 * MIN })
+  })
+
+  it('the slug, and undefined for a name that is no fix run', () => {
+    const r = repo({ claims: [claim('fix-scroll')] }, withPlan('fix-plan'))
+    expect(buildFixPipeline(r, 'fix-scroll', NOW)?.slug).toBe('scroll')
+    expect(buildFixPipeline(r, 'fix-nope', NOW)).toBeUndefined()
+    expect(buildFixPipeline(repo({ claims: [claim('fix-plan')] }, withPlan('fix-plan')), 'fix-plan', NOW)).toBeUndefined()
+  })
+})
+
+describe('otherActivity', () => {
+  const of = (r: BoardRepo) => otherActivity(r, NOW).map((x) => [x.role, x.detail, x.state])
+
+  it('agents tied to no run: researcher, scout, a planner with no plan, stray engineers and reviewers', () => {
+    const agents = [
+      agent({ type: 'pod:researcher', ...span(50, 40), ended: true }),
+      agent({ type: 'pod:scout', ...span(30, 20), ended: true }),
+      agent({ type: 'pod:sprint-planner', ...span(15, 10), ended: true }),
+      engineer('fix-old', 9, 8, { ended: true }),
+      agent({ type: 'pod:reviewer', kind: 'fix', ...span(5, 1) }),
+    ]
+    expect(of(repo({ agents }))).toEqual([
+      ['reviewer', undefined, 'running'],
+      ['engineer', 'fix-old', 'ended'],
+      ['sprint-planner', undefined, 'ended'],
+      ['scout', undefined, 'ended'],
+      ['researcher', undefined, 'ended'],
+    ])
+  })
+
+  it('leaves out agents of any plan in the repo and of a listed fix run', () => {
+    const agents = [
+      engineer('one-A1', 10, 1, { sprint: 'one', slice: 'A1' }),
+      agent({ type: 'pod:reporter', plan: 'alpha', ...span(10, 1) }),
+      engineer('fix-scroll', 10, 1),
+      reviewer(5, 1),
+      agent({ type: 'pod:researcher', ...span(5, 1) }),
+    ]
+    expect(of(repo({ agents, claims: [claim('fix-scroll')] }, withPlan('alpha')))).toEqual([['researcher', undefined, 'running']])
+  })
+
+  it('an unlisted fix run’s agents (its claim gone) are other activity, with their branch', () => {
+    expect(of(repo({ agents: [engineer('fix-scroll', 10, 2, { ended: true })] }))).toEqual([['engineer', 'fix-scroll', 'ended']])
+  })
+
+  it(`only the last ${OTHER_WINDOW_MS / 3_600_000} hours, newest ${OTHER_CAP} at most`, () => {
+    const old = agent({ type: 'pod:researcher', startedAt: NOW - OTHER_WINDOW_MS - 10 * MIN, lastAt: NOW - OTHER_WINDOW_MS - MIN, ended: true })
+    const edge = agent({ type: 'pod:scout', startedAt: NOW - OTHER_WINDOW_MS - 10 * MIN, lastAt: NOW - OTHER_WINDOW_MS + MIN, ended: true })
+    const noTime = agent({ type: 'pod:scout' })
+    expect(of(repo({ agents: [old, edge, noTime] }))).toEqual([['scout', undefined, 'ended']])
+    const many = Array.from({ length: OTHER_CAP + 3 }, (_, i) => agent({ type: 'pod:researcher', ...span(100, i + 1), ended: true }))
+    const out = otherActivity(repo({ agents: many }), NOW)
+    expect(out).toHaveLength(OTHER_CAP)
+    expect(out.map((x) => x.id)).toEqual(many.slice(0, OTHER_CAP).map((x) => x.id))
+  })
+
+  it('the detail is a dispatch field only: branch, else plan, else sprint', () => {
+    const agents = [
+      agent({ type: 'pod:sprint-planner', plan: 'gone-plan', ...span(5, 3), ended: true }),
+      agent({ type: 'pod:engineer', sprint: 'gone-sprint', ...span(5, 2), ended: true }),
+    ]
+    expect(of(repo({ agents }))).toEqual([
+      ['engineer', 'gone-sprint', 'ended'],
+      ['sprint-planner', 'gone-plan', 'ended'],
+    ])
+  })
+
+  it('carries no description or other text', () => {
+    const a = agent({ type: 'pod:researcher', description: 'PLANTED_FAKE_SECRET', ...span(5, 1) })
+    const out = otherActivity(repo({ agents: [a] }), NOW)
+    expect(JSON.stringify(out)).not.toContain('PLANTED_FAKE_SECRET')
+    expect(Object.keys(out[0]!).sort()).toEqual(['id', 'lastAt', 'role', 'startedAt', 'state'])
+  })
+
+  it('adds nothing to the runs or the count', () => {
+    const r = repo({ agents: [agent({ type: 'pod:researcher', ...span(5, 1) })] })
+    const runs = listRuns(board(r), NOW)
+    expect(runs.map((x) => [x.where, x.state])).toEqual([['no active plan', 'idle']])
+    expect(activeRuns(runs)).toBe(0)
+  })
+})

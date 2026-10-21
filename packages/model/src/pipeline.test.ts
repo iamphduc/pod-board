@@ -1,0 +1,350 @@
+import { describe, expect, it } from 'vitest'
+import * as model from './index.ts'
+import type { AgentRun, BoardRepo, PrStatus } from './board.ts'
+import { buildPipeline, type Pipeline, type Stage } from './pipeline.ts'
+import { buildRepoModel, type RepoFiles } from './run-model.ts'
+
+// Every snapshot is built inline: test/no-io.test.ts scans this folder, so no file reads here.
+
+const NOW = Date.UTC(2026, 9, 18, 12)
+const T0 = NOW - 5 * 60 * 60_000
+const MIN = 60_000
+const README = '# pod docs\n\npod docs: 2\n'
+
+type SprintRow = [slug: string, status: string]
+type BoardRow = [wave: number, code: string, pr: string, status: string, confidence?: string, model?: string]
+
+function planDoc(title: string, sprints: SprintRow[]): string {
+  return [
+    `# Plan: ${title}`,
+    '',
+    '_Generated: 2026-10-18 · Status: active · Grilled-with: grilling_',
+    '',
+    '## Sprint sequence',
+    '',
+    '| Sprint | Goal | Status | Depends on |',
+    '|--------|------|--------|------------|',
+    ...sprints.map(([slug, status]) => `| ${slug} | goal of ${slug} | ${status} | — |`),
+    '',
+  ].join('\n')
+}
+
+function sprintDoc(slug: string, plan: string, board: BoardRow[]): string {
+  return [
+    `# Sprint: ${slug}`,
+    '',
+    `_From plan: pod-docs/plans/${plan}.md · Slug: ${slug} · Status: active · Generated: 2026-10-18_`,
+    '',
+    '## Status board',
+    '',
+    '| Wave | Slice | Title | Branch | PR | Status | Confidence | Depends on |',
+    '|------|-------|-------|--------|----|--------|------------|------------|',
+    ...board.map(([w, code, pr, status, conf]) => `| ${w} | ${code} | Title ${code} | ${slug}-${code} | ${pr} | ${status} | ${conf ?? 'medium'} | — |`),
+    '',
+    '## Per-slice detail',
+    '',
+    ...board.flatMap(([, code, , , , m]) => [`### ${code}: Title ${code}`, '- **Scope:** do it', ...(m ? [`- **Model:** ${m}`] : []), '']),
+  ].join('\n')
+}
+
+type Docs = { sprints: SprintRow[]; docs?: Record<string, BoardRow[]>; archived?: Record<string, BoardRow[]>; queue?: string[] }
+
+function files({ sprints, docs = {}, archived = {}, queue = [] }: Docs, slug = 'alpha'): RepoFiles {
+  const out: RepoFiles = {
+    'pod-docs/README.md': README,
+    [`pod-docs/plans/${slug}.md`]: planDoc(slug.toUpperCase(), sprints),
+    'pod-docs/handoff-queue.md': queue.join('\n'),
+  }
+  for (const [s, rows] of Object.entries(docs)) out[`pod-docs/sprints/${s}.md`] = sprintDoc(s, slug, rows)
+  for (const [s, rows] of Object.entries(archived)) out[`pod-docs/sprints/archive/${s}.md`] = sprintDoc(s, slug, rows)
+  return out
+}
+
+function repo(f: RepoFiles, extra: Partial<BoardRepo> = {}): BoardRepo {
+  return { id: 'id-r', name: 'r', path: '/r', source: 'registered', model: buildRepoModel(f), agents: [], prs: [], claims: [], ...extra }
+}
+
+let seq = 0
+function agent(over: Partial<AgentRun>): AgentRun {
+  seq += 1
+  return { id: `a${seq}`, session: 's', type: 'pod:engineer', description: '', tokens: 0, ended: false, ...over }
+}
+const running = (over: Partial<AgentRun>) => agent({ startedAt: NOW - 10 * MIN, lastAt: NOW - MIN, ...over })
+const ended = (over: Partial<AgentRun>) => agent({ startedAt: T0, lastAt: T0 + 10 * MIN, ended: true, ...over })
+
+const queueLine = (type: string, route: string, fields: string, body: string, pending = true) =>
+  `- \`[2026-10-18 · ${type} · ${route} · ${fields}]\` ${body} **Resolution:** ${pending ? 'pending' : 'fixed in #9'}`
+
+const pr = (n: number) => `[#${n}](https://github.com/o/r/pull/${n})`
+
+const build = (r: BoardRepo, plan = 'alpha'): Pipeline => {
+  const p = buildPipeline(r, plan, NOW)
+  if (!p) throw new Error(`no pipeline for ${plan}`)
+  return p
+}
+const stage = (p: Pipeline, key: string): Stage => {
+  const s = p.stages.find((x) => x.key === key)
+  if (!s) throw new Error(`no stage ${key}`)
+  return s
+}
+const steps = (p: Pipeline, key: string) => stage(p, key).steps.map((s) => [s.label, s.state, s.detail])
+const stepStates = (p: Pipeline, key: string) => stage(p, key).steps.map((s) => s.state)
+
+describe('buildPipeline', () => {
+  it('stages of a mid-run plan', () => {
+    const r = repo(
+      files({
+        sprints: [['s1', 'done'], ['s2', 'active'], ['s3', 'planned']],
+        archived: { s1: [[1, 'A1', `${pr(41)} merged`, 'done'], [2, 'A2', `${pr(42)} merged`, 'done']] },
+        docs: { s2: [[1, 'B1', `${pr(50)} merged`, 'done'], [2, 'B2', '—', 'pending'], [3, 'B3', '—', 'pending'], [3, 'B4', '—', 'pending']] },
+      }),
+    )
+    const p = build(r)
+    expect(p.stages.map((s) => [s.key, s.caption])).toEqual([
+      ['plan', 'Plan'],
+      ['sprint:s1', 'Sprint 1 of 3'],
+      ['sprint:s2', 'Sprint 2 of 3'],
+      ['sprint:s3', 'Sprint 3 of 3'],
+      ['check', 'Check'],
+      ['ship', 'Ship'],
+    ])
+    expect(steps(p, 'plan')).toEqual([
+      ['Plan', 'done', '3 sprints'],
+      ['Go', 'unknown', 'not recorded yet'],
+    ])
+    expect(steps(p, 'sprint:s1')).toEqual([['s1', 'done', '2 waves']])
+    expect(stage(p, 'sprint:s2').steps.map((s) => [s.label, s.state])).toEqual([
+      ['Wave 1', 'done'],
+      ['Wave 2', 'live'],
+      ['Wave 3', 'wait'],
+    ])
+    expect(stage(p, 'sprint:s2').steps[2]?.detail).toBe('2 slices planned')
+    expect(steps(p, 'sprint:s3')).toEqual([['s3', 'wait', 'not drafted']])
+    expect(steps(p, 'check')).toEqual([
+      ['Final review', 'wait', 'not started'],
+      ['Fix pass', 'wait', 'only if review fails'],
+    ])
+    expect(steps(p, 'ship')).toEqual([['Final PR', 'wait', 'not open yet']])
+    // Step keys are unique across the pipeline, so the screen can key on them.
+    const keys = p.stages.flatMap((s) => s.steps.map((x) => x.key))
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('wave step state', () => {
+    const ask = (slice: string, sprint = 'one') => queueLine('PENDING', 'engineer → human', `sprint: ${sprint} · slice: ${slice}`, 'Pick one')
+    const r = repo(
+      files({
+        sprints: [['one', 'active']],
+        docs: {
+          one: [
+            [1, 'W1', '—', 'blocked'],
+            [2, 'W2', 'merged', 'done'],
+            [3, 'W3', 'merged', 'done'],
+            [4, 'W4', pr(4), 'pushed'],
+            [5, 'W5', '—', 'pending'],
+            [6, 'W6', '—', 'pending'],
+            [7, 'W7', 'skipped', 'done'],
+            [8, 'W8', '—', 'pending'],
+            [9, 'W9a', 'merged', 'done'],
+            [9, 'W9b', '—', 'pending'],
+            [10, 'W10a', 'merged', 'done'],
+            [10, 'W10b', '—', 'pending'],
+          ],
+        },
+        queue: [
+          ask('W1'), // blocked wins over you
+          ask('W2'), // done wins over you: a finished wave reads done
+          queueLine('PENDING', 'engineer → human', 'sprint: one · slice: W3', 'old', false), // resolved: no you
+          ask('W6', 'other'), // another sprint's slice: no you
+          ask('W8'), // an unfinished wave: you
+          ask('W9a'), // only a done slice asks: the wave isn't you
+          ask('W10b'), // an unfinished slice of a part-done wave asks: you
+        ],
+      }),
+      { agents: [running({ sprint: 'one', slice: 'W5' })] },
+    )
+    expect(stepStates(build(r), 'sprint:one')).toEqual(['blocked', 'done', 'done', 'live', 'live', 'wait', 'blocked', 'you', 'wait', 'you'])
+
+    // The current wave is live on its own, with nothing pushed and no engineer.
+    const fresh = repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'X1', '—', 'pending'], [2, 'X2', '—', 'pending']] } }))
+    expect(stepStates(build(fresh), 'sprint:one')).toEqual(['live', 'wait'])
+    // A stale engineer doesn't make a later wave live.
+    const stale = repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'X1', '—', 'pending'], [2, 'X2', '—', 'pending']] } }), {
+      agents: [agent({ sprint: 'one', slice: 'X2', startedAt: T0, lastAt: T0 })],
+    })
+    expect(stepStates(build(stale), 'sprint:one')).toEqual(['live', 'wait'])
+  })
+
+  it('wave time and tokens', () => {
+    const r = repo(
+      files({
+        sprints: [['one', 'active']],
+        docs: { one: [[1, 'W1', 'merged', 'done'], [1, 'W2', 'merged', 'done'], [2, 'X1', '—', 'pending'], [3, 'Y1', '—', 'pending']] },
+      }),
+      {
+        agents: [
+          ended({ sprint: 'one', slice: 'W1', startedAt: T0, lastAt: T0 + 20 * MIN, tokens: 300_000 }),
+          ended({ sprint: 'one', slice: 'W2', startedAt: T0 + 5 * MIN, lastAt: T0 + 41 * MIN, tokens: 312_000 }),
+          // A wave fix counts toward its wave, not a slice.
+          ended({ sprint: 'one', branch: 'one-w1-fix', startedAt: T0 + 42 * MIN, lastAt: T0 + 50 * MIN + 20_000, tokens: 10_000 }),
+          // Live: the span runs to now, not to the last record.
+          running({ sprint: 'one', slice: 'X1', startedAt: NOW - 14 * MIN, lastAt: NOW - 5 * MIN, tokens: 900 }),
+        ],
+      },
+    )
+    const p = build(r)
+    expect(steps(p, 'sprint:one')).toEqual([
+      ['Wave 1', 'done', '3 engineers · 50 min · 622k tok'],
+      ['Wave 2', 'live', '1 engineer · 14 min so far'],
+      ['Wave 3', 'wait', '1 slice planned'],
+    ])
+    // The wave fix's tokens stay off the slice rows.
+    expect(p.log[0]?.rows.map((row) => [row.code, row.minutes, row.tokens])).toEqual([
+      ['W1', 20, 300_000],
+      ['W2', 36, 312_000],
+    ])
+
+    // No agents: time and tokens are left out, never shown as 0.
+    const quiet = repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'W1', 'merged', 'done'], [2, 'X1', '—', 'pending']] } }))
+    const details = stage(build(quiet), 'sprint:one').steps.map((s) => s.detail)
+    expect(details).toEqual(['1 slice', '1 slice'])
+    expect(build(quiet).log[0]?.rows[0]).not.toHaveProperty('minutes')
+    expect(build(quiet).log[0]?.rows[0]).not.toHaveProperty('tokens')
+    // Agents with no times: no minutes, but their tokens count.
+    const untimed = repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'W1', 'merged', 'done'], [2, 'X1', '—', 'pending']] } }), {
+      agents: [agent({ sprint: 'one', slice: 'W1', ended: true, tokens: 5_000 })],
+    })
+    expect(stage(build(untimed), 'sprint:one').steps[0]?.detail).toBe('1 engineer · 5.0k tok')
+  })
+
+  it('agents join slices', () => {
+    const r = repo(
+      files({
+        sprints: [['s1', 'done'], ['s2', 'active']],
+        archived: { s1: [[1, 'A1', 'merged', 'done']] },
+        docs: { s2: [[1, 'A1', '—', 'pending'], [1, 'A2', '—', 'pending']] },
+      }),
+      {
+        agents: [
+          ended({ sprint: 's2', slice: 'A1', tokens: 100 }),
+          // A slice with no sprint joins the first sprint, in plan order, whose board has the code.
+          ended({ slice: 'A1', tokens: 20 }),
+          ended({ slice: 'A2', tokens: 3 }),
+          // Another plan's sprint, or a code its sprint doesn't have: no slice.
+          ended({ sprint: 's9', slice: 'A1', tokens: 5 }),
+          ended({ sprint: 's2', slice: 'ZZ', tokens: 7 }),
+        ],
+      },
+    )
+    const rows = build(r).log.flatMap((g) => g.rows.map((row) => [g.sprint, row.code, row.tokens]))
+    expect(rows).toEqual([
+      ['s1', 'A1', 20],
+      ['s2', 'A1', 100],
+      ['s2', 'A2', 3],
+    ])
+  })
+
+  it('check and ship stages', () => {
+    const done = { sprints: [['one', 'done']] as SprintRow[], docs: { one: [[1, 'A1', 'merged', 'done']] as BoardRow[] } }
+    const check = (agents: AgentRun[]) => steps(build(repo(files(done), { agents })), 'check')
+    const reviewer = (over: Partial<AgentRun>) => ({ type: 'pod:reviewer', plan: 'alpha', ...over })
+
+    expect(check([ended(reviewer({ round: 1 })), running(reviewer({ round: 2 }))])[0]).toEqual(['Final review', 'live', 'round 2'])
+    expect(check([ended(reviewer({ round: 1 })), ended(reviewer({ round: 2 }))])[0]).toEqual(['Final review', 'done', '2 rounds'])
+    expect(check([ended(reviewer({ round: 1 }))])[0]).toEqual(['Final review', 'done', '1 round'])
+    // A round with no number is counted.
+    expect(check([ended(reviewer({})), running(reviewer({}))])[0]).toEqual(['Final review', 'live', 'round 2'])
+    // Another plan's reviewer isn't this plan's review.
+    expect(check([running(reviewer({ plan: 'beta' }))])[0]).toEqual(['Final review', 'wait', 'not started'])
+
+    expect(check([running({ branch: 'alpha-fix' })])[1]).toEqual(['Fix pass', 'live', 'pass 1'])
+    expect(check([ended({ branch: 'alpha-fix' })])[1]).toEqual(['Fix pass', 'done', '1 pass'])
+    expect(check([ended({ branch: 'beta-fix' })])[1]).toEqual(['Fix pass', 'wait', 'only if review fails'])
+
+    const handBack = (n: number, pending = true, route = 'orchestrator → human') =>
+      queueLine('PENDING', route, 'plan: alpha', `Plan complete: merge https://github.com/o/r/pull/${n}`, pending)
+    const status = (n: number, state: PrStatus['state']): PrStatus => ({ number: n, state, checks: 'pass', checkedAt: NOW })
+    const ship = (queue: string[], prs: PrStatus[] = []) => steps(build(repo(files({ ...done, queue }), { prs })), 'ship')
+
+    expect(ship([handBack(12)])).toEqual([['Final PR', 'you', 'PR #12 · you merge']])
+    expect(ship([handBack(12)], [status(12, 'open')])).toEqual([['Final PR', 'you', 'PR #12 · you merge']])
+    expect(ship([handBack(12)], [status(12, 'merged')])).toEqual([['Final PR', 'done', 'merged PR #12']])
+    // The last pending hand-back wins.
+    expect(ship([handBack(12), handBack(13)], [status(12, 'merged')])).toEqual([['Final PR', 'you', 'PR #13 · you merge']])
+    // Resolved, not from the orchestrator, or with no PR link: no hand-back.
+    expect(ship([handBack(12, false)])).toEqual([['Final PR', 'wait', 'not open yet']])
+    expect(ship([handBack(12, true, 'engineer → human')])).toEqual([['Final PR', 'wait', 'not open yet']])
+    expect(ship([queueLine('PENDING', 'orchestrator → human', 'plan: alpha', 'Plan complete, awaiting you')])).toEqual([['Final PR', 'wait', 'not open yet']])
+  })
+
+  it('slice log', () => {
+    const r = repo(
+      files({
+        sprints: [['s1', 'done'], ['s2', 'active'], ['s3', 'planned']],
+        archived: { s1: [[1, 'A1', `${pr(41)} merged`, 'done', 'high', 'opus'], [2, 'A2', '—', 'done', '—', 'Sonnet 4.5']] },
+        docs: {
+          s2: [
+            [1, 'B1', pr(50), 'pushed'],
+            [2, 'B2', '—', 'pending', '—', 'opus'],
+            [3, 'B3', '—', 'pending'],
+            [4, 'B4', '—', 'blocked'],
+          ],
+        },
+      }),
+      {
+        agents: [
+          ended({ sprint: 's1', slice: 'A1', startedAt: T0, lastAt: T0 + 30 * MIN, tokens: 1000 }),
+          running({ sprint: 's2', slice: 'B2', startedAt: NOW - 14 * MIN, lastAt: NOW - MIN, tokens: 500 }),
+        ],
+      },
+    )
+    const log = build(r).log
+    expect(log.map((g) => [g.sprint, g.wave, g.label, g.status])).toEqual([
+      ['s1', 1, 'Sprint 1 · wave 1', 'merged PR #41'],
+      ['s1', 2, 'Sprint 1 · wave 2', 'merged'],
+      ['s2', 1, 'Sprint 2 · wave 1', 'PR #50 open'],
+      ['s2', 2, 'Sprint 2 · wave 2', 'running'],
+      ['s2', 3, 'Sprint 2 · wave 3', 'planned'],
+      ['s2', 4, 'Sprint 2 · wave 4', 'blocked'],
+    ])
+    expect(log[0]?.rows).toEqual([{ code: 'A1', title: 'Title A1', model: 'opus', confidence: 'high', minutes: 30, tokens: 1000, live: false }])
+    expect(log[1]?.rows).toEqual([{ code: 'A2', title: 'Title A2', model: 'sonnet', live: false }])
+    expect(log[1]?.rows[0]).not.toHaveProperty('confidence')
+    expect(log[3]?.rows).toEqual([{ code: 'B2', title: 'Title B2', model: 'opus', minutes: 14, tokens: 500, live: true }])
+    expect(log[4]?.rows).toEqual([{ code: 'B3', title: 'Title B3', confidence: 'medium', live: false }])
+    expect(log[4]?.rows[0]).not.toHaveProperty('model')
+  })
+
+  it('unknown plan and empty repo', () => {
+    const r = repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'A1', '—', 'pending']] } }))
+    expect(buildPipeline(r, 'nope', NOW)).toBeUndefined()
+    // Unsupported docs, an error with an empty model, and docs with no plans.
+    expect(buildPipeline(repo({ 'pod-docs/README.md': 'pod docs: 1\n' }), 'alpha', NOW)).toBeUndefined()
+    expect(buildPipeline(repo({}, { error: 'folder not found' }), 'alpha', NOW)).toBeUndefined()
+    expect(buildPipeline(repo({ 'pod-docs/README.md': README }), 'alpha', NOW)).toBeUndefined()
+
+    // A plan with no sprints: just its own, check, and ship stages, and no log.
+    const bare = build(repo(files({ sprints: [] })))
+    expect(bare.stages.map((s) => s.key)).toEqual(['plan', 'check', 'ship'])
+    expect(bare.log).toEqual([])
+    // A current sprint whose doc has no board yet reads as not drafted.
+    const empty = repo({ ...files({ sprints: [['one', 'active']] }), 'pod-docs/sprints/one.md': '# Sprint: one\n\n_From plan: pod-docs/plans/alpha.md · Slug: one · Status: active_\n' })
+    expect(steps(build(empty), 'sprint:one')).toEqual([['one', 'wait', 'not drafted']])
+    // Odd agents never throw.
+    const odd = repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'A1', '—', 'pending']] } }), {
+      agents: [agent({ type: '', slice: '', sprint: '', branch: '-w-fix' }), agent({ type: 'pod:reviewer' }), agent({ startedAt: NaN, lastAt: NaN })],
+    })
+    expect(() => build(odd)).not.toThrow()
+  })
+
+  it('drafting: a running planner for the plan makes the undrafted current sprint live', () => {
+    const f = files({ sprints: [['one', 'done'], ['two', 'planned']], docs: { one: [[1, 'A1', 'merged', 'done']] } })
+    const planner = (over: Partial<AgentRun> = {}) => running({ type: 'pod:sprint-planner', plan: 'alpha', ...over })
+    expect(steps(build(repo(f, { agents: [planner()] })), 'sprint:two')).toEqual([['two', 'live', 'drafting']])
+    expect(steps(build(repo(f, { agents: [planner({ plan: 'beta' })] })), 'sprint:two')).toEqual([['two', 'wait', 'not drafted']])
+  })
+
+  it('is exported from the package entry', () => {
+    expect(model.buildPipeline).toBe(buildPipeline)
+  })
+})
