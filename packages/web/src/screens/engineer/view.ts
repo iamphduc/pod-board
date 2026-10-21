@@ -62,11 +62,14 @@ export function timelineRows(timeline: AgentTimeline): { rows: Row[]; earlier?: 
   return hidden > 0 ? { rows, earlier: `${count(hidden, 'earlier step', 'earlier steps')} not shown` } : { rows }
 }
 
-/** The details list: the agent's branch and model, else the slice's; `—` for what only an engineer has. */
-export function engineerDetails(slice: SliceModel, agent: AgentRun | undefined, now: number, tests?: TestProgress): Detail[] {
-  const branch = agent?.branch || slice.branch.trim() || NONE
-  const model = agent?.model || slice.model || NONE
-  const files = slice.filesOwned.length > 0 ? { value: slice.filesOwned.join(', '), mono: true } : { value: 'not listed', mono: false }
+/**
+ * The details list: the agent's branch and model, else the slice's; `—` for what only an engineer has.
+ * With no slice (a fix run's engineer), files owned read `not listed`.
+ */
+export function engineerDetails(slice: SliceModel | undefined, agent: AgentRun | undefined, now: number, tests?: TestProgress): Detail[] {
+  const branch = agent?.branch || slice?.branch.trim() || NONE
+  const model = agent?.model || slice?.model || NONE
+  const files = slice && slice.filesOwned.length > 0 ? { value: slice.filesOwned.join(', '), mono: true } : { value: 'not listed', mono: false }
   return [
     { label: 'Branch', value: branch, mono: branch !== NONE },
     { label: 'Files owned', ...files },

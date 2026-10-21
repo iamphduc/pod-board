@@ -2,7 +2,7 @@
 
 ## What it is
 
-Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per sprint, Check, Ship) and its slice log, plus the Add a repo form, the live chip, and the empty and error states. Covers the features.md rows Screen 1, Screen 1 live state, Screen 1 Add repo, and Unsupported docs and no runs. The logic is pure in `packages/model/src/runs.ts` and `pipeline.ts` and in `packages/web/src/screens/runs/view.ts`; components are glue.
+Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per sprint, Check, Ship) and its slice log, plus the Add a repo form, the live chip, and the empty and error states. Also `/pod:fix` runs, with their own pipeline and agent log, and the Other activity strip. Covers the features.md rows Screen 1, Screen 1 live state, Screen 1 close-out run, Screen 1 fix run, Other activity, Screen 1 Add repo, and Unsupported docs and no runs. The logic is pure in `packages/model/src/runs.ts`, `pipeline.ts`, and `fix-runs.ts` and in `packages/web/src/screens/runs/view.ts`; components are glue.
 
 ## How it works
 
@@ -15,6 +15,24 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - **States.** Banners in order: `lost · retrying`, `config unreadable`, `gh missing` / `gh logged out` with "Last checked HH:MM". The empty main view names an unsupported docs version or its absence; no repos shows `No repos yet`.
 - **Add a repo** posts to `/api/repos`; a repeat shows "Already registered."; Escape clears the error.
 
+## Fix runs
+
+- **Which.** Each claim `<repo> fix-<slug>` whose name matches no plan of the repo, once per name (`fixRunNames`). A claim named like a plan stays that plan's; a claim not named `fix-…` that names no plan is ignored. The run's `RunSummary` has `plan: 'fix-<slug>'` (the route key, since no plan has that name) and `fix: '<slug>'`.
+- **Agents.** Engineers whose dispatch `branch` is `fix-<slug>`; reviewers with `kind: fix` whose `branch` is `fix-<slug>` or whose `pr` is the run's PR number. Each counts once per turn: an agent continued with SendMessage (`AgentRun.turns`, see `run-model.md`) gives one entry per turn, with that turn's start, last write, and tokens; earlier turns read `ended`. An engineer turn that started after the first matched review is a fix pass, whether a new agent or the same one resumed, else the build (a re-dispatch before any review is still the build). A reviewer's first turn takes its `round` field; else, and for a resumed turn, 2 when it started after a fix pass, else 1. Several turns of one step read `<n> engineers`, `<n> passes`, or `<n> runs`, and its minutes add up each turn's own time (to now while one runs), never the idle time between turns. A `kind: fix` reviewer is never a plan's review round (`roleOf`), even with a plan field.
+- **PR.** The PR on `repo.prs` whose `branch` is `fix-<slug>`: the server asks `gh pr list --head fix-<slug> --state all` for each fix claim and keeps the open PR, else the newest. A closed one is asked about again every 30 s (a reopen or a new PR shows); a merged one isn't.
+- **Listed** while its claim exists, unless its PR merged and none of its agents wrote in the last 30 minutes (a leftover claim).
+- **Reviewed** means the run's agent that wrote last is a reviewer that ended (one that went quiet without ending doesn't count). Last write, not start: an engineer continued for the fix pass (the same transcript) keeps its first start but writes after the review.
+- **Where:** the newest running agent's step (`build`, `review`, `fix pass`, `review round 2`); else `review` while the PR is open and not reviewed; else `PR` once there is one; else the newest agent's step; else `build` (pod claims ports before it dispatches). **State:** an agent running → `running`; the PR open and reviewed → `needs-you`; else `idle`.
+- **Pipeline** (`buildFixPipeline`): Build (Engineer: `not started`, `<n> min so far`, or `<n> min · <k> tok`, with `<n> engineers` when there are several; Fix pass: `only if review fails` until one starts), Review (Round 1; Round 2: `only after a fix pass`), Ship (PR: `not open yet`, `PR #N · after review` waiting while the PR is open and not reviewed, then `PR #N · you merge`, `PR #N · merged`, or `PR #N · closed` as blocked).
+- **Agent log** below the pipeline, oldest first, one row per turn (a continued engineer shows an `engineer` row and a `fix pass` row): role (`engineer`, `fix pass`, `reviewer · round N`), `HH:MM → HH:MM` (`→ now` while running), and a running / ended / stale chip. Each engineer row links to `#/<repoId>/fix-<slug>/agent/<id>`, which opens the engineer view under the log (no slice, so Files owned reads `not listed`), headed by its latest turn. An unknown agent id falls back to the pipeline.
+- **No wave board:** no tabs, and `#/<repoId>/fix-<slug>/board` falls back to the pipeline. The title is the slug, never the task text.
+
+## Other activity
+
+- **Which.** The repo's agents that belong to no plan of the repo (`isPlanAgent`, listed or not) and to no listed fix run, whose last write is under 2 hours old (`OTHER_WINDOW_MS`), newest first, 8 at most (`OTHER_CAP`): researchers, scouts, planners with no plan, stray engineers and reviewers, and a fix run's agents once its claim is gone.
+- **Shows** under the main view of any run of that repo (the repo row's too): `<role>` (the type without `pod:`), ` · <field>` (branch, else plan, else sprint), the last write as `HH:MM`, and a state chip. No description, prompt, or task text.
+- **Not a run:** it adds nothing to `Runs · N active` and no `needs you`.
+
 ## Why it's this way
 
 - **A claimed plan stays a run through its close-out**: pod archives the plan (`Status: archived`) before the final merge and writes the hand-back only after the reporter finishes, so without the claim the run read `no active plan · idle` while the reporter wrote. The claim file is pod's own "still working on it" signal; pod deletes it after the merge. With no claim, an archived plan stays off the list, even with its reporter running: a reporter re-run on a finished plan isn't a run.
@@ -25,8 +43,20 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - **The health check beside the stream**: the Vite proxy kept a dead API's stream open, so the page never saw it drop.
 - **Light chip text uses darker `--*-ink` tokens** than the preview, to pass 4.5:1. See [decisions.md](../decisions.md#2026-10-19--light-chip-text-darker-ink-tokens).
 
+- **Fix runs read fields only** (`kind`, `branch`, `PR`), never the prose a dispatch wraps them in, by the same rule as plan reviewers: prose matching read a plan reviewer's plan as `field`. See [decisions.md](../decisions.md#2026-10-20--fix-runs-on-the-board).
+- **An open fix PR waits for its review** (`review · idle`, Ship `after review`), and a running reviewer beats it: the PR isn't the human's to merge until the review is done, like a plan's final PR that waits for its hand-back. Round 1 review of #23 found the first version told the human to merge an unreviewed PR.
+- **The slug, not the task text, titles a fix run:** the task text is prompt text, which can quote findings and pasted output, and the board serves none.
+- **Other activity's 2 hours and 8 agents** keep it quiet: long enough to see a research run or a just-closed fix, short enough not to list a day's history.
+
 ## Watch out
 
+- A fix reviewer dispatched only in prose (ytb-feed's `kind: fix. Review PR <url>, branch fix-… → …`) reads `kind: fix` but no branch or PR, so it doesn't join its run: Review reads `not started` and the reviewer shows under Other activity. pod's `/pod:fix` names `PR URL` and `branch` as fields; writing them as fields fixes it.
+- A fix engineer dispatched with no `Branch:` field (older chess-web and ytb-feed shapes: ``Branch `fix-…` ``, `branch fix-… off origin/main`) joins no run and shows under Other activity.
+- A closed (not merged) fix PR keeps the run listed as `PR · idle` with Ship `blocked` until the claim goes. A new PR on the same branch after a merged one isn't seen: `gh` isn't asked again about a merged PR. A leftover claim drops off within 30 minutes anyway.
+- The board can't read a review's verdict. After a round 1 that failed and before the fix pass starts, the last agent to write is an ended reviewer, so the run reads `needs-you` and Ship `you merge` in that gap.
+- A fix run's agents show under Other activity for 2 hours after its claim goes.
+- A turn starts only at a prompt whose `origin.kind` is `coordinator`. If the runtime renames that origin, a continued agent still reads running while it works, but its rounds fold into one turn again.
+- A plan reviewer's prompt that says `kind: fix` would leave the plan's Check stage. No real plan review did as of 2026-10-20.
 - A plan's reviewers and planners join it only through `AgentRun.plan`, read by `readDispatch` (see `run-model.md`): a `plan slug` field, then a `plan` field, then, for sprint planners only, the prose ``for plan `<slug>` ``. A loose match once read a round 2 reviewer's plan as `field` from quoted prose, so the plan dropped off the runs list (`no active plan · idle`) during its own review; reading only list items then lost most running engineers' slice and branch. Any change to these rules needs the corpus check over real transcripts ([decision](../decisions.md#2026-10-19--fix-the-dispatch-field-regression-with-a-corpus-check)).
 - A pause between close-out steps longer than 30 minutes (the orchestrator waiting on the human before it dispatches the reporter, say) drops the plan off the list until the next agent starts. Within 30 minutes of the merge, a leftover claim still reads `closing out · idle`.
 - The reporter has no step of its own in the pipeline: it shows only as the run's `running` state while it writes.
@@ -49,3 +79,6 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - 2026-10-20 · board-read · final review passed at round 5, with every row driven live · [report](../reports/board-read.html)
 - 2026-10-20 · fix-closeout-idle · a live claim keeps its plan listed through the close-out (`closing out`, then `final PR`), and the reporter joins its plan, so a closing-out run no longer reads `no active plan · idle`.
 - 2026-10-20 · fix-closeout-idle round 1 · a claimed archived plan leaves the list once its hand-back isn't pending and none of its agents wrote in 30 minutes, so a leftover claim no longer shows a finished plan as `closing out` forever.
+- 2026-10-20 · fix-show-fix-runs · `/pod:fix` runs show on the runs list with a `fix` tag, their own pipeline (Build, Review, Ship by head-branch PR) and agent log, and no wave board; agents tied to no run show in an Other activity strip ([decision](../decisions.md#2026-10-20--fix-runs-on-the-board)).
+- 2026-10-20 · fix-show-fix-runs round 2 · a continued agent reads running until it hands back again, and its turns are their own steps and log rows: the engineer resumed after the review is the fix pass, the reviewer resumed after it round 2. So a running round 2 no longer reads `needs you`.
+- 2026-10-20 · fix-show-fix-runs round 1 · an open fix PR reads `review · idle` with Ship `after review` until the agent that wrote last is an ended reviewer, and a closed fix PR is asked about again, so a reopen shows.

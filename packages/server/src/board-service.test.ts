@@ -73,9 +73,9 @@ async function transcript(repoPath: string, id: string, agentType: string, promp
   await writeFile(join(sub, `agent-${id}.jsonl`), lines.map((l) => JSON.stringify(l)).join('\n') + '\n')
 }
 
-type FakeGh = GhReader & { refreshed: { repoPath: string; numbers: number[] }[]; asked: number[] }
+type FakeGh = GhReader & { refreshed: { repoPath: string; numbers: number[]; branches?: string[] }[]; asked: number[] }
 
-function fakeGh(prs: Record<number, PrStatus['state']> = {}, status: GhStatus = 'ok'): FakeGh {
+function fakeGh(prs: Record<number, PrStatus['state']> = {}, status: GhStatus = 'ok', byBranch: Record<string, PrStatus> = {}): FakeGh {
   const refreshed: FakeGh['refreshed'] = []
   const asked: number[] = []
   return {
@@ -88,8 +88,9 @@ function fakeGh(prs: Record<number, PrStatus['state']> = {}, status: GhStatus = 
       const state = prs[n]
       return state ? { number: n, state, checks: 'pass', checkedAt: NOW } : undefined
     },
-    async refresh(repoPath, numbers) {
-      refreshed.push({ repoPath, numbers: [...numbers] })
+    getBranch: (_repoPath, branch) => byBranch[branch],
+    async refresh(repoPath, numbers, branches = []) {
+      refreshed.push({ repoPath, numbers: [...numbers], ...(branches.length > 0 ? { branches: [...branches] } : {}) })
       return false
     },
   }
@@ -369,6 +370,44 @@ describe('board service', () => {
     const service = createBoardService(deps(gh))
     expect(await service.refreshGh(await service.build())).toBe(false)
     expect(gh.refreshed).toEqual([{ repoPath: normalizeRepoPath(repo, platform), numbers: [] }])
+  })
+
+  test('a fix claim: refreshGh asks gh for its branch; the Board has its branch PR and its agents', async () => {
+    const repo = copyFixture()
+    const path = normalizeRepoPath(repo, platform)
+    await claim(3200, repo, 'fix-clock')
+    // A claim named like a plan, and one that names no fix, ask gh for no branch.
+    await claim(3300, repo, 'sparring-ladder')
+    await claim(3400, repo, 'somename')
+    await transcript(repo, 'eng1', 'pod:engineer', 'Standalone /pod:fix slice. Parent repo: E:/r. Merge-target: main. Branch: fix-clock. Ports: 3210/3211.')
+    await transcript(repo, 'rev1', 'pod:reviewer', 'kind: fix. Task as given: x.\nPR: https://github.com/o/r/pull/95. Branch: fix-clock. Merge-target: main.')
+
+    const gh = fakeGh({}, 'ok', { 'fix-clock': { number: 95, state: 'open', checks: 'none', checkedAt: NOW, branch: 'fix-clock' } })
+    const service = createBoardService(deps(gh))
+    const board = await service.build()
+    await service.refreshGh(board)
+    expect(gh.refreshed).toEqual([{ repoPath: path, numbers: [], branches: ['fix-clock'] }])
+    const r = board.repos[0]!
+    expect(r.prs).toEqual([{ number: 95, state: 'open', checks: 'none', checkedAt: NOW, branch: 'fix-clock' }])
+    expect(r.agents.map((a) => [a.id, a.branch, a.kind, a.pr])).toEqual([
+      ['eng1', 'fix-clock', undefined, undefined],
+      ['rev1', 'fix-clock', 'fix', 95],
+    ])
+    expect(model.listRuns(board, NOW).find((x) => x.fix === 'clock')).toMatchObject({ plan: 'fix-clock', where: 'review', state: 'running', portBase: 3200 })
+  })
+
+  test('a PR found by branch that is also a numbered live PR is on the Board once', async () => {
+    const repo = copyFixture()
+    // A hand-back linking #77 makes #77 a live PR by number too.
+    const queue = join(repo, 'pod-docs', 'handoff-queue.md')
+    const handBack = '- `[2026-10-20 · PENDING · orchestrator → human · plan: sparring-ladder]` plan sparring-ladder complete — final PR https://github.com/o/r/pull/77 **Resolution:** pending'
+    await writeFile(queue, `${await readFile(queue, 'utf8')}\n${handBack}\n`)
+    await claim(3200, repo, 'fix-clock')
+    const pr: PrStatus = { number: 77, state: 'open', checks: 'none', checkedAt: NOW, branch: 'fix-clock' }
+    const gh = fakeGh({ 77: 'open' }, 'ok', { 'fix-clock': pr })
+    const board = await createBoardService(deps(gh)).build()
+    expect(gh.asked).toContain(77)
+    expect(board.repos[0]!.prs.filter((p) => p.number === 77)).toEqual([pr])
   })
 
   test('never writes into a repo', async () => {

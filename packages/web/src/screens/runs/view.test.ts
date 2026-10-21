@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildRepoModel, type Board, type BoardRepo, type RunSummary } from '@pod-board/model'
-import { banners, barTitle, emptyMessage, groupChip, rowFigures, runChip, streamChip, titleParts } from './view.ts'
+import { agentChip, agentLogRows, banners, barTitle, emptyMessage, groupChip, otherRows, rowFigures, runChip, runLine, streamChip, titleParts } from './view.ts'
 
 const run = (over: Partial<RunSummary>): RunSummary => ({ repoId: 'r', repo: 'chess-web', where: 'x', state: 'idle', ...over })
 
@@ -172,5 +172,64 @@ describe('empty messages', () => {
       'No active plan in this repo. A plan shows here once pod starts one.',
     )
     expect(emptyMessage(run({ state: 'running', plan: 'p' }), r)).toBe("Can't find plan p in this repo's pod docs.")
+  })
+})
+
+describe('fix runs and other activity', () => {
+  const fixRun = run({ plan: 'fix-scroll', fix: 'scroll', where: 'review', state: 'running' })
+  const at = (h: number, m: number) => new Date(2026, 9, 20, h, m).getTime()
+
+  it('the run line: fix · <slug> · <where>, a plan’s <plan> · <where>, else the where', () => {
+    expect(runLine(fixRun)).toBe('fix · scroll · review')
+    expect(runLine(run({ plan: 'alpha', where: 'one · wave 1/2' }))).toBe('alpha · one · wave 1/2')
+    expect(runLine(run({ where: 'no active plan' }))).toBe('no active plan')
+  })
+
+  it('the bar title of a fix run', () => {
+    expect(barTitle(fixRun)).toBe('chess-web · fix · scroll')
+  })
+
+  it('agent chips', () => {
+    expect(agentChip('running')).toEqual({ cls: 's-run', label: 'running' })
+    expect(agentChip('ended')).toEqual({ cls: 's-ok', label: 'ended' })
+    expect(agentChip('stale')).toEqual({ cls: 's-idle', label: 'stale' })
+  })
+
+  it('agent log rows: role and round, start → end, a link to each engineer', () => {
+    const rows = agentLogRows(fixRun, [
+      { agentId: 'e1', role: 'engineer', startedAt: at(10, 33), endedAt: at(11, 2), state: 'ended', engineer: true },
+      { agentId: 'r1', role: 'reviewer', round: 1, startedAt: at(11, 5), state: 'running', engineer: false },
+      { agentId: 'e2', role: 'fix pass', state: 'stale', engineer: true },
+    ])
+    expect(rows).toEqual([
+      { key: 'e1', agentId: 'e1', label: 'engineer', time: '10:33 → 11:02', chip: { cls: 's-ok', label: 'ended' }, href: '#/r/fix-scroll/agent/e1' },
+      { key: 'r1', agentId: 'r1', label: 'reviewer · round 1', time: '11:05 → now', chip: { cls: 's-run', label: 'running' } },
+      { key: 'e2', agentId: 'e2', label: 'fix pass', time: '—', chip: { cls: 's-idle', label: 'stale' }, href: '#/r/fix-scroll/agent/e2' },
+    ])
+  })
+
+  it('a continued agent gives one row per turn, each with its own key and the same agent', () => {
+    const rows = agentLogRows(fixRun, [
+      { agentId: 'e1', role: 'engineer', turn: 0, startedAt: at(10, 25), endedAt: at(11, 8), state: 'ended', engineer: true },
+      { agentId: 'r1', role: 'reviewer', round: 1, startedAt: at(11, 10), endedAt: at(11, 19), state: 'ended', engineer: false },
+      { agentId: 'e1', role: 'fix pass', turn: 1, startedAt: at(11, 19), state: 'running', engineer: true },
+    ])
+    expect(rows.map((r) => [r.key, r.agentId, r.label, r.time, r.href])).toEqual([
+      ['e1:0', 'e1', 'engineer', '10:25 → 11:08', '#/r/fix-scroll/agent/e1'],
+      ['r1', 'r1', 'reviewer · round 1', '11:10 → 11:19', undefined],
+      ['e1:1', 'e1', 'fix pass', '11:19 → now', '#/r/fix-scroll/agent/e1'],
+    ])
+  })
+
+  it('other activity rows: role, the field, and the time', () => {
+    expect(
+      otherRows([
+        { id: 'x1', role: 'researcher', startedAt: at(9, 0), lastAt: at(9, 40), state: 'ended' },
+        { id: 'x2', role: 'engineer', detail: 'fix-old', lastAt: at(11, 58), state: 'running' },
+      ]),
+    ).toEqual([
+      { key: 'x1', text: 'researcher', time: '09:40', chip: { cls: 's-ok', label: 'ended' } },
+      { key: 'x2', text: 'engineer · fix-old', time: '11:58', chip: { cls: 's-run', label: 'running' } },
+    ])
   })
 })

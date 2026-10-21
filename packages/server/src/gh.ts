@@ -13,14 +13,22 @@ export type GhReader = {
   /** When `gh auth status` last ran. */
   checkedAt(): number | undefined
   get(repoPath: string, n: number): PrStatus | undefined
-  /** Fetches the PRs that are due. `true` when the gh status or any PR's number, state, checks, or url changed. */
-  refresh(repoPath: string, numbers: number[]): Promise<boolean>
+  /** The PR found by its head branch (a fix run's `fix-<slug>`), with `branch` set. */
+  getBranch(repoPath: string, branch: string): PrStatus | undefined
+  /**
+   * Fetches the PRs that are due, by number and by head branch. `true` when the gh status or
+   * any PR's number, state, checks, or url changed.
+   */
+  refresh(repoPath: string, numbers: number[], branches?: string[]): Promise<boolean>
 }
 
 export const AUTH_RECHECK_MS = 60_000
 export const PR_CACHE_MS = 30_000
 export const GH_TIMEOUT_MS = 10_000
 const PR_FIELDS = 'number,state,url,statusCheckRollup'
+const LIST_FIELDS = `${PR_FIELDS},headRefName`
+/** A branch gh can't read as a flag, with no spaces or shell characters. */
+const BRANCH = /^[A-Za-z0-9][\w./-]{0,199}$/
 
 /** Runs `gh` directly (no shell) with a 10 s timeout and prompts turned off. */
 export const defaultGhExec: GhExec = (args, cwd) =>
@@ -54,6 +62,7 @@ export function createGhReader(opts: { exec?: GhExec; now?: () => number } = {})
   const cache = new Map<string, Entry>()
 
   const keyOf = (repoPath: string, n: number) => `${n}\u0000${repoPath}`
+  const branchKey = (repoPath: string, branch: string) => `branch\u0000${branch}\u0000${repoPath}`
 
   const safeExec = async (args: string[], cwd: string): Promise<ExecResult> => {
     try {
@@ -83,42 +92,71 @@ export function createGhReader(opts: { exec?: GhExec; now?: () => number } = {})
     return authInflight
   }
 
-  const fetchPr = async (repoPath: string, n: number, entry: Entry): Promise<boolean> => {
-    const r = await safeExec(['pr', 'view', String(n), '--json', PR_FIELDS], repoPath)
+  /** Runs one gh read for an entry and keeps what `parse` makes of it; `undefined` keeps the last value. */
+  const fetchInto = async (
+    args: string[],
+    repoPath: string,
+    entry: Entry,
+    parse: (stdout: string, at: number) => PrStatus | undefined,
+  ): Promise<boolean> => {
+    const r = await safeExec(args, repoPath)
     const at = now()
     entry.fetchedAt = at
     if (r.status === 'not-found') return setStatus('missing')
     if (r.status !== 'ok') return false
-    const next = parsePrView(r.stdout, n, at)
+    const next = parse(r.stdout, at)
     if (!next) return false
     const prev = entry.value
     entry.value = next
-    return !prev || prev.state !== next.state || prev.checks !== next.checks || prev.url !== next.url
+    return !prev || prev.number !== next.number || prev.state !== next.state || prev.checks !== next.checks || prev.url !== next.url
   }
 
-  const refreshPr = (repoPath: string, n: number): Promise<boolean> => {
-    const key = keyOf(repoPath, n)
+  /**
+   * Fetches an entry when it's due: not final, and not fetched in the last PR_CACHE_MS. By number,
+   * merged and closed are final. By branch, only merged is: a closed PR can be reopened, or a new PR
+   * opened on the same branch, while the fix run's claim lasts.
+   */
+  const refreshEntry = (key: string, fetch: (entry: Entry) => Promise<boolean>, isFinal: (pr: PrStatus) => boolean): Promise<boolean> => {
     let entry = cache.get(key)
     if (!entry) cache.set(key, (entry = {}))
     if (entry.inflight) return entry.inflight
-    if (entry.value && entry.value.state !== 'open') return Promise.resolve(false)
+    if (entry.value && isFinal(entry.value)) return Promise.resolve(false)
     if (entry.fetchedAt !== undefined && now() - entry.fetchedAt < PR_CACHE_MS) return Promise.resolve(false)
     const e = entry
-    e.inflight = fetchPr(repoPath, n, e).finally(() => {
+    e.inflight = fetch(e).finally(() => {
       e.inflight = undefined
     })
     return e.inflight
   }
 
+  const refreshPr = (repoPath: string, n: number) =>
+    refreshEntry(
+      keyOf(repoPath, n),
+      (e) => fetchInto(['pr', 'view', String(n), '--json', PR_FIELDS], repoPath, e, (out, at) => parsePrView(out, n, at)),
+      (pr) => pr.state !== 'open',
+    )
+
+  const refreshBranch = (repoPath: string, branch: string) =>
+    refreshEntry(
+      branchKey(repoPath, branch),
+      (e) =>
+        fetchInto(['pr', 'list', '--head', branch, '--state', 'all', '--json', LIST_FIELDS, '--limit', '10'], repoPath, e, (out, at) =>
+          parsePrList(out, branch, at),
+        ),
+      (pr) => pr.state === 'merged',
+    )
+
   return {
     status: () => status,
     checkedAt: () => authAt,
     get: (repoPath, n) => cache.get(keyOf(repoPath, n))?.value,
-    async refresh(repoPath, numbers) {
+    getBranch: (repoPath, branch) => cache.get(branchKey(repoPath, branch))?.value,
+    async refresh(repoPath, numbers, branches = []) {
       let changed = await checkAuth(repoPath)
       if (status !== 'ok') return changed
       const wanted = [...new Set(numbers)].filter((n) => Number.isSafeInteger(n) && n > 0)
-      const results = await Promise.all(wanted.map((n) => refreshPr(repoPath, n)))
+      const heads = [...new Set(branches)].filter((b) => BRANCH.test(b))
+      const results = await Promise.all([...wanted.map((n) => refreshPr(repoPath, n)), ...heads.map((b) => refreshBranch(repoPath, b))])
       for (const r of results) changed ||= r
       return changed
     },
@@ -137,6 +175,10 @@ export function parsePrView(stdout: string, n: number, checkedAt: number): PrSta
   } catch {
     return undefined
   }
+  return prOf(data, n, checkedAt)
+}
+
+function prOf(data: unknown, n: number, checkedAt: number): PrStatus | undefined {
   if (!data || typeof data !== 'object') return undefined
   const d = data as Record<string, unknown>
   const state = typeof d.state === 'string' ? STATES[d.state] : undefined
@@ -144,6 +186,30 @@ export function parsePrView(stdout: string, n: number, checkedAt: number): PrSta
   const pr: PrStatus = { number: n, state, checks: rollupChecks(d.statusCheckRollup), checkedAt }
   if (typeof d.url === 'string' && d.url) pr.url = d.url
   return pr
+}
+
+/**
+ * Maps `gh pr list --head <branch> --json number,state,url,statusCheckRollup,headRefName` output to
+ * the branch's PR, with `branch` set: the open one, else the newest. Entries for another head are
+ * skipped. `undefined` when the output isn't a list or holds no usable entry (no PR yet).
+ */
+export function parsePrList(stdout: string, branch: string, checkedAt: number): PrStatus | undefined {
+  let data: unknown
+  try {
+    data = JSON.parse(stdout)
+  } catch {
+    return undefined
+  }
+  if (!Array.isArray(data)) return undefined
+  const prs: PrStatus[] = []
+  for (const item of data) {
+    const d = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>
+    if (d.headRefName !== branch || typeof d.number !== 'number' || !Number.isSafeInteger(d.number) || d.number < 1) continue
+    const pr = prOf(d, d.number, checkedAt)
+    if (pr) prs.push(pr)
+  }
+  const pick = prs.find((p) => p.state === 'open') ?? prs.sort((a, b) => b.number - a.number)[0]
+  return pick && { ...pick, branch }
 }
 
 function rollupChecks(rollup: unknown): PrStatus['checks'] {

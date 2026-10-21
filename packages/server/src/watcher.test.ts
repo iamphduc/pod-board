@@ -23,6 +23,7 @@ const gh: GhReader = {
   status: () => 'unknown',
   checkedAt: () => undefined,
   get: () => undefined,
+  getBranch: () => undefined,
   refresh: async () => false,
 }
 

@@ -217,3 +217,69 @@ describe('agentState', () => {
     expect(agentState(run({ lastAt: now + 5000 }), now)).toBe('running')
   })
 })
+
+describe('continued agents (SendMessage after a hand-back)', () => {
+  const handback = (minutes: number, id: string) =>
+    assistant(minutes, id, { content: [{ type: 'tool_use', id: `t-${id}`, name: 'SubagentHandback', input: { message: 'SECRET-HANDBACK' } }] })
+  const toolResult = (minutes: number) => user(minutes, [{ type: 'tool_result', tool_use_id: 't', content: 'SECRET-RESULT' }])
+  // A resume prompt as the runtime writes it: a meta user record from the coordinator.
+  const resume = (minutes: number) => ({ ...user(minutes, 'SECRET-RESUME'), isMeta: true, origin: { kind: 'coordinator' } })
+
+  it('a resumed agent is running again until it hands back again', () => {
+    const working = parse(meta('pod:engineer'), jsonl(user(0, PROMPT), assistant(1, 'm1'), handback(5, 'm2'), toolResult(5), resume(10), assistant(12, 'm3')))
+    expect(working?.ended).toBe(false)
+    expect(working?.resumedAt).toBe(Date.parse(at(10)))
+    expect(working?.turns).toEqual([
+      { startedAt: Date.parse(at(0)), endedAt: Date.parse(at(5)), lastAt: Date.parse(at(5)), tokens: 4 },
+      { startedAt: Date.parse(at(10)), lastAt: Date.parse(at(12)), tokens: 2 },
+    ])
+    expect(agentState(working!, Date.parse(at(13)))).toBe('running')
+
+    const done = parse(meta('pod:engineer'), jsonl(user(0, PROMPT), assistant(1, 'm1'), handback(5, 'm2'), toolResult(5), resume(10), assistant(12, 'm3'), handback(15, 'm4')))
+    expect(done?.ended).toBe(true)
+    expect(done?.turns?.[1]).toEqual({ startedAt: Date.parse(at(10)), endedAt: Date.parse(at(15)), lastAt: Date.parse(at(15)), tokens: 4 })
+  })
+
+  it('an end_turn ends a turn too, and a trailing end_turn after the hand-back stays in that turn', () => {
+    const r = parse(meta('pod:reviewer'), jsonl(user(0, PROMPT), handback(5, 'm1'), toolResult(5), assistant(6, 'm2', { stop: 'end_turn' }), resume(10), assistant(11, 'm3')))
+    expect(r?.ended).toBe(false)
+    expect(r?.turns?.map((t) => [t.startedAt, t.endedAt, t.lastAt])).toEqual([
+      [Date.parse(at(0)), Date.parse(at(5)), Date.parse(at(6))],
+      [Date.parse(at(10)), undefined, Date.parse(at(11))],
+    ])
+  })
+
+  it('a task notification or a nudge after the hand-back re-opens the same turn: working again, but no new turn', () => {
+    const notice = (minutes: number) => ({ ...user(minutes, 'SECRET-NOTICE'), isMeta: true, origin: { kind: 'task-notification' } })
+    const nudge = (minutes: number) => ({ ...user(minutes, 'SECRET-NUDGE'), isMeta: true })
+    const working = parse(meta('pod:engineer'), jsonl(user(0, PROMPT), handback(5, 'm1'), toolResult(5), notice(6), assistant(7, 'm2')))
+    expect(working?.ended).toBe(false)
+    expect(working).not.toHaveProperty('turns')
+    const again = parse(meta('pod:engineer'), jsonl(user(0, PROMPT), assistant(4, 'm1', { stop: 'end_turn' }), nudge(4), handback(5, 'm2')))
+    expect(again?.ended).toBe(true)
+    expect(again).not.toHaveProperty('turns')
+    // With a real resume later, the notice stays in turn 1, which ends at its last hand-back.
+    const later = parse(meta('pod:engineer'), jsonl(user(0, PROMPT), handback(5, 'm1'), notice(6), handback(7, 'm2'), resume(10), assistant(11, 'm3')))
+    expect(later?.turns?.map((t) => [t.startedAt, t.endedAt])).toEqual([
+      [Date.parse(at(0)), Date.parse(at(7))],
+      [Date.parse(at(10)), undefined],
+    ])
+  })
+
+  it('a meta prompt beside the first one, and tool results, start no turn; an agent never resumed has no turns', () => {
+    const r = parse(meta('pod:engineer'), jsonl(user(0, PROMPT), { ...user(0, 'reminder'), isMeta: true }, assistant(1, 'm1'), toolResult(2), handback(3, 'm2'), toolResult(3)))
+    expect(r?.ended).toBe(true)
+    expect(r).not.toHaveProperty('turns')
+    expect(r).not.toHaveProperty('resumedAt')
+  })
+
+  it('dispatch fields still come from the first prompt only, not a resume', () => {
+    const r = parse(meta('pod:reviewer'), jsonl(user(0, '- kind: fix\n- round: 1'), handback(5, 'm1'), { ...user(10, '- round: 2\n- kind: plan'), isMeta: true }, assistant(11, 'm2')))
+    expect(r).toMatchObject({ kind: 'fix', round: 1 })
+  })
+
+  it('keeps no text from a resume, a hand-back, or a tool result', () => {
+    const r = parse(meta('pod:engineer'), jsonl(user(0, PROMPT), handback(5, 'm1'), toolResult(5), resume(10), assistant(11, 'm2')))
+    expect(JSON.stringify(r)).not.toMatch(/SECRET/)
+  })
+})

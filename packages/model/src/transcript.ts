@@ -3,7 +3,7 @@
 // files and hands their text in. No transcript text, tool input, tool output,
 // or the meta file's description is ever kept. The rules and why are in pod-docs/feature-details/run-model.md.
 
-import type { AgentRun, AgentState } from './board.ts'
+import type { AgentRun, AgentState, AgentTurn } from './board.ts'
 import { readDispatch } from './dispatch.ts'
 import { turnTokens } from './pod-flow/model.ts'
 import type { Usage } from './pod-flow/types.ts'
@@ -28,33 +28,48 @@ export function parseAgentTranscript({ id, session, meta, jsonl }: AgentFile): A
   let startedAt: number | undefined
   let lastAt: number | undefined
   let model: string | undefined
-  let lastStop: unknown
-  let handedBack = false
+  // A turn runs from a prompt to its hand-back (or end_turn); a prompt after that starts the next turn.
+  let turn: Turn = { ended: false }
+  const turns: Turn[] = [turn]
   // A message streams over several records with the same id; its last record has the final usage.
-  const usageById = new Map<string, number>()
+  const usageById = new Map<string, { tokens: number; turn: Turn }>()
 
   for (const line of jsonl.split('\n')) {
     const record = parseJson(line)
     if (!isObject(record)) continue
+    const message = isObject(record.message) ? record.message : undefined
+    // A prompt after a hand-back: the agent works again. Only the coordinator's resume (SendMessage)
+    // starts a new turn; a task notification or a nudge re-opens the turn it answers.
+    if (record.type === 'user' && message && isPrompt(message.content) && turn.ended) {
+      if (isObject(record.origin) && record.origin.kind === 'coordinator') turns.push((turn = { ended: false }))
+      else turn = Object.assign(turn, { ended: false, endedAt: undefined })
+    }
     const time = typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : Number.NaN
     if (Number.isFinite(time)) {
       startedAt ??= time
       lastAt = time
+      turn.startedAt ??= time
+      turn.lastAt = time
     }
-    const message = record.message
-    if (!isObject(message)) continue
+    if (!message) continue
     if (record.type === 'user') {
       prompt ??= promptText(message.content)
     } else if (record.type === 'assistant') {
       if (typeof message.model === 'string') model = message.model
-      lastStop = message.stop_reason
-      if (Array.isArray(message.content) && message.content.some(isHandback)) handedBack = true
-      if (typeof message.id === 'string' && isObject(message.usage)) usageById.set(message.id, tokensOf(message.usage))
+      if (message.stop_reason === 'end_turn' || (Array.isArray(message.content) && message.content.some(isHandback))) {
+        turn.ended = true
+        if (Number.isFinite(time)) turn.endedAt ??= time
+      }
+      if (typeof message.id === 'string' && isObject(message.usage)) usageById.set(message.id, { tokens: tokensOf(message.usage), turn })
     }
   }
 
-  const run: AgentRun = { id, session, type: info.agentType, tokens: 0, ended: handedBack || lastStop === 'end_turn' }
-  for (const tokens of usageById.values()) run.tokens += tokens
+  // Ended only when the last turn handed back: a resumed agent works again until it hands back again.
+  const run: AgentRun = { id, session, type: info.agentType, tokens: 0, ended: turn.ended }
+  for (const u of usageById.values()) {
+    run.tokens += u.tokens
+    u.turn.tokens = (u.turn.tokens ?? 0) + u.tokens
+  }
   if (prompt !== undefined) {
     for (const [key, value] of Object.entries(readDispatch(prompt, info.agentType))) {
       if (value !== undefined) Object.assign(run, { [key]: value })
@@ -63,7 +78,25 @@ export function parseAgentTranscript({ id, session, meta, jsonl }: AgentFile): A
   if (model !== undefined) run.model = model
   if (startedAt !== undefined) run.startedAt = startedAt
   if (lastAt !== undefined) run.lastAt = lastAt
+  // Only a resumed agent gets its turns: one turn says nothing the run's own fields don't.
+  const timed = turns.filter((t): t is Turn & { startedAt: number; lastAt: number } => t.startedAt !== undefined && t.lastAt !== undefined)
+  if (timed.length > 1) {
+    run.turns = timed.map((t) => {
+      const out: AgentTurn = { startedAt: t.startedAt, lastAt: t.lastAt, tokens: t.tokens ?? 0 }
+      if (t.endedAt !== undefined) out.endedAt = t.endedAt
+      return out
+    })
+    run.resumedAt = timed.at(-1)!.startedAt
+  }
   return run
+}
+
+type Turn = { ended: boolean; startedAt?: number; endedAt?: number; lastAt?: number; tokens?: number }
+
+/** A user record that brings a prompt: text, and no tool result (a tool's answer is no prompt). */
+function isPrompt(content: unknown): boolean {
+  if (typeof content === 'string') return true
+  return Array.isArray(content) && content.some((b) => isObject(b) && b.type === 'text') && !content.some((b) => isObject(b) && b.type === 'tool_result')
 }
 
 /** `ended` → ended; written to within STALE_MS → running; else, or never written to, stale. */

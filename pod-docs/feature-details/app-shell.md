@@ -10,7 +10,7 @@ The frame around every screen: the web app at `http://127.0.0.1:<web>/`, the bar
 - **Theme.** The choice is stored under `pod-board-theme` in `localStorage`: `light`, `dark`, or nothing for System. It sets `data-theme` on `<html>`; System follows `prefers-color-scheme`.
 - **Theme boot.** An inline script before the module script reads the stored choice and sets `data-theme`. A `color-scheme` meta and two `:root[data-theme]` rules make the browser's own canvas follow it. Missing, unknown, or throwing storage does nothing.
 - **Tokens.** Only the theme files define colors and fonts; screen CSS uses tokens, never color literals. Fonts (Bricolage Grotesque, Instrument Sans, JetBrains Mono) are self-hosted woff2 with their licenses. Nothing loads from another host.
-- **Chips.** Every state has a chip and a card edge, never text alone. Text under 12 px in the preview was raised to 12 or 13 px.
+- **Chips.** Every state has a chip and a card edge, never text alone. A kind tag (`chip tag`, the `fix` beside a fix run's repo) is an outlined chip with no dot, in `--muted` on `--line`, so it never reads as a state. Text under 12 px in the preview was raised to 12 or 13 px.
 - **PWA.** `/manifest.webmanifest` (`application/manifest+json`) and icons (`/icons/icon-192.png`); Chrome offers to install from `127.0.0.1`.
 
 ## Why it's this way
@@ -32,3 +32,4 @@ The frame around every screen: the web app at `http://127.0.0.1:<web>/`, the bar
 
 - 2026-10-19 · board-read · added: the bootstrap page (B1), the look foundation (server-runs L1), screen 1's theme control and PWA (S1), and theme boot (board-engineer X1) · [report](../reports/board-read.html)
 - 2026-10-20 · board-read · final review passed at round 5; Theme, Theme boot, and PWA rows driven live · [report](../reports/board-read.html)
+- 2026-10-20 · fix-show-fix-runs: an outlined kind tag chip (`chip tag`) marks fix runs in the runs list.

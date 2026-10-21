@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AgentRun, BoardRepo } from '@pod-board/model'
+import type { AgentRun, BoardRepo, SliceModel } from '@pod-board/model'
 import { createTimelineLoader, fetchJsonVia, type TimelineState } from '../../timeline-loader.ts'
-import { cardChip, type Card } from '../board/board-view.ts'
 import { Chip } from '../runs/Chip.tsx'
+import type { Chip as ChipView } from '../runs/view.ts'
 import { DocTitle } from '../runs/DocTitle.tsx'
 import { engineerDetails, timelineRows } from './view.ts'
 import './engineer.css'
 
-type Props = { repo: BoardRepo; card: Card; agent: AgentRun | undefined; now: number }
+/** `code · title` and a chip head the view: a slice card's, or a fix run's engineer. A fix run's engineer has no slice. */
+type Props = { repo: BoardRepo; code: string; title: string; chip: ChipView; slice?: SliceModel; agent: AgentRun | undefined; now: number }
 
-export function EngineerView({ repo, card, agent, now }: Props) {
+export function EngineerView({ repo, code, title, chip, slice, agent, now }: Props) {
   const [state, setState] = useState<TimelineState>({ kind: 'idle' })
   const loader = useRef<ReturnType<typeof createTimelineLoader>>(undefined)
 
@@ -28,17 +29,17 @@ export function EngineerView({ repo, card, agent, now }: Props) {
   }, [repo.id, agent?.id, lastAt, ended]) // the key's parts, not the agent object, which every Board event replaces
 
   const timeline = state.kind === 'ready' || state.kind === 'loading' || state.kind === 'error' ? state.timeline : undefined
-  const details = engineerDetails(card.slice, agent, now, timeline?.tests)
+  const details = engineerDetails(slice, agent, now, timeline?.tests)
   const view = timeline ? timelineRows(timeline) : undefined
 
   return (
-    <div className="frame ev" aria-label={`Engineer for ${card.code}`} role="region">
+    <div className="frame ev" aria-label={`Engineer for ${code}`} role="region">
       <div className="ev-side">
         <div className="ev-bar">
           <span className="ev-title">
-            {card.code} · <DocTitle text={card.title} />
+            {code} · <DocTitle text={title} />
           </span>
-          <Chip chip={cardChip(card.state)} />
+          <Chip chip={chip} />
         </div>
         <dl className="ev-details">
           {details.map((d) => (

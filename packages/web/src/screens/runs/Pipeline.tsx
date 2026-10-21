@@ -10,7 +10,7 @@ const STATE_WORDS: Record<StepState, string> = {
   unknown: 'unknown',
 }
 
-export function Pipeline({ pipeline }: { pipeline: PipelineModel }) {
+export function Pipeline({ pipeline }: { pipeline: Pick<PipelineModel, 'stages'> }) {
   return (
     <div className="pipe-frame" role="region" aria-label="Pipeline" tabIndex={0}>
       <ol className="pipe">

@@ -139,3 +139,36 @@ describe('live clock', () => {
     expect(ticks).toHaveLength(2)
   })
 })
+
+describe('fix run routes', () => {
+  const fix: RunSummary = { repoId: 'r', repo: 'web', plan: 'fix-scroll', fix: 'scroll', where: 'build', state: 'running' }
+  const plan: RunSummary = { repoId: 'r', repo: 'web', plan: 'alpha', where: 'x', state: 'idle' }
+  const all = [fix, plan]
+  const slicesOf = (r: RunSummary) => (r.plan === 'alpha' ? ['A1'] : [])
+  const agentsOf = (r: RunSummary) => (r.fix === 'scroll' ? ['a1'] : [])
+
+  it('a fix run is picked by its claim name', () => {
+    expect(resolveSelection(all, '#/r/fix-scroll')).toMatchObject({ run: fix, view: 'pipeline', hash: '#/r/fix-scroll' })
+  })
+
+  it('a fix run never gets the wave board; the hash follows', () => {
+    expect(resolveSelection(all, '#/r/fix-scroll/board', slicesOf, agentsOf)).toMatchObject({ run: fix, view: 'pipeline', slice: undefined, hash: '#/r/fix-scroll' })
+    expect(hashFor(fix, 'board')).toBe('#/r/fix-scroll')
+  })
+
+  it('the agent route opens one of the run’s agents; an unknown one falls back to the pipeline', () => {
+    expect(parseHash('#/r/fix-scroll/agent/a1')).toEqual({ repoId: 'r', plan: 'fix-scroll', view: 'agent', agent: 'a1' })
+    expect(resolveSelection(all, '#/r/fix-scroll/agent/a1', slicesOf, agentsOf)).toEqual({ run: fix, view: 'agent', slice: undefined, agent: 'a1', hash: '#/r/fix-scroll/agent/a1' })
+    expect(resolveSelection(all, '#/r/fix-scroll/agent/zz', slicesOf, agentsOf)).toMatchObject({ view: 'pipeline', agent: undefined, hash: '#/r/fix-scroll' })
+    expect(parseHash('#/r/fix-scroll/agent')).toBeUndefined()
+  })
+
+  it('a plan run never gets the agent route', () => {
+    expect(resolveSelection(all, '#/r/alpha/agent/a1', slicesOf, () => ['a1'])).toMatchObject({ run: plan, view: 'pipeline', agent: undefined, hash: '#/r/alpha' })
+    expect(hashFor(plan, 'agent', 'a1')).toBe('#/r/alpha')
+  })
+
+  it('hashFor builds the agent route, encoded', () => {
+    expect(hashFor(fix, 'agent', 'a/1')).toBe('#/r/fix-scroll/agent/a%2F1')
+  })
+})
