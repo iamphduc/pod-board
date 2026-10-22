@@ -7,7 +7,7 @@
 import type { AgentRun, BoardRepo, PrStatus } from './board.ts'
 import { formatTokens, isDone } from './pod-flow/model.ts'
 import type { PlanModel, SliceModel, SprintModel, WaveModel } from './run-model.ts'
-import { agentState } from './transcript.ts'
+import { agentState, STALE_MS } from './transcript.ts'
 
 export type StepState = 'done' | 'live' | 'wait' | 'you' | 'blocked' | 'unknown'
 export type Step = { key: string; label: string; state: StepState; detail: string }
@@ -89,6 +89,42 @@ export const isRunning = (a: AgentRun, now: number) => agentState(a, now) === 'r
 /** A running sprint planner that names the plan. */
 export const isDrafting = (agents: AgentRun[], plan: PlanModel, now: number) =>
   agents.some((a) => isType(a, 'sprint-planner') && a.plan === plan.slug && isRunning(a, now))
+
+// ---- Which plans are runs (the runs list's rule, shared with waitingPrs) ----
+
+export const planAgentRunning = (repo: BoardRepo, plan: PlanModel, now: number) =>
+  repo.agents.some((a) => isPlanAgent(a, plan) && isRunning(a, now))
+
+/** A port claim names the plan. pod deletes it only on resume after the merge, so it can outlive the run. */
+const isClaimed = (repo: BoardRepo, plan: PlanModel) => repo.claims.some((c) => c.plan === plan.slug)
+
+/**
+ * One of the plan's agents wrote within the last STALE_MS, ended or not. It bridges the gaps between
+ * close-out steps (the final review ended, the reporter not started; the reporter ended, the hand-back not written).
+ */
+const planAgentRecent = (repo: BoardRepo, plan: PlanModel, now: number) =>
+  repo.agents.some((a) => isPlanAgent(a, plan) && a.lastAt !== undefined && now - a.lastAt < STALE_MS)
+
+/**
+ * A plan is a run while a claim names it and it isn't archived. A claimed archived plan is closing out
+ * (pod archives the plan before the final merge) while its hand-back waits, it's halted, or one of its
+ * agents wrote recently; else the claim is a leftover and the plan is finished. Unclaimed, a plan is a run
+ * unless it's archived or finished. Finished: every sprint done, no hand-back waiting, no halt, and none of
+ * its agents running (a final review runs after the last sprint is done).
+ */
+export function isRun(repo: BoardRepo, plan: PlanModel, now: number): boolean {
+  const claimed = isClaimed(repo, plan)
+  if (claimed && plan.status !== 'archived') return true
+  if (plan.status === 'archived') {
+    return claimed && (pendingHandBack(repo, plan) !== undefined || isHalted(plan) || planAgentRecent(repo, plan, now))
+  }
+  return (
+    plan.sprints.some((s) => s.status !== 'done') ||
+    pendingHandBack(repo, plan) !== undefined ||
+    isHalted(plan) ||
+    planAgentRunning(repo, plan, now)
+  )
+}
 
 // ---- The pipeline ----
 
