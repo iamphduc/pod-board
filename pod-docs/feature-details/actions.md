@@ -12,17 +12,19 @@ Board actions change something outside the board. The first one merges a PR that
 - **The merge.** First a fresh read. If it fails, the result is `failed` with its text, and no merge runs. If its head isn't `headSha`, the result is `stale` with the current `headSha`, and no merge runs. Otherwise the server runs exactly `gh pr merge <url> --merge --match-head-commit <headSha>`. The `<url>` comes from that fresh read. The call has a 60 s timeout, and it never passes `--admin`, `--auto`, `--squash`, `--rebase`, or `--delete-branch`. Then the server always reads the PR again:
   - `MERGED` → `merged`.
   - Open with `autoMergeRequest` set → `auto-merge`.
-  - Open, no auto-merge, and the call succeeded → `queued`. See **Why** for the reason.
+  - Open, no auto-merge, and the call succeeded → the server asks GitHub whether the PR is in a merge queue: `gh api graphql` with `repository(owner:, name:) { pullRequest(number:) { mergeQueueEntry { state } } }`, owner and name from the re-read's url, default timeout. An entry → `queued`. No entry, or the query fails → `unconfirmed`, `gh ran the merge, but GitHub hasn't confirmed the merge yet. Check it on GitHub.` This is the only case that asks; see **Why**.
   - Else, if the call failed (timeout included) → `failed` with gh's stderr: escape codes removed, trimmed, and at most 500 chars. An empty stderr reads `gh pr merge failed`.
   - `CLOSED` → `failed`, `PR is closed`.
   - The re-read failed after a successful call → `unconfirmed`, with a message to check GitHub.
+  - So `unconfirmed` means the call succeeded but GitHub hasn't shown the result: either the re-read failed, or the PR is still open and not in a merge queue.
 - **After the merge call.** Once the merge call has run, the server drops the PR's gh cache entries (`GhCache.forget`: the entry by number, and any branch entry holding that number) and asks gh again. This happens before the response.
 - **Action log.** One `ActionEntry` per merge request that passed the checks above: `stale` and `failed` too, but not `400`, `404`, `503`, `409`, or previews. `target` is `PR #N`, `repo` is the repo's name, and a stale entry's message is `head now <sha7>`. Each entry is one JSON line appended to `<config dir>/actions.jsonl` (the folder of `config.json`), owner-only on POSIX. The file appears with the first merge. At start the server reads the newest 50 good lines. It skips bad lines, and a missing or unreadable file gives an empty list. If the last line was cut short, the next entry starts on a new line. If the append fails, the response is the same except `logged: false`, and the entry isn't listed.
 - **The Board.** `Board.actions` is the log's newest 50, newest first, read on every build. After every logged merge request, the server rebuilds the Board and sends it before the response, so it shows the new entry and the PR's fresh state.
 
 ## Why it's this way
 
-- **`queued` for an open PR after a successful call.** gh 2.92's `pr view --json` has no merge-queue field (the fields include `autoMergeRequest`, `mergeable`, `mergeStateStatus`, and `headRefOid`, but nothing for a queue). Without a queue, a successful `gh pr merge --merge` merges at once, so an open PR after a successful call most likely went into a merge queue. The cost: if GitHub's re-read lags a plain merge, the result reads `Added to the merge queue` until the Board's next gh read shows `merged`.
+- **`queued` only from a merge-queue entry.** gh 2.92's `pr view --json` has no merge-queue field, so the server asks GraphQL's `mergeQueueEntry`. An open PR after a successful call can also be GitHub's re-read lagging a plain merge on a repo with no queue. Calling that `queued` would say "Added to the merge queue", which is false. The board shows only what GitHub reports, so anything GitHub hasn't confirmed is `unconfirmed`. The Board's next gh read then shows `merged`.
+- **The queue is asked only in that one case.** A merged, closed, or auto-merge re-read already says what happened, and a failed call has gh's own text. Asking only there keeps the extra gh call off every other path.
 - **`merged` only from the re-read.** gh's exit code doesn't say what happened. A timeout can still merge, and a success can mean queued. The re-read is the only proof.
 - **`--match-head-commit`.** It refuses the merge if anything was pushed after you looked. That includes autopilot racing you on a wave PR.
 - **No merge on a failed fresh read.** Without a read, the server can't check the head or the url, so it doesn't merge.
@@ -30,7 +32,8 @@ Board actions change something outside the board. The first one merges a PR that
 
 ## Watch out
 
-- The real gh field names were taken from `gh pr view --json` (no fields), gh 2.92.0. A gh that adds a merge-queue field should be read for `queued` instead of the fallback.
+- The real gh field names were taken from `gh pr view --json` (no fields), gh 2.92.0. `mergeQueueEntry` was checked with a read-only `gh api graphql` query on `iamphduc/pod-board` #27 (`null`). A gh that adds a merge-queue field to `pr view --json` could replace the extra call.
+- In the GraphQL call, owner and name go with `-f` (raw string). `gh api -F` converts values: a repo named `123` would become a number, and `@…` would read a file. Only `number` uses `-F`.
 - Tests and smoke runs never merge a real PR: tests use a fake gh exec, and the smoke recipe only checks the `404` and `403` previews.
 - `actions.jsonl` is in the config folder, which the watcher watches. The config folder's filter keeps only `config.json`, so an append doesn't trigger a rebuild. The route rebuilds the Board itself.
 - The whole log file is read once at start. It is never trimmed, so it grows by one line per merge.
@@ -38,3 +41,4 @@ Board actions change something outside the board. The first one merges a PR that
 ## History
 
 - 2026-10-21 · merge-actions M1: merge-preview and merge routes, gh merge with a re-read, and the action log on the Board.
+- 2026-10-21 · merge-actions wave 2 fix: `queued` only when GraphQL shows a merge-queue entry; an open PR after a successful call is otherwise `unconfirmed`.
