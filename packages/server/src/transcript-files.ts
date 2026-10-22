@@ -69,33 +69,40 @@ export async function listAgentFiles(
 }
 
 type Stamp = { size: number; mtimeMs: number } | undefined
-type Entry = { jsonl: Stamp; meta: Stamp; text: AgentFileText }
+type Entry<T> = { jsonl: Stamp; meta: Stamp; value: T }
+
+/** Reads an agent's files now, with no cache. `meta` is `''` when it can't be read; a missing transcript throws. */
+export async function readAgentFile(file: AgentFile): Promise<AgentFileText> {
+  return {
+    id: file.id,
+    session: file.session,
+    meta: await readFile(file.metaPath, 'utf8').catch(() => ''),
+    jsonl: await readFile(file.jsonlPath, 'utf8'),
+  }
+}
 
 /**
- * Reads agent files, caching each by its files' size and mtime: an agent
- * whose transcript and meta are unchanged is not read again. `retain` drops
- * the cache for agents no longer listed, so memory follows the listing.
+ * Parses each agent's files once and keeps only what `parse` returns, never
+ * the file text: an agent whose transcript and meta keep their size and mtime
+ * is not read again. Both files are stamped before they're read, so a write
+ * during the read is seen on the next call. `retain` forgets agents no longer
+ * listed, so memory follows the listing. A missing transcript throws.
  */
-export function createAgentFileReader(): {
-  read(file: AgentFile): Promise<AgentFileText>
+export function createAgentFileCache<T>(parse: (text: AgentFileText) => T): {
+  read(file: AgentFile): Promise<T>
   retain(files: readonly AgentFile[]): void
 } {
-  const cache = new Map<string, Entry>()
+  const cache = new Map<string, Entry<T>>()
   return {
     async read(file) {
       const jsonl = await stampOf(file.jsonlPath)
       if (!jsonl) throw new Error(`transcript gone: ${file.jsonlPath}`)
       const meta = await stampOf(file.metaPath)
       const hit = cache.get(file.jsonlPath)
-      if (hit && same(hit.jsonl, jsonl) && same(hit.meta, meta)) return hit.text
-      const text: AgentFileText = {
-        id: file.id,
-        session: file.session,
-        meta: meta ? await readFile(file.metaPath, 'utf8').catch(() => '') : '',
-        jsonl: await readFile(file.jsonlPath, 'utf8'),
-      }
-      cache.set(file.jsonlPath, { jsonl, meta, text })
-      return text
+      if (hit && same(hit.jsonl, jsonl) && same(hit.meta, meta)) return hit.value
+      const value = parse(await readAgentFile(file))
+      cache.set(file.jsonlPath, { jsonl, meta, value })
+      return value
     },
     retain(files) {
       const keep = new Set(files.map((f) => f.jsonlPath))
@@ -103,14 +110,6 @@ export function createAgentFileReader(): {
     },
   }
 }
-
-const shared = createAgentFileReader()
-
-/** Reads an agent's files through one shared cache. See `createAgentFileReader`. */
-export const readAgentFile = shared.read
-
-/** Drops the shared cache for agents not in `files`. */
-export const retainAgentFiles = shared.retain
 
 const same = (a: Stamp, b: Stamp) => a?.size === b?.size && a?.mtimeMs === b?.mtimeMs
 

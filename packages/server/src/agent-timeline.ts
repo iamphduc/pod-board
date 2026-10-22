@@ -4,7 +4,7 @@
 // holds tool names and short summaries only (see the model's timeline.ts).
 
 import { parseAgentTimeline, type AgentTimeline, type Board } from '@pod-board/model'
-import { createAgentFileReader, listAgentFiles } from './transcript-files.ts'
+import { listAgentFiles, readAgentFile } from './transcript-files.ts'
 
 export type TimelineSourceDeps = {
   board: () => Board
@@ -22,8 +22,8 @@ export type TimelineSource = {
 export const AGENT_ID = /^[A-Za-z0-9_-]{1,64}$/
 
 export function createTimelineSource(deps: TimelineSourceDeps): TimelineSource {
-  // Its own cache, by size and mtime, so a transcript that didn't change isn't read again.
-  const reader = createAgentFileReader()
+  // No cache: the page asks again only when the agent's lastAt moves, so the file has changed
+  // anyway, and a kept copy of every viewed transcript's text would only grow.
   return {
     async timeline(repoId, agentId) {
       if (!AGENT_ID.test(agentId)) return undefined
@@ -34,7 +34,7 @@ export function createTimelineSource(deps: TimelineSourceDeps): TimelineSource {
       const file = files.find((f) => f.id === agent.id && f.session === agent.session)
       if (!file) return undefined
       try {
-        const { jsonl } = await reader.read(file)
+        const { jsonl } = await readAgentFile(file)
         return parseAgentTimeline({ agentId: agent.id, jsonl, roots: [repo.path] })
       } catch {
         // Deleted between listing and reading.

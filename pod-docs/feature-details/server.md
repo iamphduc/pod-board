@@ -7,9 +7,10 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 ## How it works
 
 - **Repos.** Paths in the config file (`POD_BOARD_CONFIG_DIR`, else the OS config folder) plus every repo a claim file in the ports folder names (`POD_BOARD_PORTS_DIR`, else `<os temp>/pod-ports`). They merge by repo identity: normalized path, compared without case when that folder's file system ignores case (probed once per repo). `source` is `registered`, `claim`, or `both`; a registered spelling wins.
-- **Each repo.** Pod docs → `buildRepoModel`; transcripts changed within `POD_BOARD_TRANSCRIPT_DAYS` (default 30) → `parseAgentTranscript`, pod agents only; PRs from `gh`'s cache. A missing or unreadable folder sets `error` and the other repos still build.
+- **Each repo.** Pod docs → `buildRepoModel`; transcripts changed within `POD_BOARD_TRANSCRIPT_DAYS` (default 30) → `parseAgentTranscript`, pod agents only, through the transcript cache; PRs from `gh`'s cache. A missing or unreadable folder sets `error` and the other repos still build.
 - **`gh`.** Asked only about each live plan's open current-sprint PRs and its hand-back PR (the model's `handBackPr`), plus the hand-back PR of an archived plan a claim names (pod archives the plan before the final merge). For each fix claim (`fix-<slug>` naming no plan, the model's `fixRunNames`) it asks `gh pr list --head fix-<slug> --state all --json number,state,url,statusCheckRollup,headRefName --limit 10` and keeps the open PR, else the newest, with `branch` set on its `PrStatus`; that PR replaces the same number found another way. Branch entries follow the number entries' cache rules, except that only a merged PR is final: a closed one is asked again every 30 s, so a reopen or a new PR on the branch shows. No PR yet (`[]`) is asked again after 30 s. A branch that could read as a flag or holds spaces or shell characters is never passed. `build` never waits on `gh`; a refresh runs every 30 s and at start.
 - **Watching.** One chokidar watcher per folder: the config folder, the ports folder, each repo's `pod-docs/` (`.md` only), and each repo's Claude project folder (subagent transcripts and meta only). A folder that doesn't exist yet is watched through its nearest parent. `POD_BOARD_POLL=1` polls every 500 ms.
+- **Transcript cache.** Each listed transcript keeps only its parsed `AgentRun` (or nothing, for a non-pod agent), never its text, keyed by the size and mtime of its `.jsonl` and `.meta.json`. A change to either one parses the whole file again. Both files are stamped before the read, so a write during the read is seen on the next build. After each build, agents that no repo listed (out of the day window, deleted, or their repo gone) are dropped. The timeline route keeps no cache: it reads the file on each request.
 - **Rebuilds.** After 300 ms with no events (800 ms when polling), but never later than 1.5 s after a burst's first event. One at a time; a rebuild that throws keeps the last Board.
 - **Sending.** Subscribers get a Board only when its JSON changed, ignoring `generatedAt`, each PR's `checkedAt`, and `ghCheckedAt` while `gh` is `ok`.
 - **Unreadable config.** The last repo list stays, and `configError: 'config unreadable'` is set on every build until the file reads again. A missing file is no error.
@@ -32,7 +33,9 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - Keep the cap timer apart from the quiet-spell timer, and never reset it within a burst.
 - Real-file watcher tests must wait out the start-up rebuilds before the edit they time.
 - Real-file watcher tests can't count the boards a burst of edits gives: a runner stall of 300 ms or more between two writes splits the burst into two correct rebuilds. Count boards only with a fake `watch` and fake timers.
-- Every rebuild re-parses every transcript in full; only file text is cached. Fine at 67 MB here, but queued for caching by size and mtime before hosting.
+- Never keep transcript text in a long-lived cache. On a real `~/.claude` (291 agents in 3 repos), the old text cache held about 1 GB, and Claude Code killed board servers for low memory.
+- Drop cache entries once per build, from the listing of every repo together. Dropping per repo, as the old text cache did, empties the other repos' entries on every build.
+- The cache trusts size and mtime: a rewrite that keeps both isn't seen until the next write. Claude only appends to transcripts.
 - Agents on the Board carry no `description`: the meta file's description is assistant-written text no page shows. `AgentRun` still lists it as optional only for old test helpers; never set it.
 - `Claim`, `PrStatus`, and `GhStatus` come from `@pod-board/model`; change the shapes there.
 
@@ -43,6 +46,7 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - 2026-10-19 · board-engineer X1: `configError` on the Board; `livePrNumbers` uses the model's `handBackPr`; the server imports the model's contract types.
 - 2026-10-20 · fix-closeout-idle: `livePrNumbers` also asks about a claimed archived plan's hand-back PR, so its Ship step can read merged.
 - 2026-10-20 · fix-show-fix-runs: `gh` also finds a fix claim's PR by its head branch (`getBranch`), so a fix run's Ship step reads `you merge` or `merged`.
+- 2026-10-21 · fix-cache-transcripts: the board keeps each transcript's parsed run, not its text, and parses only files whose size or mtime changed. On a real `~/.claude`: heap after the first board 986 MB → 13 MB, a rebuild with nothing changed 5 s → 69 ms. The timeline route reads its file fresh.
 - 2026-10-19 · board-engineer wave 2 fix: config edits reach the board through the watcher; poll mode waits one poll interval longer before a rebuild; a new `ghCheckedAt` counts as a change while `gh` isn't `ok`.
 - 2026-10-19 · board-engineer wave 2 fix 2: a rebuild waits at most 1.5 s after a burst's first event, so steady edits still reach clients.
 - 2026-10-19 · board-read · plan complete; final PR held at gate 2 for a dispatch bug outside the server · [report](../reports/board-read.html)

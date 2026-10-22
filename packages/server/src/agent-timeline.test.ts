@@ -66,7 +66,7 @@ describe('timeline source', () => {
     const t = await source.timeline(repoId, 'eng1')
     expect(t).toMatchObject({ agentId: 'eng1', total: 1, events: [{ tool: 'Read', summary: 'Read src/a.ts' }] })
 
-    // A new line shows up on the next call (the cache follows size and mtime).
+    // A new line shows up on the next call (read fresh each time).
     await appendFile(file, toolUse(2, 't2', 'Write', { file_path: join(repo, 'b.ts') }))
     expect((await source.timeline(repoId, 'eng1'))?.events.map((e) => e.summary)).toEqual(['Read src/a.ts', 'Write b.ts'])
 
