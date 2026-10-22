@@ -16,7 +16,7 @@ Which reply pod waits for on a run, and the chat to paste it in. The board never
   6. `not-started`: the plan isn't archived, has at least one sprint, and every sprint is `planned` with no doc → `go` (`Only if pod asked for go.`).
 - **Fix run** (`run` is `fix-<slug>`, a listed fix run). Nothing while one of its agents runs. A reviewed open PR (`fixWaitingPr`) → `fix-waiting` `continue` (`Merge PR #N, then reply continue.`); its PR merged while the run is listed → `fix-merged` `continue` (`PR #N merged.`).
 - **Pod already waits for `continue`** only on `wave-merged`, `sprint-done`, `final-merged`, and `fix-merged` (`SEND_SIGNALS`). The `*-waiting` signals need your merge first.
-- **Session** (`replySession`). From the run's agents (a plan's `isPlanAgent` agents; a fix run's engineers and reviewers, `fixRunAgents`), the one with the newest `lastAt`; ties go to the newer `startedAt`, then the smaller agent id. Agents with no `lastAt` don't count. `id` is its `session`; `startedAt` is the earliest start of any agent of the repo in that session; `resume` is `claude --resume <id>` only when the id matches `^[A-Za-z0-9-]{1,64}$`. No agent → none.
+- **Session** (`replySession`). From the run's agents (a plan's `isPlanAgent` agents; a fix run's engineers and reviewers, `fixRunAgents`), the one with the newest `lastAt`; ties go to the newer `startedAt`, then the smaller agent id. Agents with no `lastAt`, or an empty `session`, don't count. `id` is its `session`; `startedAt` is the earliest start of any agent of the repo in that session; `resume` is `claude --resume <id>` only when the id matches `^[A-Za-z0-9-]{1,64}$`. No agent → none.
 
 ## Why it's this way
 
