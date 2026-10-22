@@ -1,17 +1,18 @@
-// The action log: one JSON line per merge request in `<config dir>/actions.jsonl`, and the newest
+// The action log: one JSON line per merge or answer request in `<config dir>/actions.jsonl`, and the newest
 // 50 in memory for the Board. Read once at start; bad lines are skipped. The rules and why are in
 // pod-docs/feature-details/actions.md.
 
 import { readFileSync } from 'node:fs'
 import { appendFile } from 'node:fs/promises'
-import type { ActionEntry, MergeOutcome } from '@pod-board/model'
+import type { ActionEntry, AnswerOutcome, MergeOutcome, NewActionEntry } from '@pod-board/model'
 
 export const ACTION_LOG_MAX = 50
-const RESULTS = new Set<MergeOutcome>(['merged', 'queued', 'auto-merge', 'stale', 'failed', 'unconfirmed'])
+const MERGE_RESULTS = new Set<string>(['merged', 'queued', 'auto-merge', 'stale', 'failed', 'unconfirmed'] satisfies MergeOutcome[])
+const ANSWER_RESULTS = new Set<string>(['answered', 'changed', 'failed'] satisfies AnswerOutcome[])
 
 export type ActionLog = {
   /** Stamps the entry with `now()` and appends it as one line. `false` when it couldn't be written; then it isn't listed either. */
-  append(entry: Omit<ActionEntry, 'at'>): Promise<boolean>
+  append(entry: NewActionEntry): Promise<boolean>
   /** The newest 50, newest first. */
   recent(): ActionEntry[]
 }
@@ -63,10 +64,14 @@ function parseEntry(line: string): ActionEntry | undefined {
   if (!d || typeof d !== 'object' || Array.isArray(d)) return undefined
   const e = d as Record<string, unknown>
   const str = (k: string) => typeof e[k] === 'string'
-  if (typeof e.at !== 'number' || !Number.isFinite(e.at) || e.action !== 'merge' || !str('repoId') || !str('repo') || !str('target')) return undefined
-  if (!RESULTS.has(e.result as MergeOutcome)) return undefined
+  if (typeof e.at !== 'number' || !Number.isFinite(e.at) || !str('repoId') || !str('repo') || !str('target') || !str('result')) return undefined
   if (e.message !== undefined && !str('message')) return undefined
-  const entry: ActionEntry = { at: e.at, action: 'merge', repoId: e.repoId as string, repo: e.repo as string, target: e.target as string, result: e.result as MergeOutcome }
+  const base = { at: e.at, repoId: e.repoId as string, repo: e.repo as string, target: e.target as string }
+  // Each action has its own results; a result from the other action is a bad line.
+  let entry: ActionEntry
+  if (e.action === 'merge' && MERGE_RESULTS.has(e.result as string)) entry = { ...base, action: 'merge', result: e.result as MergeOutcome }
+  else if (e.action === 'answer' && ANSWER_RESULTS.has(e.result as string)) entry = { ...base, action: 'answer', result: e.result as AnswerOutcome }
+  else return undefined
   if (e.message !== undefined) entry.message = e.message as string
   return entry
 }

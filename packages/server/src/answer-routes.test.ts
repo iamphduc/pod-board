@@ -240,6 +240,7 @@ describe('answer route', () => {
     expect(text).toContain(`${HALT} **Answer (human):** third`)
 
     // A failed write frees the slot too.
+    await writeFile(join(claimedPath, 'pod-docs', 'handoff-queue.md'), `${CLAIMED_ASK}\n`)
     const failing = await setup({ fs: { ...nodeQueueFs, rename: async () => Promise.reject(Object.assign(new Error('x'), { code: 'EACCES' })) } })
     for (let i = 0; i < 2; i++) {
       const res = await failing.post({ repoId: failing.claimedId, line: CLAIMED_ASK, text: 'x' })
@@ -274,7 +275,7 @@ describe('answer route', () => {
     expect(await json<AnswerResult>(failed)).toEqual({ outcome: 'failed', message: "Couldn't write the queue (EACCES).", logged: true })
     expect(f.logged[0]).toMatchObject({ action: 'answer', result: 'failed', message: "Couldn't write the queue (EACCES)." })
     expect(f.events).toEqual(['log', 'rebuild'])
-    expect(await readdir(join(repoPath, 'pod-docs'))).toEqual(['README.md', 'handoff-queue.md', 'plans'])
+    expect((await readdir(join(repoPath, 'pod-docs'))).sort()).toEqual(['README.md', 'handoff-queue.md', 'plans'])
 
     // No log entry holds the answer text or the body.
     for (const e of [...s.logged, ...f.logged]) {

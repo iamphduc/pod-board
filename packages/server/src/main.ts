@@ -1,8 +1,10 @@
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { serve } from '@hono/node-server'
+import { Hono } from 'hono'
 import { createActionLog } from './action-log.ts'
 import { createActionRoutes } from './action-routes.ts'
+import { createAnswerRoutes } from './answer-routes.ts'
 import { createTimelineSource } from './agent-timeline.ts'
 import { createApp } from './app.ts'
 import { createBoardService } from './board-service.ts'
@@ -55,14 +57,19 @@ const app = createApp({
   source: watcher,
   addRepo: (p) => addRepo(configFile, p, platform),
   timeline: createTimelineSource({ board: () => watcher.board(), ...settings, now: Date.now }).timeline,
-  actions: createActionRoutes({
-    board: () => watcher.board(),
-    gh,
-    exec: defaultGhExec,
-    refreshGh: (board) => service.refreshGh(board),
-    rebuild: () => watcher.rebuild(),
-    log,
-  }),
+  actions: new Hono()
+    .route(
+      '/',
+      createActionRoutes({
+        board: () => watcher.board(),
+        gh,
+        exec: defaultGhExec,
+        refreshGh: (board) => service.refreshGh(board),
+        rebuild: () => watcher.rebuild(),
+        log,
+      }),
+    )
+    .route('/', createAnswerRoutes({ board: () => watcher.board(), rebuild: () => watcher.rebuild(), log })),
 })
 
 const server = serve({ fetch: app.fetch, hostname: listen.hostname, port: listen.port }, () => {

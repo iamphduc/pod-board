@@ -45,7 +45,7 @@ function spyFs(hooks: Partial<Record<keyof QueueFs, (...args: string[]) => Promi
     writeFile: wrap('writeFile'),
     rename: wrap('rename'),
     unlink: wrap('unlink'),
-  } as QueueFs & { calls: string[] }
+  } as unknown as QueueFs & { calls: string[] }
 }
 
 describe('queue writer', () => {
