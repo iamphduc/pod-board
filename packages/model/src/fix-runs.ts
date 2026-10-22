@@ -73,6 +73,11 @@ function fixAgents(repo: BoardRepo, name: string, now: number): FixAgent[] {
   return [...builds, ...reviews].sort(byStart)
 }
 
+/** The run's agents, once each, oldest first: the engineers and reviewers its pipeline is built from. */
+export function fixRunAgents(_repo: BoardRepo, _name: string, _now: number): AgentRun[] {
+  return []
+}
+
 /** Listed while its claim exists, unless its PR merged and none of its agents wrote in the last STALE_MS (a leftover claim). */
 function isListed(repo: BoardRepo, name: string, agents: FixAgent[], now: number): boolean {
   if (fixPr(repo, name)?.state !== 'merged') return true
