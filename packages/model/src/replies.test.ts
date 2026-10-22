@@ -116,6 +116,19 @@ describe('runReplies', () => {
     ])
     // Once pod resolves the entry, nothing.
     expect(replies(closing({ prs: [gh(12, 'merged')] }, { ...DONE, queue: [handBack(12, false)] }))).toEqual([])
+    // pod archives the plan before the final merge. Archived and claimed, long after its last agent wrote:
+    const archived: Opts = { ...DONE, status: 'archived' }
+    const old = { agents: [ended({ type: 'pod:reporter', plan: 'alpha', lastAt: NOW - 120 * MIN })] }
+    // gh open, closed, or unknown → still waiting on your merge: one continue, one try.
+    for (const prs of [[gh(12, 'open')], [gh(12, 'closed')], []]) expect(replies(closing({ ...old, prs }, archived))).toEqual(both)
+    expect(replies(closing({ ...old, prs: [gh(12, 'open')] }, archived)).filter((x) => x.reply === 'continue')).toHaveLength(1)
+    // gh merged, the hand-back entry still pending → pod waits for continue to clean up.
+    expect(replies(closing({ ...old, prs: [gh(12, 'merged')] }, archived))).toEqual([
+      { reply: 'continue', signal: 'final-merged', why: 'PR #12 merged: pod cleans up.', pr: 12, key: 'final-merged:12' },
+    ])
+    // Once pod resolves the entry, nothing; with no claim, nothing either.
+    expect(replies(closing({ ...old, prs: [gh(12, 'merged')] }, { ...archived, queue: [handBack(12, false)] }))).toEqual([])
+    expect(replies(repo(files(archived), { ...old, prs: [gh(12, 'merged')] }))).toEqual([])
     // A hand-back beside a handed-back wave: the hand-back wins.
     expect(replies(pushed({}, PUSHED, [handBack(12)])).map((x) => x.signal)).toEqual(['final-waiting', 'final-waiting'])
   })

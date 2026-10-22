@@ -47,8 +47,12 @@ describe('queue answers', () => {
   it('reads the answer apart from the body', () => {
     // At the line's end, after the Resolution.
     expect(splitAnswer('Pick a name **Resolution:** pending **Answer (human):** call it Ladder ')).toEqual({ body: 'Pick a name', answer: 'call it Ladder' })
-    // Before the Resolution: the answer runs up to it.
-    expect(splitAnswer('Pick a name **Answer (human):** Ladder **Resolution:** pending')).toEqual({ body: 'Pick a name', answer: 'Ladder' })
+    // Before the Resolution the marker is body text: the board appends answers after it.
+    expect(splitAnswer('Pick a name **Answer (human):** Ladder **Resolution:** pending')).toEqual({ body: 'Pick a name **Answer (human):** Ladder' })
+    // A later Resolution still ends the answer.
+    expect(splitAnswer('Q **Resolution:** pending **Answer (human):** yes **Resolution:** done')).toEqual({ body: 'Q', answer: 'yes' })
+    // No Resolution at all: nothing the board appended to, so no answer.
+    expect(splitAnswer('Q **Answer (human):** x')).toEqual({ body: 'Q **Answer (human):** x' })
     // The first answer marker counts; any case reads the same.
     expect(splitAnswer('Q **Resolution:** pending **answer (HUMAN):** one **Answer (human):** two')).toEqual({ body: 'Q', answer: 'one **Answer (human):** two' })
     // No answer → no answer field; the body is parseQueue's.
@@ -68,10 +72,23 @@ describe('queue answers', () => {
       ].join('\n'),
     )
     expect([after?.body, after?.answer, after?.isPending]).toEqual(['Pick a name', 'Ladder', true])
-    expect([before?.body, before?.answer, before?.isPending]).toEqual(['Pick a name', 'Ladder', true])
+    expect([before?.body, before?.answer, before?.isPending]).toEqual(['Pick a name **Answer (human):** Ladder', undefined, true])
     expect(none?.body).toBe('Pick a name')
     expect(none?.answer).toBeUndefined()
     expect(none).not.toHaveProperty('answer')
+  })
+
+  it('a body that quotes the answer marker stays answerable', () => {
+    const body = 'gate 1: claude-pod `main` has no `**Answer (human):**` format yet. To unblock: merge it, then reply `continue`.'
+    const quoted = `- \`[2026-10-21 · BLOCKED · orchestrator → human · plan: alpha]\` ${body} **Resolution:** pending`
+    const [entry] = queueOf(quoted)
+    expect(entry?.body).toBe(body)
+    expect(entry).not.toHaveProperty('answer')
+    expect(entry && isAnswerable(entry)).toBe(true)
+    // The board's answer after the Resolution still reads as answered, and the body stays whole.
+    const [answered] = queueOf(withAnswer(quoted, 'go ahead'))
+    expect([answered?.body, answered?.answer, answered?.isPending]).toEqual([body, 'go ahead', true])
+    expect(answered && isAnswerable(answered)).toBe(false)
   })
 
   it('the answer leaves the entry\'s reading unchanged', () => {

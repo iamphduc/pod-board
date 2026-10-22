@@ -14,11 +14,11 @@ const README = '# pod docs\n\npod docs: 2\n'
 type SprintRow = [slug: string, status: string]
 type BoardRow = [wave: number, code: string, pr: string, status: string]
 
-function planDoc(slug: string, sprints: SprintRow[]): string {
+function planDoc(slug: string, sprints: SprintRow[], status = 'active'): string {
   return [
     `# Plan: ${slug}`,
     '',
-    `_Generated: 2026-10-22 · Status: active · Grilled-with: grilling_`,
+    `_Generated: 2026-10-22 · Status: ${status} · Grilled-with: grilling_`,
     '',
     '## Sprint sequence',
     '',
@@ -44,12 +44,12 @@ function sprintDoc(slug: string, plan: string, board: BoardRow[]): string {
   ].join('\n')
 }
 
-type Opts = { sprints?: SprintRow[]; docs?: Record<string, BoardRow[]>; queue?: string[] }
+type Opts = { sprints?: SprintRow[]; docs?: Record<string, BoardRow[]>; queue?: string[]; status?: string }
 
 function files(opts: Opts = {}, plan = 'alpha'): RepoFiles {
   const out: RepoFiles = {
     'pod-docs/README.md': README,
-    [`pod-docs/plans/${plan}.md`]: planDoc(plan, opts.sprints ?? [['one', 'active']]),
+    [`pod-docs/plans/${plan}.md`]: planDoc(plan, opts.sprints ?? [['one', 'active']], opts.status),
     'pod-docs/handoff-queue.md': (opts.queue ?? []).join('\n'),
   }
   for (const [s, rows] of Object.entries(opts.docs ?? {})) out[`pod-docs/sprints/${s}.md`] = sprintDoc(s, plan, rows)
@@ -230,6 +230,17 @@ describe('autoSends', () => {
       const f = BY_SIGNAL[s]
       expect(autoSends(board(f.repo), [toggle(f.run)], NOW, always), s).toEqual([{ repoId: 'id-r', run: f.run, session: 'sess-1', key: keyOf(s) }])
     }
+  })
+
+  it('sends final-merged on an archived close-out', () => {
+    // pod archives the plan before the final merge; the merge comes long after the plan's last agent wrote.
+    const old = [ended({ plan: 'alpha', session: 'sess-1', lastAt: NOW - 120 * MIN })]
+    const closing = (state: PrStatus['state']) => planRepo({ ...DONE, status: 'archived' }, { claims: [claim('alpha')], agents: old, prs: [gh(12, state)] })
+    expect(sendableReply(closing('merged'), 'alpha', 'continue', NOW)).toMatchObject({ reply: 'continue', signal: 'final-merged', key: 'final-merged:12' })
+    expect(autoSends(board(closing('merged')), [toggle('alpha')], NOW, always)).toEqual([{ repoId: 'id-r', run: 'alpha', session: 'sess-1', key: 'final-merged:12' }])
+    expect(autoSends(board(closing('merged')), [toggle('alpha', 'final-merged:12')], NOW, always)).toEqual([])
+    // Not merged yet: nothing to send.
+    expect(autoSends(board(closing('open')), [toggle('alpha')], NOW, always)).toEqual([])
   })
 
   it('one send per stop', () => {
