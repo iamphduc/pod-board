@@ -36,8 +36,11 @@ Which reply pod waits for on a run, and the chat to paste it in. The board names
 - The session is the one whose agent wrote last. If the human started a new chat for the same run with no agents yet, the panel still names the old session.
 - A plan with all sprints `planned` and no doc reads `go` even if pod never asked for it. The `why` carries that warning.
 - `cd "<path>"` doesn't escape a `"` in the repo path.
+- pod archives a plan before its final merge, so `final-merged` usually comes on an archived plan. The plan must stay a run while its hand-back entry is pending, even after the merge and long after its last agent wrote, or the reply and the auto-send vanish while pod still waits.
+- A queue body can quote `**Answer (human):**` (pod's own gate entries do). Only a marker after the entry's `**Resolution:**` is an answer; one before it is body text.
 
 ## History
 
 - 2026-10-21 · queue-and-replies R1 · added: `runReplies`, `replySession`, `fixRunAgents`, and the Reply panel.
 - 2026-10-22 · resume-runs M1 · added: the stop `key` on each reply, `sendableReply`, and `autoSends`.
+- 2026-10-22 · board-actions plan fix · fixed: `final-merged` on an archived, claimed plan after the final merge (it gave no reply); an entry quoting the answer marker in its body now stays answerable.

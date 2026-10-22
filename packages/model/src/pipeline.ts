@@ -108,8 +108,9 @@ const planAgentRecent = (repo: BoardRepo, plan: PlanModel, now: number) =>
 
 /**
  * A plan is a run while a claim names it and it isn't archived. A claimed archived plan is closing out
- * (pod archives the plan before the final merge) while its hand-back waits, it's halted, or one of its
- * agents wrote recently; else the claim is a leftover and the plan is finished. Unclaimed, a plan is a run
+ * (pod archives the plan before the final merge) while its hand-back entry is pending (merged or not: pod
+ * waits for `continue` to clean up after the merge), it's halted, or one of its agents wrote recently; else
+ * the claim is a leftover and the plan is finished. Unclaimed, a plan is a run
  * unless it's archived or finished. Finished: every sprint done, no hand-back waiting, no halt, and none of
  * its agents running (a final review runs after the last sprint is done).
  */
@@ -118,7 +119,7 @@ export function isRun(repo: BoardRepo, plan: PlanModel, now: number): boolean {
   const claimed = isClaimed(repo, plan)
   if (claimed && plan.status !== 'archived') return true
   if (plan.status === 'archived') {
-    return claimed && (pendingHandBack(repo, plan) !== undefined || isHalted(plan) || planAgentRecent(repo, plan, now))
+    return claimed && (handBackPr(plan) !== undefined || isHalted(plan) || planAgentRecent(repo, plan, now))
   }
   return (
     plan.sprints.some((s) => s.status !== 'done') ||

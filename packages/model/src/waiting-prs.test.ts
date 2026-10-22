@@ -185,6 +185,10 @@ describe('waitingPrs', () => {
     expect(waitingPrs(repo(archived), NOW)).toEqual([])
     // A claim lists it again (closing out), so its hand-back waits.
     expect(waitingPrs(repo(archived, { claims: [claim('alpha')] }), NOW).map((w) => w.kind)).toContain('final')
+    // Once gh says it merged, the run stays listed (pod waits for continue) but the final PR no longer waits.
+    const closedOut = files({ status: 'archived', sprints: [['one', 'done']], docs: { one: [[1, 'A1', 'merged', 'done']] }, queue: [handBack(12)] })
+    expect(waitingPrs(repo(closedOut, { claims: [claim('alpha')], prs: [gh(12, 'open')] }), NOW).map((w) => w.kind)).toEqual(['final'])
+    expect(waitingPrs(repo(closedOut, { claims: [claim('alpha')], prs: [gh(12, 'merged')] }), NOW)).toEqual([])
     // A repo with an error or unsupported docs lists no runs.
     expect(waitingPrs(pushed({ error: 'folder not found' }), NOW)).toEqual([])
     expect(waitingPrs(repo({ 'pod-docs/README.md': 'pod docs: 1\n' }), NOW)).toEqual([])

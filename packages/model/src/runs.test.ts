@@ -258,8 +258,11 @@ describe('listRuns', () => {
     expect(runsOf(repo('r', planFiles({ ...closed, queue: [resolved] }), { claims: [claim] }))).toEqual(none)
     expect(runsOf(repo('r', planFiles(closed), { claims: [claim] }))).toEqual(none)
     expect(runsOf(repo('r', planFiles({ ...closed, queue: [resolved] }), { claims: [claim], agents: [ended(31)] }))).toEqual(none)
-    // A hand-back still pending in the queue but its PR known merged: no pending hand-back, so off the list.
-    expect(runsOf(repo('r', planFiles({ ...closed, queue: [pending] }), { claims: [claim], prs: [merged] }))).toEqual(none)
+    // A hand-back still pending in the queue but its PR known merged: pod waits for continue to clean up, so listed.
+    expect(view(repo('r', planFiles({ ...closed, queue: [pending] }), { claims: [claim], prs: [merged] }))).toEqual([['alpha', 'closing out', 'needs-you']])
+    expect(view(repo('r', planFiles({ ...closed, queue: [pending] }), { claims: [claim], prs: [merged], agents: [ended(120)] }))).toEqual([['alpha', 'closing out', 'needs-you']])
+    // Resolved after the merge: off the list.
+    expect(runsOf(repo('r', planFiles({ ...closed, queue: [resolved] }), { claims: [claim], prs: [merged] }))).toEqual(none)
     // An agent of the plan left running long ago (stale, never ended) doesn't keep it either.
     const stale = agent({ type: 'pod:reporter', plan: 'alpha', lastAt: NOW - 31 * MIN })
     expect(runsOf(repo('r', planFiles(closed), { claims: [claim], agents: [stale] }))).toEqual(none)

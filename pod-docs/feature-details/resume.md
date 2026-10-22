@@ -53,3 +53,4 @@ The board can send `continue` or `go` to a pod run's own Claude session, so you 
 ## History
 
 - 2026-10-22 · resume-runs S1: the resume and auto-continue routes, the toggle store, the idle check, and the automatic check.
+- 2026-10-22 · board-actions plan fix: the auto-continue toggle and `final-merged` now work on an archived plan after its final merge (the route answered `404 not a run`).

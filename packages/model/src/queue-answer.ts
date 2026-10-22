@@ -21,18 +21,20 @@ export function queueLines(md: string): string[] {
 
 /**
  * The text after an entry's header, split into its body and its answer. The answer is the text after the
- * first `**Answer (human):**`, up to a `**Resolution:**` that follows it. The body is `parseQueue`'s
- * (cut at the Resolution), cut at the answer too. An empty answer is still an answer.
+ * first `**Answer (human):**` that follows the entry's first `**Resolution:**` (the board appends it at the
+ * line's end), up to a later `**Resolution:**`. A marker before the Resolution is body text, as when an entry
+ * quotes it. The body is `parseQueue`'s (cut at the Resolution). An empty answer is still an answer.
  */
 export function splitAnswer(rest: string): { body: string; answer?: string } {
-  const mark = ANSWER.exec(rest)
-  if (!mark) return { body: cutResolution(rest) }
-  const after = rest.slice(mark.index + mark[0].length)
+  const body = cutResolution(rest)
+  const resolution = RESOLUTION.exec(rest)
+  if (!resolution) return { body }
+  const tail = rest.slice(resolution.index + resolution[0].length)
+  const mark = ANSWER.exec(tail)
+  if (!mark) return { body }
+  const after = tail.slice(mark.index + mark[0].length)
   const end = RESOLUTION.exec(after)
-  return {
-    body: cutResolution(rest.slice(0, mark.index)),
-    answer: (end ? after.slice(0, end.index) : after).trim(),
-  }
+  return { body, answer: (end ? after.slice(0, end.index) : after).trim() }
 }
 
 const cutResolution = (text: string) => text.replace(/\*\*Resolution:\*\*.*$/i, '').trim()

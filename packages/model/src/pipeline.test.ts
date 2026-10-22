@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as model from './index.ts'
 import type { AgentRun, BoardRepo, PrStatus } from './board.ts'
-import { buildPipeline, type Pipeline, type Stage } from './pipeline.ts'
+import { buildPipeline, isRun, type Pipeline, type Stage } from './pipeline.ts'
 import { buildRepoModel, type RepoFiles } from './run-model.ts'
 
 // Every snapshot is built inline: test/no-io.test.ts scans this folder, so no file reads here.
@@ -415,6 +415,13 @@ describe('buildPipeline', () => {
     const offList = build(repo({ ...files({ ...done, queue: [handBack(12)] }), 'pod-docs/plans/alpha.md': planDoc('ALPHA', [['one', 'done']]).replace('Status: active', 'Status: archived') }))
     expect(steps(offList, 'ship')).toEqual([['Final PR', 'you', 'PR #12 · you merge']])
     expect(merges(offList)).toEqual([])
+    // Claimed, it's closing out: Ship carries merge until gh says merged, then none, though the run stays listed.
+    const archivedFiles = { ...files({ ...done, queue: [handBack(12)] }), 'pod-docs/plans/alpha.md': planDoc('ALPHA', [['one', 'done']]).replace('Status: active', 'Status: archived') }
+    const claims = [{ portBase: 3100, repoPath: '/r', plan: 'alpha' }]
+    expect(merges(build(repo(archivedFiles, { claims, prs: [status(12, 'open')] })))).toEqual([['final-pr', { number: 12 }]])
+    const mergedOut = repo(archivedFiles, { claims, prs: [status(12, 'merged')] })
+    expect(isRun(mergedOut, mergedOut.model.plans[0]!, NOW)).toBe(true)
+    expect(merges(build(mergedOut))).toEqual([])
   })
 
   it('is exported from the package entry', () => {
