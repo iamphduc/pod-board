@@ -1,4 +1,5 @@
 import { homedir, tmpdir } from 'node:os'
+import { dirname } from 'node:path'
 import { serve } from '@hono/node-server'
 import { createTimelineSource } from './agent-timeline.ts'
 import { createApp } from './app.ts'
@@ -7,6 +8,7 @@ import { portsDir } from './claims.ts'
 import { configPath, listenConfig, portFromEnv } from './config.ts'
 import { createGhReader } from './gh.ts'
 import { addRepo } from './repos-config.ts'
+import { createSessionToken, writeSessionToken } from './session-token.ts'
 import { claudeDir, transcriptDays } from './transcript-files.ts'
 import { createBoardWatcher } from './watcher.ts'
 
@@ -29,12 +31,22 @@ try {
 }
 const { listen, webPort, configFile } = settings
 
+// A fresh token each launch, written before anything listens. No token file, no API.
+const token = createSessionToken()
+try {
+  await writeSessionToken(dirname(configFile), token)
+} catch (err) {
+  console.error(`pod-board: ${err instanceof Error ? err.message : String(err)}`)
+  process.exit(1)
+}
+
 const service = createBoardService({ ...settings, platform, gh: createGhReader() })
 const watcher = createBoardWatcher({ service, ...settings, poll: env.POD_BOARD_POLL === '1' })
 await watcher.start()
 
 const app = createApp({
   ports: [listen.port, webPort],
+  token,
   source: watcher,
   addRepo: (p) => addRepo(configFile, p, platform),
   timeline: createTimelineSource({ board: () => watcher.board(), ...settings, now: Date.now }).timeline,

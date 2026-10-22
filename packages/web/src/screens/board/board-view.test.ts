@@ -131,6 +131,30 @@ describe('card state', () => {
     expect(stateOf(one([{ wave: 1, code: 'C1' }, { wave: 1, code: 'C2' }], {}, [running({ sprint: 's1', slice: 'C2' })]), 'C1')).toBe('waiting')
   })
 
+  it('cards of a waiting wave need you', () => {
+    const handedBack: BoardRow[] = [
+      { wave: 1, code: 'A1', status: 'done', pr: pr(5) },
+      { wave: 2, code: 'B1', status: 'pushed', pr: pr(7) },
+      { wave: 2, code: 'B2', status: 'pushed', pr: pr(7) },
+      { wave: 3, code: 'C1' },
+    ]
+    const b = wb(one(handedBack))
+    expect(['A1', 'B1', 'B2', 'C1'].map((c) => card(b, c).state)).toEqual(['merged', 'needs-you', 'needs-you', 'waiting'])
+    // With no ask naming it, the card says what you do.
+    expect(card(b, 'B1').meta).toBe('PR #7 · you merge')
+    // A running engineer of the wave: running, as today.
+    expect(stateOf(one(handedBack, {}, [running({ sprint: 's1', slice: 'B2' })]), 'B1')).toBe('running')
+    // blocked keeps precedence: a blocked slice blocks the wave, and its card reads blocked.
+    const withBlock = one([{ wave: 1, code: 'B1', status: 'pushed', pr: pr(7) }, { wave: 1, code: 'B2', status: 'blocked' }])
+    expect(['B1', 'B2'].map((c) => stateOf(withBlock, c))).toEqual(['running', 'blocked'])
+    // merged keeps precedence: a done slice in a waiting wave reads merged.
+    const mixed = wb(one([{ wave: 1, code: 'B1', status: 'done', pr: pr(7) }, { wave: 1, code: 'B2', status: 'pushed', pr: pr(7) }]))
+    expect([card(mixed, 'B1').state, card(mixed, 'B2').state]).toEqual(['merged', 'needs-you'])
+    // A shown sprint that isn't current (the plan's last sprint with a doc) has no waiting wave.
+    const old = repo({ sprints: [['s1', 'done']], docs: { s1: [{ wave: 1, code: 'B1', status: 'pushed', pr: pr(7) }] } })
+    expect(stateOf(old, 'B1')).toBe('running')
+  })
+
   it('needs-you only from an entry naming this slice, with this sprint or none', () => {
     const rows = [{ wave: 1, code: 'C1' }]
     expect(stateOf(one(rows, { queue: [q('PENDING', 'engineer → human', 'plan: alpha · slice: C1', 'x')] }), 'C1')).toBe('needs-you')

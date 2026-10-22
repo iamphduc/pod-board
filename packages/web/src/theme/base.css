@@ -230,6 +230,127 @@ a {
   border-color: var(--bad);
 }
 
+/* Quiet button: no fill or frame until hovered, for the lesser choice (Cancel). */
+.btn.quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+.btn.quiet:hover {
+  background: var(--panel-2);
+  border-color: var(--line);
+  color: var(--fg);
+}
+
+/* Multi-line input: <textarea class="input">. Body font, grows downward only. */
+textarea.input {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  font: 400 var(--size-small) / 1.45 var(--body);
+  resize: vertical;
+}
+
+/*
+ * Switch: <button class="switch" role="switch" aria-checked="false">label</button>.
+ * The track (::before) and knob (::after) are drawn; the label is the button's
+ * text. On moves the knob right and fills the track, so state shows in form.
+ */
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: 500 var(--size-micro) / 1 var(--mono);
+  cursor: pointer;
+}
+
+.switch::before {
+  content: "";
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border: 1px solid var(--muted);
+  border-radius: var(--radius-pill);
+  background: var(--panel-2);
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.switch[aria-checked="true"]::before {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.switch[aria-checked="true"]::after {
+  background: var(--panel);
+  transform: translateX(12px);
+}
+
+.switch:hover::before {
+  border-color: var(--fg);
+}
+
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/*
+ * In-place panel: opens under the step or entry it acts on, never as a modal.
+ * Put the buttons in .inplace-actions; they stack on a phone.
+ */
+.inplace {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  background: var(--panel-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.inplace-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Phone: every control is a 44 px touch target. */
+@media (max-width: 480px) {
+  .btn,
+  .input,
+  .switch {
+    min-height: 44px;
+  }
+
+  .inplace-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

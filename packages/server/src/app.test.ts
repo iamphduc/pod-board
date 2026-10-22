@@ -2,10 +2,11 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AgentTimeline, Board } from '@pod-board/model'
-import type { Hono } from 'hono'
+import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { createApp, type AppDeps, type BoardSource } from './app.ts'
 import { createBoardService } from './board-service.ts'
+import { createSessionToken } from './session-token.ts'
 import type { GhReader } from './gh.ts'
 import { normalizeRepoPath } from './guard.ts'
 import { addRepo } from './repos-config.ts'
@@ -16,6 +17,9 @@ const WEB = 3061
 const HOST = { host: `127.0.0.1:${API}` }
 const POST_HEADERS = { ...HOST, origin: `http://127.0.0.1:${WEB}`, 'content-type': 'application/json' }
 const platform = process.platform
+
+const TOKEN = createSessionToken()
+const ACTION_HEADERS = { ...POST_HEADERS, 'x-pod-board-token': TOKEN }
 
 const BOARD: Board = { generatedAt: 1, gh: 'unknown', repos: [] }
 
@@ -48,9 +52,11 @@ const TIMELINE: AgentTimeline = {
 type TimelineFn = AppDeps['timeline']
 const noTimeline: TimelineFn = async () => undefined
 
-function fakeApp(opts: { pingMs?: number; source?: BoardSource; timeline?: TimelineFn } = {}): Hono {
+function fakeApp(opts: { pingMs?: number; source?: BoardSource; timeline?: TimelineFn; actions?: Hono } = {}): Hono {
   return createApp({
     ports: [API, WEB],
+    token: TOKEN,
+    ...(opts.actions === undefined ? {} : { actions: opts.actions }),
     source: opts.source ?? fakeSource().source,
     addRepo: async () => ({ error: 'not a directory' }),
     timeline: opts.timeline ?? noTimeline,
@@ -137,7 +143,7 @@ describe('add repo route', () => {
     const service = createBoardService({ configFile, portsDir, claudeDir, transcriptDays: 30, platform, gh })
     watcher = createBoardWatcher({ service, configFile, portsDir, claudeDir })
     await watcher.start()
-    app = createApp({ ports: [API, WEB], source: watcher, addRepo: (p) => addRepo(configFile, p, platform), timeline: noTimeline })
+    app = createApp({ ports: [API, WEB], token: TOKEN, source: watcher, addRepo: (p) => addRepo(configFile, p, platform), timeline: noTimeline })
   })
 
   afterEach(async () => {
@@ -191,6 +197,15 @@ describe('add repo route', () => {
     expect(await missing.json()).toEqual({ error: 'not a directory' })
   })
 
+  test('add repo needs no token', async () => {
+    const repo = join(root, 'repo-five')
+    await mkdir(repo)
+    // POST_HEADERS has Host, Origin, and the JSON type, and no token.
+    expect(POST_HEADERS).not.toHaveProperty('x-pod-board-token')
+    expect((await post(JSON.stringify({ path: repo }))).status).toBe(201)
+    expect((await post(JSON.stringify({ path: repo }))).status).toBe(409)
+  })
+
   test('409 for a repo already registered', async () => {
     const repo = join(root, 'repo-three')
     await mkdir(repo)
@@ -213,6 +228,7 @@ describe('add repo route', () => {
   test('500 when the config file cannot be written', async () => {
     const res = await createApp({
       ports: [API, WEB],
+      token: TOKEN,
       source: watcher,
       addRepo: () => Promise.reject(new Error('EACCES')),
       timeline: noTimeline,
@@ -309,5 +325,134 @@ describe('guard on every route', () => {
     expect((await app.request('/', { headers: HOST })).status).toBe(404)
     // Only GET answers on the health route.
     expect((await app.request('/api/health', { method: 'POST', headers: POST_HEADERS })).status).toBe(404)
+  })
+})
+
+/** Action routes that echo what they got, counting each call. */
+function echoActions() {
+  const calls: unknown[] = []
+  const actions = new Hono()
+  actions.post('/echo', async (c) => {
+    const body: unknown = await c.req.json()
+    calls.push(body)
+    return c.json({ got: body })
+  })
+  return { actions, calls }
+}
+
+const noCorsHeaders = (res: Response) => expect([...res.headers.keys()].filter((k) => k.toLowerCase().startsWith('access-control-'))).toEqual([])
+
+describe('action routes', () => {
+  const setup = () => {
+    const { actions, calls } = echoActions()
+    const app = fakeApp({ actions })
+    const send = (headers: Record<string, string>, opts: { method?: string; body?: string; path?: string } = {}) => {
+      const method = opts.method ?? 'POST'
+      return app.request(opts.path ?? '/api/actions/echo', {
+        method,
+        headers,
+        ...(method === 'GET' || method === 'HEAD' ? {} : { body: opts.body ?? '{"n":1}' }),
+      })
+    }
+    return { app, calls, send }
+  }
+  const { 'x-pod-board-token': _token, ...noToken } = ACTION_HEADERS
+
+  const refused = async (res: Response, status: number, error: string, label: string) => {
+    expect(res.status, label).toBe(status)
+    expect(await res.json(), label).toEqual({ error })
+    noCorsHeaders(res)
+  }
+
+  test('action without token is refused', async () => {
+    const { send, calls } = setup()
+    await refused(await send(noToken), 403, 'bad token', 'no token')
+    await refused(await send({ ...noToken, 'x-pod-board-token': '' }), 403, 'bad token', 'empty token')
+    expect(calls).toEqual([])
+  })
+
+  test('action with wrong token is refused', async () => {
+    const { send, calls } = setup()
+    const wrong = createSessionToken()
+    expect(wrong).toHaveLength(TOKEN.length)
+    await refused(await send({ ...ACTION_HEADERS, 'x-pod-board-token': wrong }), 403, 'bad token', 'same length')
+    await refused(await send({ ...ACTION_HEADERS, 'x-pod-board-token': TOKEN.slice(1) }), 403, 'bad token', 'shorter')
+    await refused(await send({ ...ACTION_HEADERS, 'x-pod-board-token': TOKEN + 'x' }), 403, 'bad token', 'longer')
+    expect(calls).toEqual([])
+  })
+
+  test('action with wrong host is refused', async () => {
+    const { send, calls } = setup()
+    await refused(await send({ ...ACTION_HEADERS, host: `evil.example:${API}` }), 403, 'forbidden host', 'foreign host')
+    await refused(await send({ ...ACTION_HEADERS, host: '127.0.0.1:9' }), 403, 'forbidden host', 'other port')
+    expect(calls).toEqual([])
+  })
+
+  test('action with missing or wrong origin is refused', async () => {
+    const { send, calls } = setup()
+    const { origin: _, ...noOrigin } = ACTION_HEADERS
+    await refused(await send(noOrigin), 403, 'forbidden origin', 'missing')
+    await refused(await send({ ...ACTION_HEADERS, origin: 'http://evil.example' }), 403, 'forbidden origin', 'foreign')
+    await refused(await send({ ...ACTION_HEADERS, origin: 'null' }), 403, 'forbidden origin', 'null')
+    expect(calls).toEqual([])
+  })
+
+  test('action with non-JSON body is refused', async () => {
+    const { send, calls } = setup()
+    for (const type of ['text/plain', 'application/x-www-form-urlencoded', 'multipart/form-data; boundary=x']) {
+      await refused(await send({ ...ACTION_HEADERS, 'content-type': type }), 415, 'unsupported media type', type)
+    }
+    const { 'content-type': _, ...noType } = ACTION_HEADERS
+    await refused(await send(noType), 415, 'unsupported media type', 'no type')
+    expect(calls).toEqual([])
+  })
+
+  test('action method and body are checked', async () => {
+    const { send, calls } = setup()
+    await refused(await send({ host: HOST.host, 'x-pod-board-token': TOKEN }, { method: 'GET' }), 405, 'method not allowed', 'GET')
+    await refused(await send(ACTION_HEADERS, { method: 'PUT' }), 405, 'method not allowed', 'PUT')
+    for (const body of ['{ nope', '[]', 'null', '']) {
+      await refused(await send(ACTION_HEADERS, { body }), 400, 'bad request', JSON.stringify(body))
+    }
+    expect(calls).toEqual([])
+  })
+
+  test('action checks run in order and fail closed', async () => {
+    const { send, calls } = setup()
+    // A wrong Origin and no token: the Origin check answers.
+    await refused(await send({ ...noToken, origin: 'http://evil.example' }), 403, 'forbidden origin', 'origin before token')
+    // GET with no token: the method check answers.
+    await refused(await send({ host: HOST.host }, { method: 'GET' }), 405, 'method not allowed', 'method before token')
+    // A form post with no token: the type check answers.
+    await refused(await send({ ...noToken, 'content-type': 'text/plain' }, { body: 'a=1' }), 415, 'unsupported media type', 'type before token')
+    // No token and a bad body: the token check answers.
+    await refused(await send(noToken, { body: '[]' }), 403, 'bad token', 'token before body')
+    // The bare /api/actions path is guarded too.
+    await refused(await send(noToken, { path: '/api/actions' }), 403, 'bad token', 'bare path')
+    expect(calls).toEqual([])
+  })
+
+  test('valid action reaches its route', async () => {
+    const { send, calls } = setup()
+    const res = await send(ACTION_HEADERS, { body: '{"n":1}' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ got: { n: 1 } })
+    expect(calls).toEqual([{ n: 1 }])
+    noCorsHeaders(res)
+    // The web port's origin and a charset are fine too.
+    const charset = await send({ ...ACTION_HEADERS, origin: `http://localhost:${WEB}`, host: `localhost:${WEB}`, 'content-type': 'application/json; charset=utf-8' })
+    expect(charset.status).toBe(200)
+    // An unknown action path past the guard is a 404.
+    expect((await send(ACTION_HEADERS, { path: '/api/actions/nope' })).status).toBe(404)
+  })
+
+  test('with no action routes, a request past the guard gets 404', async () => {
+    const app = fakeApp()
+    const ok = await app.request('/api/actions/echo', { method: 'POST', headers: ACTION_HEADERS, body: '{}' })
+    expect(ok.status).toBe(404)
+    // The guard still runs first.
+    const res = await app.request('/api/actions/echo', { method: 'POST', headers: noToken, body: '{}' })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'bad token' })
   })
 })
