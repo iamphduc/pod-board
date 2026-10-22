@@ -224,6 +224,8 @@ describe('runReplies', () => {
   it('is exported from the package entry', () => {
     expect(model.runReplies).toBe(runReplies)
     expect(model.replySession).toBe(replySession)
+    // Only these signals mean pod already waits for continue.
+    expect([...model.SEND_SIGNALS].sort()).toEqual(['final-merged', 'fix-merged', 'sprint-done', 'wave-merged'])
   })
 })
 

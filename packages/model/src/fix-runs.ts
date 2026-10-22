@@ -57,11 +57,9 @@ function turnsOf(a: AgentRun, now: number): Turn[] {
  * turn takes its `round` field; else, and for a resumed turn, 2 when it started after a fix pass, else 1.
  */
 function fixAgents(repo: BoardRepo, name: string, now: number): FixAgent[] {
-  const pr = fixPr(repo, name)?.number
-  const isReviewer = (a: AgentRun) =>
-    isType(a, 'reviewer') && a.kind === 'fix' && (a.branch === name || (a.pr !== undefined && a.pr === pr))
-  const reviewers = repo.agents.filter(isReviewer).flatMap((a) => turnsOf(a, now))
-  const engineers = repo.agents.filter((a) => isType(a, 'engineer') && a.branch === name).flatMap((a) => turnsOf(a, now))
+  const { engineers: eng, reviewers: rev } = matchFixAgents(repo, name)
+  const reviewers = rev.flatMap((a) => turnsOf(a, now))
+  const engineers = eng.flatMap((a) => turnsOf(a, now))
   const start = (x: Turn) => x.a.startedAt ?? 0
   const firstReview = Math.min(...reviewers.map((x) => x.a.startedAt ?? Number.POSITIVE_INFINITY))
   const builds = engineers.map((x): FixAgent => ({ ...x, role: start(x) > firstReview ? 'fix pass' : 'engineer' }))
@@ -74,8 +72,21 @@ function fixAgents(repo: BoardRepo, name: string, now: number): FixAgent[] {
 }
 
 /** The run's agents, once each, oldest first: the engineers and reviewers its pipeline is built from. */
-export function fixRunAgents(_repo: BoardRepo, _name: string, _now: number): AgentRun[] {
-  return []
+export function fixRunAgents(repo: BoardRepo, name: string, _now: number): AgentRun[] {
+  if (!fixRunNames(repo).includes(name)) return []
+  const { engineers, reviewers } = matchFixAgents(repo, name)
+  return [...engineers, ...reviewers].sort((x, y) => (x.startedAt ?? 0) - (y.startedAt ?? 0))
+}
+
+/** Engineers by their dispatch branch; reviewers by `kind: fix` plus the branch or the PR number. */
+function matchFixAgents(repo: BoardRepo, name: string): { engineers: AgentRun[]; reviewers: AgentRun[] } {
+  const pr = fixPr(repo, name)?.number
+  const isReviewer = (a: AgentRun) =>
+    isType(a, 'reviewer') && a.kind === 'fix' && (a.branch === name || (a.pr !== undefined && a.pr === pr))
+  return {
+    engineers: repo.agents.filter((a) => isType(a, 'engineer') && a.branch === name),
+    reviewers: repo.agents.filter(isReviewer),
+  }
 }
 
 /** Listed while its claim exists, unless its PR merged and none of its agents wrote in the last STALE_MS (a leftover claim). */
