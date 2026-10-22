@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
@@ -14,7 +14,9 @@ let repo: string
 let queue: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'pod-board-a1-writer-'))
+  // Resolved once, like the real realpath does: macOS temp is /var -> /private/var, Windows temp can be an 8.3 short name.
+  // Fakes below build their targets from this, so the writer compares like with like.
+  root = await realpath(await mkdtemp(join(tmpdir(), 'pod-board-a1-writer-')))
   repo = join(root, 'repo')
   await mkdir(join(repo, 'pod-docs'), { recursive: true })
   queue = join(repo, 'pod-docs', 'handoff-queue.md')
