@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -14,6 +14,7 @@ const SESSION = '0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b'
 
 type Record = { argv: string[]; env: { [k: string]: string }; cwd: string; pid: number }
 
+let realTmp: string
 let tmp: string
 let binDir: string
 let logDir: string
@@ -98,7 +99,10 @@ const readRecord = async (): Promise<Record> => {
 }
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'claude-runner-'))
+  // The temp root sits behind a link, like macOS /var -> /private/var.
+  realTmp = mkdtempSync(join(tmpdir(), 'claude-runner-'))
+  tmp = `${realTmp}-link`
+  symlinkSync(realTmp, tmp, 'junction')
   binDir = join(tmp, 'bin')
   logDir = join(tmp, 'logs')
   repo = join(tmp, 'repo')
@@ -112,7 +116,8 @@ afterEach(async () => {
   for (const pid of pids) if (alive(pid)) process.kill(pid)
   await waitFor(() => [...pids].every((p) => !alive(p)))
   pids.clear()
-  rmSync(tmp, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })
+  rmSync(tmp, { force: true, maxRetries: 20, retryDelay: 100 })
+  rmSync(realTmp, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })
 })
 
 describe('createClaudeRunner', () => {
