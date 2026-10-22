@@ -671,16 +671,78 @@
   max-width: 100%;
 }
 
-/* Phone: each row stacks, the copy button under its text. */
+/* A reply row, and the result of its Continue or Go under it. */
+.reply-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.reply-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.resume-outcome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  min-width: 0;
+  font-size: var(--size-small);
+}
+
+.resume-result,
+.resume-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  flex: 1 1 14rem;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.resume-error {
+  color: var(--bad-ink);
+}
+
+/* The auto-continue switch beside the run's state chip; a failed save's message beside it. */
+.auto-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.auto-switch-error {
+  color: var(--bad-ink);
+  font-size: var(--size-small);
+  overflow-wrap: anywhere;
+}
+
+/* Phone: each row stacks, the copy and send buttons under its text, full width. */
 @media (max-width: 480px) {
   .reply-row,
-  .reply-cmd {
+  .reply-cmd,
+  .reply-actions,
+  .resume-outcome {
     flex-direction: column;
     align-items: stretch;
   }
 
   .reply-copy,
-  .reply-copy .btn {
+  .reply-copy .btn,
+  .reply-actions > .btn,
+  .resume-outcome > .btn {
     width: 100%;
   }
 }

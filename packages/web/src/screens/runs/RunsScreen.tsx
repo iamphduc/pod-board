@@ -3,6 +3,7 @@ import type { StreamState } from '../../board-stream.ts'
 import { hashFor, type View } from '../../selection.ts'
 import { BoardScreen } from '../board/BoardScreen.tsx'
 import { ActionLog } from './ActionLog.tsx'
+import { AutoContinueSwitch } from './AutoContinueSwitch.tsx'
 import { AddRepoForm } from './AddRepoForm.tsx'
 import { Chip } from './Chip.tsx'
 import { FixRun } from './FixRun.tsx'
@@ -10,6 +11,7 @@ import { OtherActivity } from './OtherActivity.tsx'
 import { Pipeline } from './Pipeline.tsx'
 import { ReplyPanel } from './ReplyPanel.tsx'
 import { replyPanel } from './reply-view.ts'
+import { switchView } from './resume-flow.ts'
 import { RunsList } from './RunsList.tsx'
 import { SliceLog } from './SliceLog.tsx'
 import { ThemeControl } from './ThemeControl.tsx'
@@ -44,6 +46,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
   const others = repo ? otherActivity(repo, now) : []
   const notices = banners(board, stream)
   const reply = replyPanel(selected, repo, now)
+  const autoSwitch = switchView(selected, board)
   return (
     <div className="screen">
       <aside className="side">
@@ -58,6 +61,9 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
         <div className="bar">
           <h1 className="title">{selected ? barTitle(selected) : 'Pod Board'}</h1>
           {selected && <Chip chip={runChip(selected.state)} />}
+          {selected?.plan !== undefined && autoSwitch && (
+            <AutoContinueSwitch key={`${selected.repoId}/${selected.plan}`} target={{ repoId: selected.repoId, run: selected.plan }} on={autoSwitch.on} />
+          )}
           {selected?.portBase !== undefined && <span className="mono note">ports {selected.portBase}</span>}
           <ThemeControl />
         </div>
@@ -80,7 +86,9 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
             ))}
           </div>
         )}
-        {reply && repo && selected && <ReplyPanel key={`${repo.id}/${selected.plan}`} view={reply} />}
+        {repo && selected?.plan !== undefined && (
+          <ReplyPanel key={`${repo.id}/${selected.plan}`} view={reply} target={{ repoId: repo.id, run: selected.plan }} />
+        )}
         {!board ? (
           <p className="muted">{stream === 'lost' ? 'Waiting for the server…' : 'Connecting to the server…'}</p>
         ) : !selected ? (
