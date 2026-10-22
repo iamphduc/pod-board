@@ -4,7 +4,7 @@
 // pod-docs/feature-details/runs-and-pipeline.md.
 
 import type { AgentRun, AgentState, BoardRepo, PrStatus } from './board.ts'
-import { isPlanAgent, spend, type Stage, type Step, type StepState } from './pipeline.ts'
+import { isPlanAgent, prByBranch, spend, type Stage, type Step, type StepState } from './pipeline.ts'
 import { formatTokens } from './pod-flow/model.ts'
 import { agentState, STALE_MS } from './transcript.ts'
 
@@ -32,7 +32,7 @@ export function fixRunNames(repo: Pick<BoardRepo, 'model' | 'claims'>): string[]
 }
 
 /** The PR gh found by the run's head branch. */
-export const fixPr = (repo: BoardRepo, name: string): PrStatus | undefined => repo.prs.find((p) => p.branch === name)
+export const fixPr = (repo: BoardRepo, name: string): PrStatus | undefined => prByBranch(repo, name)
 
 type Turn = { a: AgentRun; turn?: number; state: AgentState }
 

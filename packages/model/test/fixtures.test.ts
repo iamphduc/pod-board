@@ -211,6 +211,14 @@ describe('a run in its close-out (chess-web ui-polish)', () => {
     expect(ship).toEqual([{ key: 'final-pr', label: 'Final PR', state: 'you', detail: 'PR #91 · you merge' }])
   })
 
+  test('before the hand-back, Ship shows the final PR gh found by the plan branch', () => {
+    const shipOf = (prs: PrStatus[]) => buildPipeline(repo({ prs }), 'ui-polish', NOW)?.stages.find((s) => s.key === 'ship')?.steps
+    const pr = (state: PrStatus['state']): PrStatus => ({ number: 91, state, checks: 'pass', checkedAt: NOW, branch: 'ui-polish' })
+    expect(shipOf([pr('open')])).toEqual([{ key: 'final-pr', label: 'Final PR', state: 'wait', detail: 'PR #91 · after review' }])
+    expect(shipOf([pr('merged')])).toEqual([{ key: 'final-pr', label: 'Final PR', state: 'done', detail: 'merged PR #91' }])
+    expect(shipOf([])).toEqual([{ key: 'final-pr', label: 'Final PR', state: 'wait', detail: 'not open yet' }])
+  })
+
   test('after the merge, a leftover claim with nothing running leaves the list (hand-back resolved or deleted)', () => {
     const idle = [{ repoId: 'chess-web', repo: 'chess-web', where: 'no active plan', state: 'idle' }]
     const merged: PrStatus = { number: 91, state: 'merged', checks: 'pass', checkedAt: NOW }

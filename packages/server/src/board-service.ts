@@ -119,8 +119,8 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
     const numbered = livePrNumbers(model, entry.claims)
       .map((n) => deps.gh.get(entry.path, n))
       .filter((pr): pr is PrStatus => pr !== undefined)
-    // A fix run's PR, found by its head branch; it replaces the same PR found by number.
-    const byBranch = fixRunNames({ model, claims: entry.claims })
+    // A fix run's PR or a plan's final PR, found by its head branch; it replaces the same PR found by number.
+    const byBranch = prBranches({ model, claims: entry.claims })
       .map((b) => deps.gh.getBranch(entry.path, b))
       .filter((pr): pr is PrStatus => pr !== undefined)
     const prs = [...numbered.filter((p) => !byBranch.some((b) => b.number === p.number)), ...byBranch]
@@ -146,7 +146,7 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
       // One repo at a time: the first call settles `gh auth status` for the rest.
       for (const repo of board.repos) {
         if (repo.error !== undefined) continue
-        if (await deps.gh.refresh(repo.path, livePrNumbers(repo.model, repo.claims), fixRunNames(repo))) changed = true
+        if (await deps.gh.refresh(repo.path, livePrNumbers(repo.model, repo.claims), prBranches(repo))) changed = true
       }
       return changed
     },
@@ -175,6 +175,26 @@ export function livePrNumbers(model: RepoModel, claims: Pick<Claim, 'plan'>[] = 
   }
   return [...numbers]
 }
+
+/**
+ * The plan branches the board asks gh about by head, for a final PR pod opened before it wrote the
+ * hand-back: per plan in its final review or close-out with no pending hand-back (that PR is asked by
+ * number). In close-out: an archived or done plan a claim names, or any other plan with every sprint
+ * done. Any PR on the branch counts, whatever its base (a plan doc doesn't record its merge-target).
+ */
+export function finalPrBranches(model: RepoModel, claims: Pick<Claim, 'plan'>[] = []): string[] {
+  const finished = new Set(['archived', 'done'])
+  return model.plans
+    .filter((plan) => {
+      if (handBackPr(plan) !== undefined) return false
+      if (finished.has(plan.status)) return claims.some((c) => c.plan === plan.slug)
+      return plan.sprints.length > 0 && plan.sprints.every((s) => s.status === 'done')
+    })
+    .map((plan) => plan.slug)
+}
+
+/** The head branches gh is asked about: each fix run's, then each final PR's. */
+const prBranches = (repo: Pick<BoardRepo, 'model' | 'claims'>) => [...fixRunNames(repo), ...finalPrBranches(repo.model, repo.claims)]
 
 function folderError(err: unknown): string {
   const code = (err as NodeJS.ErrnoException | undefined)?.code

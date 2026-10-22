@@ -4,7 +4,7 @@
 // which slice, wave fix, review round, or fix pass, and the plan's hand-back
 // and halt. Pure. The rules and why are in pod-docs/feature-details/runs-and-pipeline.md.
 
-import type { AgentRun, BoardRepo } from './board.ts'
+import type { AgentRun, BoardRepo, PrStatus } from './board.ts'
 import { formatTokens, isDone } from './pod-flow/model.ts'
 import type { PlanModel, SliceModel, SprintModel, WaveModel } from './run-model.ts'
 import { agentState } from './transcript.ts'
@@ -215,9 +215,22 @@ function checkSteps(ctx: Ctx): Step[] {
   return [review, fix]
 }
 
+/** A PR gh found by its head branch: a fix run's `fix-<slug>`, or a plan's final PR on `<plan-slug>`. */
+export const prByBranch = (repo: Pick<BoardRepo, 'prs'>, branch: string): PrStatus | undefined => repo.prs.find((p) => p.branch === branch)
+
+/**
+ * The hand-back's PR wins once it exists. Before it, the PR gh found on the plan's branch: open
+ * reads `after review` (pod hands it back only after the final review), merged done, closed blocked.
+ */
 function shipStep(ctx: Ctx): Step {
   const n = handBackPr(ctx.plan)
-  if (n === undefined) return { key: 'final-pr', label: 'Final PR', state: 'wait', detail: 'not open yet' }
+  if (n === undefined) {
+    const pr = prByBranch(ctx.repo, ctx.plan.slug)
+    if (!pr) return { key: 'final-pr', label: 'Final PR', state: 'wait', detail: 'not open yet' }
+    if (pr.state === 'merged') return { key: 'final-pr', label: 'Final PR', state: 'done', detail: `merged PR #${pr.number}` }
+    if (pr.state === 'closed') return { key: 'final-pr', label: 'Final PR', state: 'blocked', detail: `PR #${pr.number} · closed` }
+    return { key: 'final-pr', label: 'Final PR', state: 'wait', detail: `PR #${pr.number} · after review` }
+  }
   return pendingHandBack(ctx.repo, ctx.plan) === undefined
     ? { key: 'final-pr', label: 'Final PR', state: 'done', detail: `merged PR #${n}` }
     : { key: 'final-pr', label: 'Final PR', state: 'you', detail: `PR #${n} · you merge` }
