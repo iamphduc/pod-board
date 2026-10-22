@@ -37,6 +37,7 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - Drop cache entries once per build, from the listing of every repo together. Dropping per repo, as the old text cache did, empties the other repos' entries on every build.
 - The cache trusts size and mtime: a rewrite that keeps both isn't seen until the next write. Claude only appends to transcripts.
 - Agents on the Board carry no `description`: the meta file's description is assistant-written text no page shows. `AgentRun` still lists it as optional only for old test helpers; never set it.
+- A plan left `active` with every sprint done, no hand-back, and no PR on its branch costs one `gh pr list --head <plan-slug>` every 30 s (`[]` isn't final) until a PR appears or the doc changes. A merged one is final and never asked again.
 - `Claim`, `PrStatus`, and `GhStatus` come from `@pod-board/model`; change the shapes there.
 
 ## History

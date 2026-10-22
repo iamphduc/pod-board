@@ -51,6 +51,7 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 
 ## Watch out
 
+- Ship's final PR before the hand-back comes from `gh` on head branch `<plan-slug>`, so a fixture copy shows it only as a git repo whose `origin` is the real GitHub repo; a plain copy makes `gh pr list` fail and Ship stays `not open yet`. With that `origin`, a hand-back's #91 also reads merged, not `you merge`.
 - A fix reviewer dispatched only in prose (ytb-feed's `kind: fix. Review PR <url>, branch fix-… → …`) reads `kind: fix` but no branch or PR, so it doesn't join its run: Review reads `not started` and the reviewer shows under Other activity. pod's `/pod:fix` names `PR URL` and `branch` as fields; writing them as fields fixes it.
 - A fix engineer dispatched with no `Branch:` field (older chess-web and ytb-feed shapes: ``Branch `fix-…` ``, `branch fix-… off origin/main`) joins no run and shows under Other activity.
 - A closed (not merged) fix PR keeps the run listed as `PR · idle` with Ship `blocked` until the claim goes. A new PR on the same branch after a merged one isn't seen: `gh` isn't asked again about a merged PR. A leftover claim drops off within 30 minutes anyway.
