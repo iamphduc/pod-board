@@ -79,6 +79,12 @@ function isListed(repo: BoardRepo, name: string, agents: FixAgent[], now: number
   return agents.some(({ a }) => a.lastAt !== undefined && now - a.lastAt < STALE_MS)
 }
 
+/** The run's PR while it waits on you: open and reviewed. The Ship step reads `you merge` exactly then. */
+export function fixWaitingPr(repo: BoardRepo, name: string, now: number): PrStatus | undefined {
+  const pr = fixPr(repo, name)
+  return pr?.state === 'open' && isReviewed(fixAgents(repo, name, now)) ? pr : undefined
+}
+
 /** The listed fix runs' names. */
 export const listedFixRuns = (repo: BoardRepo, now: number): string[] =>
   fixRunNames(repo).filter((n) => isListed(repo, n, fixAgents(repo, n, now), now))
@@ -172,6 +178,8 @@ export function buildFixPipeline(repo: BoardRepo, name: string, now: number): Fi
     : pr.state === 'open' && !isReviewed(agents)
       ? { key: 'pr', label: 'PR', state: 'wait', detail: `PR #${pr.number} · after review` }
       : { key: 'pr', label: 'PR', state: PR_STEP[pr.state].state, detail: `PR #${pr.number} · ${PR_STEP[pr.state].text}` }
+  const waiting = fixWaitingPr(repo, name, now)
+  if (waiting) ship.merge = { number: waiting.number }
   const stages: Stage[] = [
     {
       key: 'build',

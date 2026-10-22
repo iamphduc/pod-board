@@ -10,7 +10,8 @@ import type { PlanModel, SliceModel, SprintModel, WaveModel } from './run-model.
 import { agentState, STALE_MS } from './transcript.ts'
 
 export type StepState = 'done' | 'live' | 'wait' | 'you' | 'blocked' | 'unknown'
-export type Step = { key: string; label: string; state: StepState; detail: string }
+/** `merge` is set only on a step that shows a PR waiting on you (see `waitingPrs`). */
+export type Step = { key: string; label: string; state: StepState; detail: string; merge?: { number: number } }
 export type Stage = { key: string; caption: string; steps: Step[] }
 export type LogRow = { code: string; title: string; model?: string; confidence?: string; minutes?: number; tokens?: number; live: boolean }
 export type LogGroup = { sprint: string; wave: number; label: string; status: string; rows: LogRow[] }
@@ -113,6 +114,7 @@ const planAgentRecent = (repo: BoardRepo, plan: PlanModel, now: number) =>
  * its agents running (a final review runs after the last sprint is done).
  */
 export function isRun(repo: BoardRepo, plan: PlanModel, now: number): boolean {
+  if (repo.error !== undefined || !repo.model.docs.supported) return false
   const claimed = isClaimed(repo, plan)
   if (claimed && plan.status !== 'archived') return true
   if (plan.status === 'archived') {
@@ -125,6 +127,34 @@ export function isRun(repo: BoardRepo, plan: PlanModel, now: number): boolean {
     planAgentRunning(repo, plan, now)
   )
 }
+
+/**
+ * The PR of a wave handed back to you: the plan is listed, the sprint is current, the wave isn't
+ * blocked or done, every unfinished slice is `pushed`, and none of the wave's engineers (slice or
+ * `<sprint>-w<N>-fix`) runs. The first unfinished slice's open PR number that gh doesn't report
+ * merged or closed (unknown counts as open). Undefined otherwise.
+ */
+export function waveWaitingPr(repo: BoardRepo, plan: PlanModel, s: SprintModel, w: WaveModel, now: number): number | undefined {
+  if (s.slug !== plan.currentSprint || w.slices.some(isBlockedSlice) || w.slices.every(isSliceDone)) return undefined
+  const open = w.slices.filter((x) => !isSliceDone(x))
+  if (!open.every((x) => x.status.trim().toLowerCase() === 'pushed')) return undefined
+  const codes = new Set(w.slices.map((x) => x.code))
+  const agentRunning = repo.agents.some((a) => {
+    if (!isRunning(a, now)) return false
+    const role = roleOf(a, plan)
+    return (role.kind === 'slice' && role.sprint === s.slug && codes.has(role.code)) || (role.kind === 'wave-fix' && role.sprint === s.slug && role.wave === w.wave)
+  })
+  if (agentRunning || !isRun(repo, plan, now)) return undefined
+  const gone = (n: number) => {
+    const state = repo.prs.find((p) => p.number === n)?.state
+    return state === 'merged' || state === 'closed'
+  }
+  return open.find((x) => x.pr.state === 'open' && x.pr.number !== undefined && !gone(x.pr.number))?.pr.number
+}
+
+/** The plan's pending hand-back PR, while the plan is on the runs list. */
+export const finalWaitingPr = (repo: BoardRepo, plan: PlanModel, now: number): number | undefined =>
+  isRun(repo, plan, now) ? pendingHandBack(repo, plan) : undefined
 
 // ---- The pipeline ----
 
@@ -162,7 +192,10 @@ function sprintSteps(ctx: Ctx, s: SprintModel): Step[] {
   if (s.slug === ctx.plan.currentSprint && s.waves.length > 0) {
     return s.waves.map((w) => {
       const state = waveState(ctx, s, w)
-      return { key: `${s.slug}/wave-${w.wave}`, label: `Wave ${w.wave}`, state, detail: waveDetail(ctx, s, w, state) }
+      const step: Step = { key: `${s.slug}/wave-${w.wave}`, label: `Wave ${w.wave}`, state, detail: waveDetail(ctx, s, w, state) }
+      const n = state === 'you' ? waveWaitingPr(ctx.repo, ctx.plan, s, w, ctx.now) : undefined
+      if (n !== undefined) Object.assign(step, { detail: `PR #${n} · you merge`, merge: { number: n } })
+      return step
     })
   }
   if (s.slug === ctx.plan.currentSprint && isDrafting(ctx.repo.agents, ctx.plan, ctx.now)) return one('live', 'drafting')
@@ -185,15 +218,15 @@ function sliceAgents(ctx: Ctx, s: SprintModel, code: string) {
 
 /**
  * Wave step state, first match wins: blocked → done → you → live → wait.
- * A done wave reads done even with a pending ask for the human, and only an ask
- * naming one of its unfinished slices makes a wave `you`, so it agrees with its cards.
+ * A done wave reads done even with a pending ask for the human. Only an ask naming one
+ * of its unfinished slices, or a PR waiting on you, makes a wave `you`, so it agrees with its cards.
  */
 function waveState(ctx: Ctx, s: SprintModel, w: WaveModel): StepState {
   if (w.slices.some(isBlockedSlice)) return 'blocked'
   if (w.slices.every(isSliceDone)) return 'done'
   const open = new Set(w.slices.filter((x) => !isSliceDone(x)).map((x) => x.code))
   const asks = ctx.plan.queue.some((e) => e.needsYou && e.slice !== undefined && open.has(e.slice) && (e.sprint === undefined || e.sprint === s.slug))
-  if (asks) return 'you'
+  if (asks || waveWaitingPr(ctx.repo, ctx.plan, s, w, ctx.now) !== undefined) return 'you'
   return isWaveLive(ctx, s, w) ? 'live' : 'wait'
 }
 
@@ -267,9 +300,10 @@ function shipStep(ctx: Ctx): Step {
     if (pr.state === 'closed') return { key: 'final-pr', label: 'Final PR', state: 'blocked', detail: `PR #${pr.number} · closed` }
     return { key: 'final-pr', label: 'Final PR', state: 'wait', detail: `PR #${pr.number} · after review` }
   }
-  return pendingHandBack(ctx.repo, ctx.plan) === undefined
-    ? { key: 'final-pr', label: 'Final PR', state: 'done', detail: `merged PR #${n}` }
-    : { key: 'final-pr', label: 'Final PR', state: 'you', detail: `PR #${n} · you merge` }
+  if (pendingHandBack(ctx.repo, ctx.plan) === undefined) return { key: 'final-pr', label: 'Final PR', state: 'done', detail: `merged PR #${n}` }
+  const step: Step = { key: 'final-pr', label: 'Final PR', state: 'you', detail: `PR #${n} · you merge` }
+  if (finalWaitingPr(ctx.repo, ctx.plan, ctx.now) !== undefined) step.merge = { number: n }
+  return step
 }
 
 /** Status, first match wins: blocked → merged (PR #N) → PR #N open → running → planned. */

@@ -2,6 +2,7 @@
 // its pod agents, its PRs, and its port claims. Types only; times are epoch ms.
 // The shapes are the sprint's shared contract (pod-docs/sprints/server-runs.md).
 
+import type { ActionEntry } from './actions.ts'
 import type { RepoModel } from './run-model.ts'
 
 /** One pod agent, read from its transcript. Never holds transcript text, tool input, or tool output. */
@@ -73,4 +74,6 @@ export type Board = {
   /** Set on every build where the config file exists but can't be read; the last repo list is still used. */
   configError?: 'config unreadable'
   repos: BoardRepo[]
+  /** The action log, newest first, at most 50. */
+  actions?: ActionEntry[]
 }
