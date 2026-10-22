@@ -1,18 +1,17 @@
 # Sprint: Action security, the action log, and merging from the board
 
-_From plan: pod-docs/plans/board-actions.md · Slug: merge-actions · Status: active · Generated: 2026-10-21_
+_From plan: pod-docs/plans/board-actions.md · Slug: merge-actions · Status: done · Generated: 2026-10-21_
 
-<!-- autopilot-run: started=2026-10-21T20:11:07-07:00 sprints=0 waves=1 -->
 
 ## Status board
 
 | Wave | Slice | Title | Branch | PR | Status | Confidence | Depends on |
 |------|-------|-------|--------|----|--------|------------|------------|
-| 1 | L1 | Look: 44 px controls, quiet button, switch, multi-line input, in-place panel | merge-actions-L1 | — | pending | — | — |
-| 1 | S1 | Action security: per-launch token, action guard, page token, action client | merge-actions-S1 | — | pending | — | — |
-| 1 | P1 | PRs waiting on you: one model rule, wave PR `you merge`, action types | merge-actions-P1 | — | pending | — | — |
-| 2 | M1 | Merge routes, gh merge and re-read, action log on the Board | merge-actions-M1 | — | pending | — | S1, P1 |
-| 2 | U1 | Merge confirm in place, the result, and the action log list | merge-actions-U1 | — | pending | — | L1, S1, P1 |
+| 1 | L1 | Look: 44 px controls, quiet button, switch, multi-line input, in-place panel | merge-actions-L1 | #27 | merged | medium | — |
+| 1 | S1 | Action security: per-launch token, action guard, page token, action client | merge-actions-S1 | #27 | merged | medium | — |
+| 1 | P1 | PRs waiting on you: one model rule, wave PR `you merge`, action types | merge-actions-P1 | #27 | merged | medium | — |
+| 2 | M1 | Merge routes, gh merge and re-read, action log on the Board | merge-actions-M1 | #28 | merged | medium | S1, P1 |
+| 2 | U1 | Merge confirm in place, the result, and the action log list | merge-actions-U1 | #28 | merged | medium | L1, S1, P1 |
 
 ## Shared contract
 
@@ -135,7 +134,7 @@ type ActionEntry = { at: number; action: 'merge'; repoId: string; repo: string; 
   - Set `Step.merge` in `pipeline.ts` and `fix-runs.ts`.
   - Update the wave state in `pipeline.ts`, the run state in `runs.ts`, and the card state in `board-view.ts`, with the same precedence in all three.
   - Update `runs-and-pipeline.md` and `wave-board.md`.
-- **Files owned:** `packages/model/src/waiting-prs.ts` (new), `packages/model/src/waiting-prs.test.ts` (new), `packages/model/src/actions.ts` (new), `packages/model/src/board.ts`, `packages/model/src/index.ts`, `packages/model/src/pipeline.ts`, `packages/model/src/pipeline.test.ts`, `packages/model/src/fix-runs.ts`, `packages/model/src/fix-runs.test.ts`, `packages/model/src/runs.ts`, `packages/model/src/runs.test.ts`, `packages/web/src/screens/board/board-view.ts`, `packages/web/src/screens/board/board-view.test.ts`, `pod-docs/feature-details/runs-and-pipeline.md`, `pod-docs/feature-details/wave-board.md`
+- **Files owned:** `packages/model/test/fixtures.test.ts` (added at wave 1, gate 1 exception), `packages/model/src/waiting-prs.ts` (new), `packages/model/src/waiting-prs.test.ts` (new), `packages/model/src/actions.ts` (new), `packages/model/src/board.ts`, `packages/model/src/index.ts`, `packages/model/src/pipeline.ts`, `packages/model/src/pipeline.test.ts`, `packages/model/src/fix-runs.ts`, `packages/model/src/fix-runs.test.ts`, `packages/model/src/runs.ts`, `packages/model/src/runs.test.ts`, `packages/web/src/screens/board/board-view.ts`, `packages/web/src/screens/board/board-view.test.ts`, `pod-docs/feature-details/runs-and-pipeline.md`, `pod-docs/feature-details/wave-board.md`
 - **Success criteria:**
   - `[test] a pending hand-back's PR is a final waiting PR; once gh says merged it isn't — packages/model/src/waiting-prs.test.ts › final PR waits until merged`
   - `[test] a fix PR waits only while open and reviewed — packages/model/src/waiting-prs.test.ts › fix PR waits after review`
@@ -195,7 +194,7 @@ type ActionEntry = { at: number; action: 'merge'; repoId: string; repo: string; 
   - `Merged` shows only for `merged`.
   - The action log list (`action-log-view.ts` and `ActionLog.tsx`) sits under Other activity: the newest 20 of `board.actions`. Each row shows the time (`HH:MM` today, else `MMM D HH:MM`), the repo, the target, and a result chip: merged → ok; queued and auto-merge → run; stale and unconfirmed → you; failed → bad. With no entries it reads `No actions yet.` It updates from the Board stream.
   - Uses S1's `postAction` and P1's types. Update `runs-and-pipeline.md`.
-- **Files owned:** `packages/web/src/screens/runs/merge-flow.ts` (new), `packages/web/src/screens/runs/merge-flow.test.ts` (new), `packages/web/src/screens/runs/MergeConfirm.tsx` (new), `packages/web/src/screens/runs/action-log-view.ts` (new), `packages/web/src/screens/runs/action-log-view.test.ts` (new), `packages/web/src/screens/runs/ActionLog.tsx` (new), `packages/web/src/screens/runs/Pipeline.tsx`, `packages/web/src/screens/runs/FixRun.tsx`, `packages/web/src/screens/runs/RunsScreen.tsx`, `packages/web/src/screens/runs/runs.css`, `pod-docs/feature-details/runs-and-pipeline.md`
+- **Files owned:** `packages/web/src/actions-client.ts` and `packages/web/src/actions-client.test.ts` (added after wave 1: a `502` with an empty body, which the Vite proxy sends when the API is down, reads `Can't reach the board.`), `packages/web/src/screens/runs/merge-flow.ts` (new), `packages/web/src/screens/runs/merge-flow.test.ts` (new), `packages/web/src/screens/runs/MergeConfirm.tsx` (new), `packages/web/src/screens/runs/action-log-view.ts` (new), `packages/web/src/screens/runs/action-log-view.test.ts` (new), `packages/web/src/screens/runs/ActionLog.tsx` (new), `packages/web/src/screens/runs/Pipeline.tsx`, `packages/web/src/screens/runs/FixRun.tsx`, `packages/web/src/screens/runs/RunsScreen.tsx`, `packages/web/src/screens/runs/runs.css`, `pod-docs/feature-details/runs-and-pipeline.md`
 - **Success criteria:**
   - `[test] open → loading → confirm on a preview; cancel and Escape → idle; a second open closes the first — packages/web/src/screens/runs/merge-flow.test.ts › opens and cancels in place`
   - `[test] merge sends { repoId, number, headSha } from the preview, and a repeat press while merging sends nothing — packages/web/src/screens/runs/merge-flow.test.ts › merges the head you saw, once`
@@ -211,3 +210,19 @@ type ActionEntry = { at: number; action: 'merge'; repoId: string; repo: string; 
 - **Depends on:** L1, S1, P1
 - **One-way door:** none. A real merge is only checked in the plan's final verification, in a scratch repo.
 - **Model:** opus
+
+## Sprint summary
+
+- **Synced with merge-target:** up to date (first sprint; `pod-staging` was synced with `main` at preflight)
+- **Slices shipped:** L1, S1, P1 (wave 1, PR #27), M1, U1 (wave 2, PR #28)
+- **Queue entries:** resolved 0, deferred 1: the closed hand-back PR question ([handoff-queue.md](../../handoff-queue.md), `[2026-10-21 · PENDING · engineer → human · … · slice: P1]`)
+- **Slice log:**
+  - L1: opus · medium · test-first yes (two guards proven by temporary breaks) · runtime the controls at 1280 and 375 px, both themes, on a sample panel · 4 NOTEs · time lost none
+  - S1: opus · medium · test-first partly: three Host/Origin/add-repo checks were already green (regression tests) · runtime curl through both ports, token restart, build without token; found and fixed Vite's CORS header for other localhost origins · 5 NOTEs · time lost ~3 min (agent-browser hung twice; worked as browser none)
+  - P1: opus · medium · test-first yes · runtime wave step and cards on a chess-web fixture copy · 5 NOTEs · time lost none. BLOCKED once on `packages/model/test/fixtures.test.ts` (one expected line); gate 1 exception added it to P1's files and the same engineer finished
+  - M1: opus · medium · test-first yes (two reds were a JSON parse and a timeout, not clean assertions) · runtime 404/403 preview checks and the log read back after a restart; no merge route call by rule · 8 NOTEs · time lost none
+  - U1: opus · medium · test-first yes · runtime the Merge button, panel, Escape, and the proxy 502 → `Can't reach the board.` on a fixture copy; also took the 502 mapping into `actions-client.ts` · 5 NOTEs · time lost none
+  - Wave 2 fix (`merge-actions-w2-fix`): opus · medium · test-first yes · `queued` only from GitHub's `mergeQueueEntry` (GraphQL), else `unconfirmed`; checked the real GraphQL answer for #27
+  - Orchestrator wave checks: wave 1 on real config (token meta, 403 bad token, no CORS headers, 44 px at 375 px); wave 2 on a fixture with gh off PATH (`gh unavailable` in place) and on real config (the confirm for PR #28 showed its title, `checks pending`, `No conflicts`, head `0dc521e`; cancelled, no merge)
+  - Stalls: none
+- **Agent context at hand-back:** 835,064 tokens — *each agent's final context size, not tokens billed*

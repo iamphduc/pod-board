@@ -4,6 +4,8 @@ _Generated: 2026-10-21 · Status: active · Grilled-with: pod (fast)_
 
 Port base: 3000
 
+<!-- autopilot-run: started=2026-10-21T20:11:07-07:00 sprints=1 waves=2 -->
+
 
 ## Goal
 Let the human do pod's hand-offs from the board instead of the chat: merge a PR that waits on them, answer a `PENDING` or resolve a `BLOCKED` queue entry, and send `continue` or `go` to the run. `continue` can be sent automatically per run with a toggle; `go` only by pressing a button. This is phase 2 of [docs/master-plan.md](../../docs/master-plan.md), plus the resume step the master plan had put in phase 4.
@@ -49,7 +51,7 @@ Let the human do pod's hand-offs from the board instead of the chat: merge a PR 
 
 | Sprint | Goal | Status | Depends on |
 |--------|------|--------|------------|
-| merge-actions | Action security (token, Host and Origin checks), the action log, and merging any PR that waits on the human, with a confirm step and the real result after | active | — |
+| merge-actions | Action security (token, Host and Origin checks), the action log, and merging any PR that waits on the human, with a confirm step and the real result after | done | — |
 | queue-and-replies | Answer a `PENDING` or `BLOCKED` in pod's answer format, and copy-the-reply with the chat to paste it in | planned | merge-actions |
 | resume-runs | Resume the orchestrator session from the board: the per-run Continue toggle, the Continue and Go buttons, and their results in the action log. Starts with a spike on headless resume | planned | queue-and-replies |
 
