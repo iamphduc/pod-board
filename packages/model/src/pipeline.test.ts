@@ -163,7 +163,8 @@ describe('buildPipeline', () => {
       }),
       { agents: [running({ sprint: 'one', slice: 'W5' })] },
     )
-    expect(stepStates(build(r), 'sprint:one')).toEqual(['blocked', 'done', 'done', 'live', 'live', 'wait', 'blocked', 'you', 'wait', 'you'])
+    // W4: pushed with its PR open and nothing running is handed back to you to merge.
+    expect(stepStates(build(r), 'sprint:one')).toEqual(['blocked', 'done', 'done', 'you', 'live', 'wait', 'blocked', 'you', 'wait', 'you'])
 
     // The current wave is live on its own, with nothing pushed and no engineer.
     const fresh = repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'X1', '—', 'pending'], [2, 'X2', '—', 'pending']] } }))
@@ -364,6 +365,56 @@ describe('buildPipeline', () => {
     const planner = (over: Partial<AgentRun> = {}) => running({ type: 'pod:sprint-planner', plan: 'alpha', ...over })
     expect(steps(build(repo(f, { agents: [planner()] })), 'sprint:two')).toEqual([['two', 'live', 'drafting']])
     expect(steps(build(repo(f, { agents: [planner({ plan: 'beta' })] })), 'sprint:two')).toEqual([['two', 'wait', 'not drafted']])
+  })
+
+  it('wave step shows a waiting PR', () => {
+    const pushed = (rows: BoardRow[], extra: Partial<BoardRepo> = {}, queue: string[] = []) =>
+      build(repo(files({ sprints: [['one', 'active']], docs: { one: rows }, queue }), extra))
+    const wave = (p: Pipeline, n: number) => stage(p, 'sprint:one').steps.find((s) => s.label === `Wave ${n}`)
+    const rows: BoardRow[] = [
+      [1, 'A1', 'merged', 'done'],
+      [2, 'B1', pr(7), 'pushed'],
+      [2, 'B2', pr(7), 'pushed'],
+    ]
+    // Every unfinished slice pushed, nothing running: you merge, with the PR's number.
+    expect(wave(pushed(rows), 2)).toEqual({ key: 'one/wave-2', label: 'Wave 2', state: 'you', detail: 'PR #7 · you merge', merge: { number: 7 } })
+    // An ask on the same wave: still the PR's words and merge.
+    const ask = queueLine('PENDING', 'engineer → human', 'sprint: one · slice: B1', 'Pick one')
+    expect(wave(pushed(rows, {}, [ask]), 2)).toMatchObject({ state: 'you', detail: 'PR #7 · you merge', merge: { number: 7 } })
+    // A running engineer of the wave: live as today, no merge.
+    const live = wave(pushed(rows, { agents: [running({ sprint: 'one', slice: 'B1' })] }), 2)
+    expect(live?.state).toBe('live')
+    expect(live).not.toHaveProperty('merge')
+    // gh says merged or closed: as today (live from the pushed slice), no merge.
+    const status = (state: PrStatus['state']): PrStatus => ({ number: 7, state, checks: 'pass', checkedAt: NOW })
+    for (const s of ['merged', 'closed'] as const) {
+      expect(wave(pushed(rows, { prs: [status(s)] }), 2)).toEqual({ key: 'one/wave-2', label: 'Wave 2', state: 'live', detail: '2 slices' })
+    }
+    // Done still beats you: a done wave reads done, with no merge.
+    expect(wave(pushed(rows), 1)).toEqual({ key: 'one/wave-1', label: 'Wave 1', state: 'done', detail: '1 slice' })
+    // Blocked still beats you.
+    const blocked = wave(pushed([[1, 'A1', pr(7), 'pushed'], [1, 'A2', '—', 'blocked']]), 1)
+    expect(blocked?.state).toBe('blocked')
+    expect(blocked).not.toHaveProperty('merge')
+  })
+
+  it('only waiting steps carry merge', () => {
+    const merges = (p: Pipeline) => p.stages.flatMap((st) => st.steps.filter((s) => 'merge' in s).map((s) => [s.key, s.merge]))
+    const handBack = (n: number) => queueLine('PENDING', 'orchestrator → human', 'plan: alpha', `Plan complete: merge https://github.com/o/r/pull/${n}`)
+    const done = { sprints: [['one', 'done']] as SprintRow[], docs: { one: [[1, 'A1', 'merged', 'done']] as BoardRow[] } }
+    const status = (n: number, state: PrStatus['state'], branch?: string): PrStatus => ({ number: n, state, checks: 'pass', checkedAt: NOW, ...(branch ? { branch } : {}) })
+
+    // A pending hand-back: only the Ship step carries merge.
+    expect(merges(build(repo(files({ ...done, queue: [handBack(12)] }))))).toEqual([['final-pr', { number: 12 }]])
+    // Merged, before the hand-back, or a PR on the plan's branch: no step carries merge.
+    expect(merges(build(repo(files({ ...done, queue: [handBack(12)] }), { prs: [status(12, 'merged')] })))).toEqual([])
+    expect(merges(build(repo(files(done), { prs: [status(12, 'open', 'alpha')] })))).toEqual([])
+    // A mid-run plan with nothing handed back: none.
+    expect(merges(build(repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'A1', '—', 'pending'], [1, 'A2', pr(7), 'pushed']] } }))))).toEqual([])
+    // An archived plan off the runs list: its Ship reads you merge but carries no merge.
+    const offList = build(repo({ ...files({ ...done, queue: [handBack(12)] }), 'pod-docs/plans/alpha.md': planDoc('ALPHA', [['one', 'done']]).replace('Status: active', 'Status: archived') }))
+    expect(steps(offList, 'ship')).toEqual([['Final PR', 'you', 'PR #12 · you merge']])
+    expect(merges(offList)).toEqual([])
   })
 
   it('is exported from the package entry', () => {

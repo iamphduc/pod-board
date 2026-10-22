@@ -273,6 +273,25 @@ describe('buildFixPipeline', () => {
     expect(stages(repo({ claims: [claim('fix-scroll')], agents: reviewed, prs: [pr(36, 'open')] }))?.[2]).toEqual(['Ship', [['PR', 'you', 'PR #36 · you merge']]])
   })
 
+  it('fix Ship step carries merge', () => {
+    const ship = (agents: AgentRun[], prs: PrStatus[]) => buildFixPipeline(repo({ claims: [claim('fix-scroll')], agents, prs }), 'fix-scroll', NOW)?.stages.at(-1)?.steps[0]
+    const others = (agents: AgentRun[], prs: PrStatus[]) =>
+      buildFixPipeline(repo({ claims: [claim('fix-scroll')], agents, prs }), 'fix-scroll', NOW)
+        ?.stages.slice(0, -1)
+        .flatMap((s) => s.steps)
+        .filter((s) => 'merge' in s)
+    const built = [engineer('fix-scroll', 60, 40, { ended: true })]
+    const reviewed = [...built, reviewer(39, 30, { ended: true })]
+    // Open and reviewed: you merge, with merge set.
+    expect(ship(reviewed, [pr(36, 'open')])).toEqual({ key: 'pr', label: 'PR', state: 'you', detail: 'PR #36 · you merge', merge: { number: 36 } })
+    expect(others(reviewed, [pr(36, 'open')])).toEqual([])
+    // Before the review, merged, closed, or no PR: no merge.
+    expect(ship(built, [pr(36, 'open')])).not.toHaveProperty('merge')
+    expect(ship(reviewed, [pr(36, 'merged')])).not.toHaveProperty('merge')
+    expect(ship(reviewed, [pr(36, 'closed')])).not.toHaveProperty('merge')
+    expect(ship(reviewed, [])).not.toHaveProperty('merge')
+  })
+
   it('two build engineers show their count', () => {
     const agents = [engineer('fix-scroll', 60, 50, { ended: true }), engineer('fix-scroll', 49, 40, { ended: true })]
     expect(stages(repo({ claims: [claim('fix-scroll')], agents }))?.[0]?.[1]).toEqual([
