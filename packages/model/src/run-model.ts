@@ -9,7 +9,13 @@ import { isDone, parsePlan, parseQueue, parseSprint, readTable, type PlanDoc, ty
 /** Repo-relative path → file text. Keys may use `/` or `\`. A file not in the map doesn't exist. */
 export type RepoFiles = Record<string, string>
 
-export type QueueItem = QueueEntry & { needsYou: boolean }
+export { cleanAnswer, isAnswerable, queueLines, splitAnswer, withAnswer, type CleanAnswer } from './queue-answer.ts'
+
+/**
+ * A handoff queue entry. `line` is its whole line, trimmed, and is its identity for writes; `date` the
+ * header's first part; `answer` the text after the first `**Answer (human):**`. `body` never holds the answer.
+ */
+export type QueueItem = QueueEntry & { needsYou: boolean; line: string; date?: string; answer?: string }
 
 export type SliceModel = {
   code: string
@@ -61,7 +67,7 @@ export function buildRepoModel(files: RepoFiles): RepoModel {
   const docs = docsVersion(repo.get(README))
   if (!docs.supported) return { docs, plans: [], queue: [] }
 
-  const queue = parseQueue(repo.get(QUEUE) ?? '').map((entry) => ({ ...entry, needsYou: needsYou(entry) }))
+  const queue = parseQueue(repo.get(QUEUE) ?? '').map((entry) => ({ ...entry, needsYou: needsYou(entry), line: '' }))
   const planDocs = readPlans(repo)
   const sprintDocs = readSprints(repo)
   const joined = joinSprints(planDocs, sprintDocs)

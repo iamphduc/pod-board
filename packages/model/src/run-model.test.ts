@@ -351,6 +351,38 @@ describe('buildRepoModel', () => {
     expect(beta?.queue.map((e) => /pull\/(\d+)/.exec(e.body)?.[1])).toEqual(['8', '5', '4'])
   })
 
+  it("an answer doesn't clear what waits on you", () => {
+    const answer = ' **Answer (human):** go ahead'
+    const ask = '- `[2026-10-21 · PENDING · engineer → human · plan: alpha · slice: A1]` Pick a name **Resolution:** pending'
+    const halt = '- `[2026-10-21 · BLOCKED · orchestrator → human · plan: alpha]` Gate 2 stopped the run **Resolution:** pending'
+    const files = (queue: string[]): RepoFiles => ({
+      'pod-docs/README.md': README,
+      'pod-docs/plans/alpha.md': plan('Alpha', [['one', 'g', 'active', '—']]),
+      'pod-docs/sprints/one.md': sprint('one', [[1, 'A1', '—', 'pending']], { from: 'alpha' }),
+      'pod-docs/handoff-queue.md': queue.join('\n'),
+    })
+    const stateOf = (queue: string[]) => {
+      const repo: model.BoardRepo = { id: 'r', name: 'r', path: '/r', source: 'registered', model: buildRepoModel(files(queue)), agents: [], prs: [], claims: [] }
+      return { repo, states: model.listRuns({ generatedAt: 0, gh: 'ok', repos: [repo] }, 0).map((r) => r.state) }
+    }
+
+    // An answered ask still waits on you, and its run still reads needs-you.
+    const asked = stateOf([ask + answer])
+    const item = asked.repo.model.queue[0]!
+    expect(item).toMatchObject({ needsYou: true, isPending: true, answer: 'go ahead' })
+    expect(model.isAnswerable(item)).toBe(false)
+    expect(asked.states).toEqual(['needs-you'])
+    expect(stateOf([ask]).states).toEqual(['needs-you'])
+
+    // An answered orchestrator BLOCKED keeps the plan halted.
+    const halted = stateOf([halt + answer])
+    const alpha = halted.repo.model.plans[0]!
+    expect(alpha.queue[0]).toMatchObject({ needsYou: true, answer: 'go ahead' })
+    expect(model.isHalted(alpha)).toBe(true)
+    expect(halted.states).toEqual(['blocked'])
+    expect(model.latestHalt(files([halt + answer])['pod-docs/handoff-queue.md']!)).toEqual(model.latestHalt(halt))
+  })
+
   it('a missing queue file gives an empty queue', () => {
     const files: RepoFiles = { 'pod-docs/README.md': README, 'pod-docs/plans/alpha.md': plan('Alpha', []) }
     const repo = buildRepoModel(files)
@@ -589,7 +621,7 @@ describe('buildRepoModel', () => {
   })
 
   it('public exports', () => {
-    for (const name of ['buildRepoModel', 'docsVersion', 'prRef', 'sliceDeps', 'needsYou', 'planExtras', 'parsePlan', 'parseSprint', 'parseQueue', 'readTable', 'isDone']) {
+    for (const name of ['buildRepoModel', 'docsVersion', 'prRef', 'sliceDeps', 'needsYou', 'planExtras', 'parsePlan', 'parseSprint', 'parseQueue', 'readTable', 'isDone', 'queueLines', 'splitAnswer', 'isAnswerable', 'cleanAnswer', 'withAnswer']) {
       expect(typeof (model as Record<string, unknown>)[name], name).toBe('function')
     }
     for (const name of ['parseAgentTranscript', 'agentState']) {
