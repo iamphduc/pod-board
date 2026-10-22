@@ -208,7 +208,7 @@ describe('a run in its close-out (chess-web ui-polish)', () => {
     const r = repo({ handBack: true })
     expect(runs(r).map((x) => [x.plan, x.where, x.state])).toEqual([['ui-polish', 'final PR', 'needs-you']])
     const ship = buildPipeline(r, 'ui-polish', NOW)?.stages.find((s) => s.key === 'ship')?.steps
-    expect(ship).toEqual([{ key: 'final-pr', label: 'Final PR', state: 'you', detail: 'PR #91 · you merge' }])
+    expect(ship).toEqual([{ key: 'final-pr', label: 'Final PR', state: 'you', detail: 'PR #91 · you merge', merge: { number: 91 } }])
   })
 
   test('before the hand-back, Ship shows the final PR gh found by the plan branch', () => {
