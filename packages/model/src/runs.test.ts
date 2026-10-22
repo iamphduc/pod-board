@@ -125,6 +125,26 @@ describe('listRuns', () => {
     expect(stateOf(repo('r', oldBlock))).toEqual(['idle'])
   })
 
+  it('waiting wave PR needs you', () => {
+    const link = '[#7](https://github.com/o/r/pull/7)'
+    const handedBack = planFiles({ board: [[1, 'A1', '—', 'done'], [2, 'B1', link, 'pushed'], [2, 'B2', link, 'pushed']] })
+    // Every unfinished slice pushed with its PR, nothing running → needs you.
+    expect(stateOf(repo('r', handedBack))).toEqual(['needs-you'])
+    // It counts as active.
+    expect(activeRuns(runsOf(repo('r', handedBack)))).toBe(1)
+    // A running engineer of the wave: running, as today.
+    expect(stateOf(repo('r', handedBack, { agents: [running({ sprint: 'one', slice: 'B1' })] }))).toEqual(['running'])
+    // gh says the PR merged: no waiting PR, so running from the pushed slices, as today.
+    const merged = { number: 7, state: 'merged' as const, checks: 'pass' as const, checkedAt: NOW }
+    expect(stateOf(repo('r', handedBack, { prs: [merged] }))).toEqual(['running'])
+    // blocked still wins: a halt, or a blocked slice in the current sprint.
+    const halt = queueLine('BLOCKED', 'orchestrator → human', 'plan: alpha', 'Gate 2 stopped the run')
+    const halted = planFiles({ queue: [halt], board: [[1, 'A1', '—', 'done'], [2, 'B1', link, 'pushed'], [2, 'B2', link, 'pushed']] })
+    expect(stateOf(repo('r', halted))).toEqual(['blocked'])
+    const blocked = planFiles({ board: [[1, 'A1', '—', 'blocked'], [2, 'B1', link, 'pushed']] })
+    expect(stateOf(repo('r', blocked))).toEqual(['blocked'])
+  })
+
   it('where text', () => {
     const whereOf = (r: BoardRepo) => runsOf(r).map((run) => run.where)
     // Mid-wave: the current wave of the current sprint's waves.
