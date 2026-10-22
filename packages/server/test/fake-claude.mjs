@@ -8,9 +8,12 @@
 //   FAKE_CLAUDE_MODE    `exit:<code>` (default `exit:0`) or `wait:<ms>` (then exit 0)
 //   FAKE_CLAUDE_STDERR  text to write to stderr before exiting
 //   FAKE_CLAUDE_DONE    file to write once it finishes waiting
-import { realpathSync, writeFileSync } from 'node:fs'
+//   FAKE_CLAUDE_PIDS    file to append its pid to, one per line, at start, so a test can
+//                       wait for every fake it started (the record keeps only the last one)
+import { appendFileSync, realpathSync, writeFileSync } from 'node:fs'
 
 const env = process.env
+if (env.FAKE_CLAUDE_PIDS) appendFileSync(env.FAKE_CLAUDE_PIDS, `${process.pid}\n`)
 if (env.FAKE_CLAUDE_RECORD) {
   const record = { argv: process.argv.slice(2), env: { ...env }, cwd: realpathSync.native(process.cwd()), pid: process.pid }
   writeFileSync(env.FAKE_CLAUDE_RECORD, JSON.stringify(record))

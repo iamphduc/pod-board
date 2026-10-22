@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { buildRepoModel, runReplies, type AgentRun, type BoardRepo, type Claim, type PrStatus, type ReplySignal, type RunSummary } from '@pod-board/model'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { NO_SESSION, replyPanel } from './reply-view.ts'
+import { ReplyPanel } from './ReplyPanel.tsx'
 
 const NOW = Date.UTC(2026, 9, 21, 12)
 const MIN = 60_000
@@ -77,12 +80,12 @@ describe('reply panel', () => {
     })
     expect(NO_SESSION).toBe('No pod session found for this run. Paste it in the chat that runs it.')
 
-    // A sendable row with no session still gets its button (the route answers no session).
+    // A sendable row with no session gets no button: the route could only answer no session.
     const lone = repo()
     lone.prs = [{ number: 7, state: 'merged', checks: 'pass', checkedAt: NOW }]
     expect(replyPanel(run(), lone, NOW)).toEqual({
       target: { repoId: 'id-r', run: 'alpha' },
-      rows: [{ key: 'continue', word: 'continue', why: 'PR #7 merged.', send: 'continue' }],
+      rows: [{ key: 'continue', word: 'continue', why: 'PR #7 merged.' }],
       noSession: NO_SESSION,
     })
 
@@ -182,6 +185,46 @@ const BY_SIGNAL: Record<ReplySignal, { repo: BoardRepo; run: string; sends: Send
   'fix-waiting': { repo: fixRepo('open'), run: FIX, sends: {} },
   'fix-merged': { repo: fixRepo('merged'), run: FIX, sends: { continue: 'continue' } },
 }
+
+const merged = (session: string): BoardRepo => {
+  const r = repo([agent({ session, startedAt: NOW - 50 * MIN, lastAt: NOW - 40 * MIN })])
+  r.prs = [{ number: 7, state: 'merged', checks: 'pass', checkedAt: NOW }]
+  return r
+}
+const html = (r: BoardRepo) => {
+  const view = replyPanel(run(), r, NOW)
+  return renderToStaticMarkup(createElement(ReplyPanel, { view, target: view!.target }))
+}
+const SEND_BUTTON = /<button class="btn primary"[^>]*>Continue<\/button>/
+
+describe('send buttons need a safe session', () => {
+  it('no button without a safe session, Copy either way', () => {
+    // The runner's rule: the id pattern, and no leading dash (it would read as a flag).
+    const unsafe = ['odd id', '-bare', '--resume', 'a'.repeat(65), 'abc;calc', '../x', 'é']
+    for (const id of unsafe) {
+      const view = replyPanel(run(), merged(id), NOW)
+      expect(view!.rows, id).toEqual([{ key: 'continue', word: 'continue', why: 'PR #7 merged.' }])
+      expect(view!.session?.line, id).toBe(`Session ${id}`) // the chat to paste it in stays
+      const page = html(merged(id))
+      expect(page, id).toContain('aria-label="Copy continue"')
+      expect(page, id).not.toMatch(SEND_BUTTON)
+    }
+    // No session at all: Copy, no button.
+    const lone = repo()
+    lone.prs = [{ number: 7, state: 'merged', checks: 'pass', checkedAt: NOW }]
+    expect(html(lone)).toContain('aria-label="Copy continue"')
+    expect(html(lone)).not.toMatch(SEND_BUTTON)
+  })
+
+  it('a safe session shows the button beside Copy', () => {
+    for (const id of ['0f6c1e2a-5b7d-4c11-9a3e-2d4f6b8c0e1a', 'a', 'A-1', 'a'.repeat(64), 'x-']) {
+      expect(replyPanel(run(), merged(id), NOW)!.rows, id).toEqual([{ key: 'continue', word: 'continue', why: 'PR #7 merged.', send: 'continue' }])
+      const page = html(merged(id))
+      expect(page, id).toContain('aria-label="Copy continue"')
+      expect(page, id).toMatch(SEND_BUTTON)
+    }
+  })
+})
 
 describe('send buttons', () => {
   it('send buttons follow sendableReply', () => {
