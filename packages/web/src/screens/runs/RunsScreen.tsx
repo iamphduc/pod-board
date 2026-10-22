@@ -2,6 +2,7 @@ import { activeRuns, buildFixPipeline, buildPipeline, otherActivity, type Board,
 import type { StreamState } from '../../board-stream.ts'
 import { hashFor, type View } from '../../selection.ts'
 import { BoardScreen } from '../board/BoardScreen.tsx'
+import { ActionLog } from './ActionLog.tsx'
 import { AddRepoForm } from './AddRepoForm.tsx'
 import { Chip } from './Chip.tsx'
 import { FixRun } from './FixRun.tsx'
@@ -83,18 +84,19 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
             <p className="muted">Add a repo's folder with the Add a repo form to see its pod runs.</p>
           </div>
         ) : fixPipeline && repo ? (
-          <FixRun repo={repo} run={selected} pipeline={fixPipeline} agent={view === 'agent' ? agent : undefined} now={now} />
+          <FixRun key={`${repo.id}/${selected.plan}`} repo={repo} run={selected} pipeline={fixPipeline} agent={view === 'agent' ? agent : undefined} now={now} />
         ) : pipeline && repo && view === 'board' && selected.plan !== undefined ? (
           <BoardScreen repo={repo} plan={selected.plan} {...(slice === undefined ? {} : { slice })} now={now} />
-        ) : pipeline ? (
+        ) : pipeline && repo ? (
           <>
-            <Pipeline pipeline={pipeline} />
+            <Pipeline key={`${repo.id}/${selected.plan}`} pipeline={pipeline} repoId={repo.id} />
             <SliceLog log={pipeline.log} />
           </>
         ) : (
           <p className="muted">{emptyMessage(selected, repo)}</p>
         )}
         {board && selected && <OtherActivity list={others} />}
+        {board && <ActionLog entries={board.actions} now={now} />}
       </main>
     </div>
   )

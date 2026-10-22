@@ -21,7 +21,7 @@ export function FixRun({ repo, run, pipeline, agent, now }: Props) {
 
   return (
     <>
-      <Pipeline pipeline={pipeline} />
+      <Pipeline pipeline={pipeline} repoId={repo.id} />
       {rows.length === 0 ? (
         <p className="muted note">No agent has started on this fix yet.</p>
       ) : (

@@ -76,6 +76,20 @@ describe('action client', () => {
     expect(await postAction('merge', {}, deps(blank.fn))).toEqual({ ok: false, status: 503, message: 'HTTP 503' })
   })
 
+  it('a 502 with an empty body means the board is down', async () => {
+    // The Vite proxy answers 502 with no body when the API isn't running.
+    const proxy = fakeFetch(() => new Response('', { status: 502 }))
+    expect(await postAction('merge-preview', {}, deps(proxy.fn))).toEqual({ ok: false, status: 502, message: "Can't reach the board." })
+    const spaces = fakeFetch(() => new Response('  \n', { status: 502 }))
+    expect(await postAction('merge-preview', {}, deps(spaces.fn))).toEqual({ ok: false, status: 502, message: "Can't reach the board." })
+    // A 502 from the API itself (gh failed) keeps its words.
+    const gh = fakeFetch(() => json(502, { error: 'gh failed' }))
+    expect(await postAction('merge-preview', {}, deps(gh.fn))).toEqual({ ok: false, status: 502, message: 'gh failed' })
+    // Only 502: an empty 500 or 504 still reads its status.
+    const other = fakeFetch(() => new Response('', { status: 504 }))
+    expect(await postAction('merge-preview', {}, deps(other.fn))).toEqual({ ok: false, status: 504, message: 'HTTP 504' })
+  })
+
   it('a success whose body is not JSON is an error, not data', async () => {
     const f = fakeFetch(() => new Response('<html></html>', { status: 200 }))
     expect(await postAction('merge', {}, deps(f.fn))).toEqual({ ok: false, status: 200, message: 'HTTP 200' })
