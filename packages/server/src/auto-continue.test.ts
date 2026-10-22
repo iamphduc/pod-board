@@ -39,7 +39,7 @@ function fakeRunner(result: () => Promise<StartResult> | StartResult = () => ({ 
 }
 
 /** The check over a Board you set, with fakes for everything outside the server. */
-function setup(o: { board: Board; store?: AutoContinueStore; runner?: ReturnType<typeof fakeRunner>; idle?: () => boolean; inFlight?: Set<string> }) {
+function setup(o: { board: Board; store?: AutoContinueStore; runner?: ReturnType<typeof fakeRunner>; idle?: (repo: BoardRepo, session: string) => boolean; inFlight?: Set<string> }) {
   let board = o.board
   const subscribers = new Set<(b: Board) => void>()
   const logged: NewActionEntry[] = []
@@ -75,11 +75,9 @@ function setup(o: { board: Board; store?: AutoContinueStore; runner?: ReturnType
     board = b
     for (const fn of subscribers) fn(b)
   }
-  return { auto, runner, store, logged, events, inFlight, emit, setIdle: (f: () => boolean) => (idle = f), subscribers }
+  return { auto, runner, store, logged, events, inFlight, emit, setIdle: (f: (repo: BoardRepo, session: string) => boolean) => (idle = f), subscribers }
 }
 
-/** Lets pending promise work finish. */
-const settle = () => new Promise((r) => setTimeout(r, 0))
 
 describe('automatic check', () => {
   test('sends only with the toggle on', async () => {
@@ -109,7 +107,7 @@ describe('automatic check', () => {
     await store.set('id-r', 'alpha', true)
     const s = setup({ board: boardOf(planRepo(SPRINT_DONE)), store, runner })
     s.auto.start()
-    await settle()
+    await s.auto.settled()
     expect(runner.starts).toHaveLength(1)
     // The send failed: it's logged, and not retried for this stop.
     expect(s.logged).toEqual([
@@ -126,13 +124,13 @@ describe('automatic check', () => {
     // A restart: a new store read from the file, a new check.
     const again = setup({ board: boardOf(planRepo(SPRINT_DONE)), store: createAutoContinueStore({ file }), runner })
     again.auto.start()
-    await settle()
+    await again.auto.settled()
     await again.auto.check()
     expect(runner.starts).toHaveLength(1)
 
     // A new stop gets its own send.
     again.emit(boardOf(planRepo(NEXT_SPRINT_DONE)))
-    await settle()
+    await again.auto.settled()
     await again.auto.check()
     expect(runner.starts).toHaveLength(2)
     expect(again.logged.at(-1)).toMatchObject({ result: 'started', auto: true })
@@ -146,7 +144,7 @@ describe('automatic check', () => {
     await store.set('id-r', 'alpha', true)
     const s = setup({ board: boardOf(planRepo(SPRINT_DONE)), store, idle: () => false })
     s.auto.start()
-    await settle()
+    await s.auto.settled()
     expect(s.runner.starts).toEqual([])
 
     // The session goes quiet; the Board doesn't change. The next tick sends.
@@ -154,7 +152,7 @@ describe('automatic check', () => {
     await vi.advanceTimersByTimeAsync(AUTO_TICK_MS - 1)
     expect(s.runner.starts).toEqual([])
     await vi.advanceTimersByTimeAsync(1)
-    await settle()
+    await s.auto.settled()
     expect(s.runner.starts).toHaveLength(1)
 
     // Stopped: no more ticks, and no more Board subscriptions.
@@ -210,7 +208,7 @@ describe('automatic check', () => {
     const t = setup({ board: boardOf(planRepo(SPRINT_DONE)), store, runner: slow })
     const first = t.auto.check()
     const second = t.auto.check()
-    await settle()
+    await vi.waitFor(() => expect(slow.starts).toHaveLength(1))
     expect(t.inFlight.has('sess-1')).toBe(true)
     release({ outcome: 'started' })
     await Promise.all([first, second])
@@ -238,7 +236,7 @@ describe('automatic check', () => {
     await store.set('id-r', 'alpha', true)
     const s = setup({ board: boardOf(planRepo(FRESH)), store })
     s.auto.start()
-    await settle()
+    await s.auto.settled()
     s.emit(boardOf(planRepo(FRESH)))
     await vi.advanceTimersByTimeAsync(AUTO_TICK_MS * 3)
     await s.auto.check()

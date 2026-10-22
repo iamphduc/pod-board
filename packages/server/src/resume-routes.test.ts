@@ -191,7 +191,7 @@ describe('resume route', () => {
     expect(s.inFlight.size).toBe(0)
 
     // No toggle → none is added. go never sets a lastKey.
-    const t = setup({ board: boardOf(planRepo(SPRINT_DONE), planRepo(FRESH, { id: 'id-f', session: 'sess-2' })) })
+    const t = setup({ board: boardOf(planRepo(SPRINT_DONE), planRepo(FRESH, { id: 'id-f', session: 'sess-2' })), store: createAutoContinueStore({ file: join(root, 'other.json') }) })
     await t.store.set('id-f', 'alpha', true)
     expect((await t.resume({ repoId: 'id-r', run: 'alpha', reply: 'continue' })).status).toBe(200)
     expect((await t.resume({ repoId: 'id-f', run: 'alpha', reply: 'go' })).status).toBe(200)

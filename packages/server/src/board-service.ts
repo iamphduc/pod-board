@@ -10,6 +10,7 @@ import {
   handBackPr,
   parseAgentTranscript,
   type ActionEntry,
+  type AutoToggle,
   type AgentRun,
   type Board,
   type BoardRepo,
@@ -35,6 +36,8 @@ export type BoardServiceDeps = {
   ignoresCase?: (dir: string) => Promise<boolean>
   /** The action log's newest entries, read on every build. No dep, no `actions` on the Board. */
   actions?: () => ActionEntry[]
+  /** The auto-continue toggles, read on every build. No dep, no `autoContinue` on the Board. */
+  autoContinue?: () => AutoToggle[]
 }
 
 export type BoardService = {
@@ -143,6 +146,8 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
       if (checkedAt !== undefined) board.ghCheckedAt = checkedAt
       if (configUnreadable) board.configError = 'config unreadable'
       if (deps.actions) board.actions = deps.actions()
+      // The stop keys stay in the store; the Board only says which toggles are on.
+      if (deps.autoContinue) board.autoContinue = deps.autoContinue().map(({ repoId, run }) => ({ repoId, run }))
       return board
     },
     async refreshGh(board) {
