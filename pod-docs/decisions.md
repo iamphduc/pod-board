@@ -87,3 +87,18 @@ Consequences: fix reviewers dispatched only in prose (ytb-feed's `kind: fix. Rev
 Context: pod opens the final PR at plan-complete step 1, before it writes the hand-back, so Ship read `Final PR · not open yet` through the final review and the report. A plan doc doesn't record its merge-target, and real final PRs target different bases: chess-web's `ui-polish` → `ui-polish-staging` (#91), pod-board's `board-read` → `pod-staging` (#15).
 Decision: before the hand-back, the final PR is any PR whose head is `<plan-slug>`, whatever its base: the open one, else the newest (the fix runs' `gh pr list --head` rule). The board asks only for plans in their final review or close-out with no pending hand-back: an archived or `done` plan while a claim names it, or any other plan with every sprint done. Open reads `PR #N · after review` (wait), merged `merged PR #N`, closed `PR #N · closed` (blocked). Once the hand-back exists, its PR wins.
 Consequences: an older PR from a reused plan slug can show until the new final PR opens. To filter by base, pod would need to write the merge-target into the plan doc.
+
+## 2026-10-21 — no npm publishing
+Context: the master plan planned `npx pod-board` for phase 2. The repo is private (2026-10-18), and the board has one user on one machine.
+Decision: don't publish to npm. Plan `board-actions` has no packaging sprint; the board keeps running from the repo.
+Consequences: no public package. Revisit if the repo goes public or someone else wants to run it.
+
+## 2026-10-21 — a Continue toggle per run
+Context: copy-the-reply still sends the human to the chat to type `continue`.
+Decision: each run gets a Continue toggle, off by default. On, the board resumes the run's orchestrator session with `continue` whenever pod waits only for `continue`. Off, a Continue button does it once. The board uses the human's own `claude` login, never an API key or `--bare`.
+Consequences: needs a check of Anthropic's current rules for headless use, and of what happens when the session is also open in a terminal, before it's built (plan `board-actions`, sprint `resume-runs`). Copy-the-reply stays as the fallback.
+
+## 2026-10-21 — `go` only from a button
+Context: the human doesn't want building to start from a guess while planning is still going on.
+Decision: the board never sends `go` on its own, not even with the Continue toggle on. A Go button sends it only when the human presses it. The same holds for `try` and for queue answers.
+Consequences: the board never infers "waiting for go" from transcripts; the Go button is shown on a plan whose sprints haven't started, and the human decides.
