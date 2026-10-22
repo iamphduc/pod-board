@@ -13,6 +13,7 @@ import { replyPanel } from './reply-view.ts'
 import { RunsList } from './RunsList.tsx'
 import { SliceLog } from './SliceLog.tsx'
 import { ThemeControl } from './ThemeControl.tsx'
+import { WaitingOnYou } from './WaitingOnYou.tsx'
 import { banners, barTitle, emptyMessage, runChip, streamChip } from './view.ts'
 import './runs.css'
 
@@ -99,6 +100,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
         ) : (
           <p className="muted">{emptyMessage(selected, repo)}</p>
         )}
+        {board && selected && repo && <WaitingOnYou key={`${repo.id}/${selected.plan}`} repo={repo} run={selected} />}
         {board && selected && <OtherActivity list={others} />}
         {board && <ActionLog entries={board.actions} now={now} />}
       </main>

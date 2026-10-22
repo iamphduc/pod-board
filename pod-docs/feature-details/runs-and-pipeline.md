@@ -2,7 +2,7 @@
 
 ## What it is
 
-Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per sprint, Check, Ship) and its slice log, plus the Add a repo form, the live chip, and the empty and error states. Also `/pod:fix` runs, with their own pipeline and agent log, and the Other activity strip. Also the Reply panel. Covers the features.md rows Screen 1, Screen 1 live state, Screen 1 close-out run, Screen 1 fix run, Other activity, Screen 1 Add repo, and Unsupported docs and no runs. The logic is pure in `packages/model/src/runs.ts`, `pipeline.ts`, and `fix-runs.ts` and in `packages/web/src/screens/runs/view.ts`; components are glue.
+Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per sprint, Check, Ship) and its slice log, plus the Add a repo form, the live chip, and the empty and error states. Also `/pod:fix` runs, with their own pipeline and agent log, and the Other activity strip. Also the Reply panel and the Waiting on you list with its answer form. Covers the features.md rows Screen 1, Screen 1 live state, Screen 1 close-out run, Screen 1 fix run, Other activity, Screen 1 Add repo, and Unsupported docs and no runs. The logic is pure in `packages/model/src/runs.ts`, `pipeline.ts`, and `fix-runs.ts` and in `packages/web/src/screens/runs/view.ts`; components are glue.
 
 ## How it works
 
@@ -57,6 +57,17 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - **Secrets.** Session ids and commands only, never prompt text.
 - At 375 px each row stacks, with its Copy button full width under its text; ids and paths wrap.
 
+## Waiting on you
+
+- **Which** (`queue-view.ts`, `WaitingOnYou.tsx`). The repo's `needsYou` entries for the selected run: the selected plan's `queue` first, then the repo's entries that join no plan, each in queue order. A fix run and a repo row get only the unjoined ones. Other plans' entries show under their own run. Entries match by `line`, since the Board arrives as JSON and a plan's join reads only the line. Nothing shows when no entry waits.
+- **Where.** Under the main view (pipeline, fix pipeline and agent log, repo row message, or wave board), above Other activity.
+- **Rows.** A card with a state edge: a type chip (BLOCKED bad, PENDING you, NOTE and others idle), the date, the route, and the body as plain text (no bold, code ticks, or link syntax). An answerable row (`isAnswerable`) has a quiet `Answer` button. An answered row shows `Your answer: <answer>` and `Waiting for pod to read it.`
+- **Form** (`answer-flow.ts`, a pure reducer and driver like `merge-flow.ts`): idle → editing → saving → result, or → error. It opens in place (`.inplace`) right under its row, with a `textarea.input`, a primary `Save answer`, a quiet Cancel, and the note `ANSWER_NOTE`: `pod reads board answers only once its pod plugin supports them. Until then, also give the answer in the chat.` One form at a time; opening another row's form drops the first one's text. Cancel and Escape close it, except while saving; while saving, Save and every Answer button are off, and a repeat press sends nothing.
+- **Save** runs `cleanAnswer` first: its error shows at once and nothing is sent. Else it posts `answer` with `{ repoId, line, text }`, the row's `line` and the cleaned text.
+- **Result words:** answered → `Saved to the queue.` with the note, and no text box. changed → the server's message (fallback `The entry changed since you looked.`), failed → the server's message (fallback `Couldn't write the queue.`); both keep the form open with the typed text, and Save can send again. `logged: false` adds `Not saved to the action log.` Client errors show `postAction`'s message and keep the text. Sending again is safe: the route answers only an unanswered entry, so a repeat gives `not waiting on you`.
+- **The result stays with its row.** After the answer the Board's line carries ` **Answer (human):** …`, so the form follows the answered row whose line starts with the line it opened on. If the entry has left the list, the form shows after the list until you close it.
+- At 375 px rows and the form stack, the textarea is full width, and buttons are 44 px tall.
+
 ## Why it's this way
 
 - **A claimed plan stays a run through its close-out**: pod archives the plan (`Status: archived`) before the final merge and writes the hand-back only after the reporter finishes, so without the claim the run read `no active plan · idle` while the reporter wrote. The claim file is pod's own "still working on it" signal; pod deletes it after the merge. With no claim, an archived plan stays off the list, even with its reporter running: a reporter re-run on a finished plan isn't a run.
@@ -98,6 +109,8 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 
 - A wave engineer that goes quiet for 30 minutes without ending counts as not running, so its wave can read `you merge` while it's still stuck.
 - A closed (not merged) hand-back PR still reads `you merge` and carries `merge`, as before; Merge then reports `PR is closed`.
+- A `needsYou` entry of a plan that isn't on the runs list (archived or finished, such as a pending `→ human` entry left after a plan closed) shows in no Waiting on you list: it joins its plan, and only listed runs show one.
+- An answer doesn't clear `needsYou`: the row stays in the list as answered, and the run stays `needs-you`, until pod reads the line and resolves the entry.
 - At 375 px the Merge button sits inside the pipeline's sideways scroller, so on a phone you may need to scroll the pipeline to reach it. The confirm itself is full width.
 - With the API stopped, the Vite proxy answers `502` with an empty body; the action client reads that as `Can't reach the board.`. A `502` with a JSON `error` (the merge routes' `gh` failures) keeps its words.
 
@@ -121,3 +134,4 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - 2026-10-21 · merge-actions P1 · one rule (`waitingPrs`) for PRs waiting on you; a handed-back wave reads `you` with `PR #N · you merge` and its run `needs-you`, and waiting steps carry `merge`.
 - 2026-10-21 · merge-actions U1 · a step with a PR waiting on you gets a Merge button that opens the confirm in place, shows GitHub's result, and the action log lists the newest 20 actions under Other activity.
 - 2026-10-21 · queue-and-replies R1 · a Reply panel under the bar names the reply pod waits for (`continue`, `try`, or `go`), why, and the chat to paste it in, each line with a Copy button.
+- 2026-10-22 · queue-and-replies U2 · a Waiting on you list under the main view shows the run's queue entries for you, and an Answer button opens a form in place that appends your answer to the entry's line.
