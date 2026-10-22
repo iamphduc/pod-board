@@ -4,6 +4,7 @@
 // The rules and why are in pod-docs/feature-details/run-model.md.
 
 import { docsVersion, needsYou, planExtras, prRef, sliceDeps, type DocsVersion, type PrRef } from './formats.ts'
+import { QUEUE_LINE, queueLines, splitAnswer } from './queue-answer.ts'
 import { isDone, parsePlan, parseQueue, parseSprint, readTable, type PlanDoc, type QueueEntry, type Row, type SprintDoc } from './pod-flow/model.ts'
 
 /** Repo-relative path → file text. Keys may use `/` or `\`. A file not in the map doesn't exist. */
@@ -67,12 +68,27 @@ export function buildRepoModel(files: RepoFiles): RepoModel {
   const docs = docsVersion(repo.get(README))
   if (!docs.supported) return { docs, plans: [], queue: [] }
 
-  const queue = parseQueue(repo.get(QUEUE) ?? '').map((entry) => ({ ...entry, needsYou: needsYou(entry), line: '' }))
+  const queue = readQueue(repo.get(QUEUE) ?? '')
   const planDocs = readPlans(repo)
   const sprintDocs = readSprints(repo)
   const joined = joinSprints(planDocs, sprintDocs)
   const plans = planDocs.map(({ doc, md }) => buildPlan(doc, md, joined.get(doc.slug) ?? [], queue))
   return { docs, plans, queue }
+}
+
+/** The queue's entries, each with its line, date, and answer. `parseQueue` and `queueLines` match one for one. */
+function readQueue(md: string): QueueItem[] {
+  const lines = queueLines(md)
+  return parseQueue(md).map((entry, i) => {
+    const line = lines[i] ?? ''
+    const m = QUEUE_LINE.exec(line)
+    const date = (m?.[1] ?? '').split('·')[0]?.trim()
+    const { body, answer } = splitAnswer(m?.[2] ?? '')
+    const item: QueueItem = { ...entry, body, needsYou: needsYou(entry), line }
+    if (date) item.date = date
+    if (answer !== undefined) item.answer = answer
+    return item
+  })
 }
 
 function normalizeKeys(files: RepoFiles): Map<string, string> {

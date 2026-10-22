@@ -79,7 +79,6 @@ describe('queue answers', () => {
       '- `[2026-10-21 · BLOCKED · orchestrator → human · plan: alpha]` Gate 2 stopped the run: tests fail **Resolution:** pending',
       '- `[2026-10-21 · PENDING · engineer → human · sprint: one · slice: A1]` Pick a name **Resolution:** pending',
       '- `[2026-10-21 · PENDING · orchestrator → human · plan: alpha]` plan alpha complete — final PR https://github.com/o/r/pull/9 **Resolution:** pending',
-      '- `[2026-10-21 · PENDING · engineer → human]` no resolution at all',
     ]
     const text = 'Use the old name; see `docs/x.md` [link](http://x) and a ] bracket'
     for (const line of lines) {
@@ -92,6 +91,8 @@ describe('queue answers', () => {
       expect(queueOf(answered)[0]?.answer).toBe(text)
       expect(queueOf(answered)[0]?.body).toBe(queueOf(line)[0]?.body)
     }
+    // A line with no Resolution isn't pending, so it's never answered: parseQueue would read the answer into its body.
+    expect(isAnswerable(queueOf('- `[2026-10-21 · PENDING · engineer → human]` no resolution')[0]!)).toBe(false)
     // Trailing spaces on the line don't double up.
     expect(withAnswer(`${lines[1]}  `, 'ok')).toBe(`${lines[1]} **Answer (human):** ok`)
     // latestHalt finds the same halt in the whole queue before and after.
