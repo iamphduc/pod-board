@@ -24,6 +24,13 @@ export function requestGuard({ ports }: { ports: readonly number[] }): Middlewar
   }
 }
 
+/** Guards every route under /api/actions/. Stub. */
+export function actionGuard(_opts: { ports: readonly number[]; token: string }): MiddlewareHandler {
+  return async (_c, next) => {
+    await next()
+  }
+}
+
 const pathFor = (platform: NodeJS.Platform) => (platform === 'win32' ? path.win32 : path.posix)
 
 /**

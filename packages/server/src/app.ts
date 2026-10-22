@@ -22,6 +22,10 @@ export type AppDeps = {
   /** One board agent's tool timeline; undefined when it isn't on the Board or its file is gone. */
   timeline: (repoId: string, agentId: string) => Promise<AgentTimeline | undefined>
   pingMs?: number
+  /** The per-launch session token every action request must carry. */
+  token: string
+  /** The action routes, mounted at /api/actions behind the action guard. */
+  actions?: Hono
 }
 
 const ADD_REPO_STATUS = { 'not absolute': 400, 'not a directory': 400, 'already registered': 409, 'config unreadable': 500 } as const
