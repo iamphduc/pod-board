@@ -16,7 +16,10 @@ function fakeFetch(reply: () => Response | Promise<Response>) {
 }
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
-const deps = (fetchFn: typeof fetch, token: string | null | undefined = TOKEN): ActionDeps => ({ fetch: fetchFn, token: () => token })
+const deps = (fetchFn: typeof fetch, ...token: [string | null | undefined] | []): ActionDeps => ({
+  fetch: fetchFn,
+  token: () => (token.length === 0 ? TOKEN : token[0]),
+})
 
 describe('action client', () => {
   it('sends the token header', async () => {

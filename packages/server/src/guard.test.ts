@@ -177,7 +177,8 @@ describe('action guard', () => {
 
   test('the token must match exactly', async () => {
     const { app } = actionGuarded()
-    for (const token of ['', 'k'.repeat(42), 'k'.repeat(44), 'j' + 'k'.repeat(42), ` ${TOKEN}`, TOKEN.toUpperCase() === TOKEN ? 'x' : TOKEN.toUpperCase()]) {
+    // HTTP trims spaces around a header value, so ` <token>` is the token itself.
+    for (const token of ['', 'k'.repeat(42), 'k'.repeat(44), 'j' + 'k'.repeat(42), 'K'.repeat(43), `${TOKEN.slice(0, 20)} ${TOKEN.slice(21)}`]) {
       const res = await act(app, { ...GOOD, 'x-pod-board-token': token })
       expect(res.status, JSON.stringify(token)).toBe(403)
       expect(await res.json()).toEqual({ error: 'bad token' })
