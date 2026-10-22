@@ -1,21 +1,22 @@
 import { cpSync } from 'node:fs'
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Board } from '@pod-board/model'
 import * as model from '@pod-board/model'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { createBoardService, type BoardServiceDeps } from './board-service.ts'
+import { createBoardService, finalPrBranches, type BoardServiceDeps } from './board-service.ts'
 import type { GhReader, GhStatus, PrStatus } from './gh.ts'
 import { normalizeRepoPath, repoId } from './guard.ts'
 import { projectDirName } from './transcript-files.ts'
 import { createBoardWatcher } from './watcher.ts'
 
-// The model as is, with handBackPr watched, so the test can see the server uses the model's rule.
+// The model as is, with handBackPr and parseAgentTranscript watched, so the test can see the
+// server uses the model's rule and parses only the transcripts that changed.
 vi.mock('@pod-board/model', async (original) => {
   const actual = await original<typeof import('@pod-board/model')>()
-  return { ...actual, handBackPr: vi.fn(actual.handBackPr) }
+  return { ...actual, handBackPr: vi.fn(actual.handBackPr), parseAgentTranscript: vi.fn(actual.parseAgentTranscript) }
 })
 
 const platform = process.platform
@@ -58,8 +59,10 @@ async function claim(port: number, repoPath: string, plan: string): Promise<void
 
 const ts = (min: number) => new Date(NOW - 10 * 60_000 + min * 60_000).toISOString()
 
+const subagentsOf = (repoPath: string) => join(claudeDir, 'projects', projectDirName(repoPath), 'session-1', 'subagents')
+
 async function transcript(repoPath: string, id: string, agentType: string, prompt: string, description = `Build ${id}`): Promise<void> {
-  const sub = join(claudeDir, 'projects', projectDirName(repoPath), 'session-1', 'subagents')
+  const sub = subagentsOf(repoPath)
   await mkdir(sub, { recursive: true })
   await writeFile(join(sub, `agent-${id}.meta.json`), JSON.stringify({ agentType, description }))
   const lines = [
@@ -396,6 +399,23 @@ describe('board service', () => {
     expect(model.listRuns(board, NOW).find((x) => x.fix === 'clock')).toMatchObject({ plan: 'fix-clock', where: 'review', state: 'running', portBase: 3200 })
   })
 
+  test("a claimed archived plan with no hand-back yet: refreshGh asks gh for the plan's branch; the Board has its final PR", async () => {
+    // chess-web's ui-polish close-out before pod writes the hand-back: the final PR is open on `ui-polish`.
+    const repo = copyFixture('chess-web', 'chess-web-ui-polish')
+    await writeFile(join(repo, 'pod-docs', 'handoff-queue.md'), '# Handoff Queue\n')
+    await claim(3200, repo, 'ui-polish')
+    const path = normalizeRepoPath(repo, platform)
+    const pr: PrStatus = { number: 91, state: 'open', checks: 'pass', checkedAt: NOW, branch: 'ui-polish' }
+    const gh = fakeGh({}, 'ok', { 'ui-polish': pr })
+    const service = createBoardService(deps(gh))
+    const board = await service.build()
+    await service.refreshGh(board)
+    expect(gh.refreshed).toEqual([{ repoPath: path, numbers: [], branches: ['ui-polish'] }])
+    expect(board.repos[0]!.prs).toEqual([pr])
+    const ship = model.buildPipeline(board.repos[0]!, 'ui-polish', NOW)?.stages.find((s) => s.key === 'ship')?.steps
+    expect(ship).toEqual([{ key: 'final-pr', label: 'Final PR', state: 'wait', detail: 'PR #91 · after review' }])
+  })
+
   test('a PR found by branch that is also a numbered live PR is on the Board once', async () => {
     const repo = copyFixture()
     // A hand-back linking #77 makes #77 a live PR by number too.
@@ -447,3 +467,193 @@ async function snapshot(dir: string): Promise<Record<string, { bytes?: string; m
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timed out after ${ms} ms`)), ms))])
 }
+
+describe('transcript cache', () => {
+  const parsed = vi.mocked(model.parseAgentTranscript)
+  const jsonlOf = (repo: string, id: string) => join(subagentsOf(repo), `agent-${id}.jsonl`)
+  const metaOf = (repo: string, id: string) => join(subagentsOf(repo), `agent-${id}.meta.json`)
+  const line = (r: unknown) => JSON.stringify(r) + '\n'
+  const usage = (min: number, id: string, tokens: number, extra: Record<string, unknown> = {}) =>
+    line({ type: 'assistant', timestamp: ts(min), message: { id, model: 'claude-opus-5-5', usage: { input_tokens: tokens, output_tokens: 0 }, content: [], ...extra } })
+  const json = (b: Board) => JSON.stringify(b)
+  /** The ids of the agents parsed since the last call. */
+  const parsedIds = () => {
+    const ids = parsed.mock.calls.map(([f]) => f.id).sort()
+    parsed.mockClear()
+    return ids
+  }
+
+  // A block body: a function returned from beforeEach runs as its cleanup.
+  beforeEach(() => {
+    parsed.mockClear()
+  })
+
+  test('a second build with no file changed parses no transcript, across every repo', async () => {
+    const a = copyFixture('alpha')
+    const b = copyFixture('beta')
+    await register(a, b)
+    await transcript(a, 'eng1', 'pod:engineer', ENGINEER_PROMPT)
+    await transcript(b, 'eng2', 'pod:engineer', ENGINEER_PROMPT)
+    await transcript(b, 'other', 'general-purpose', 'not a pod agent')
+    const service = createBoardService(deps())
+    const first = await service.build()
+    expect(parsedIds()).toEqual(['eng1', 'eng2', 'other'])
+    const second = await service.build()
+    expect(parsedIds()).toEqual([])
+    expect(json(second)).toBe(json(first))
+  })
+
+  test('only the transcript that grew, or whose meta changed, is parsed again', async () => {
+    const repo = copyFixture()
+    await register(repo)
+    await transcript(repo, 'eng1', 'pod:engineer', ENGINEER_PROMPT)
+    await transcript(repo, 'rev1', 'general-purpose', '- **plan:** sparring-ladder\n- **round:** 1\n')
+    const service = createBoardService(deps())
+    await service.build()
+    parsedIds()
+
+    await appendFile(jsonlOf(repo, 'eng1'), usage(5, 'm2', 1000))
+    const grown = await service.build()
+    expect(parsedIds()).toEqual(['eng1'])
+    expect(grown.repos[0]!.agents[0]).toMatchObject({ id: 'eng1', tokens: 1150, lastAt: Date.parse(ts(5)) })
+
+    await writeFile(metaOf(repo, 'rev1'), JSON.stringify({ agentType: 'pod:reviewer' }))
+    const meta = await service.build()
+    expect(parsedIds()).toEqual(['rev1'])
+    expect(meta.repos[0]!.agents.map((x) => x.id)).toEqual(['eng1', 'rev1'])
+  })
+
+  test('a transcript that leaves the listing is forgotten, and parsed again when it comes back', async () => {
+    const repo = copyFixture()
+    await register(repo)
+    await transcript(repo, 'eng1', 'pod:engineer', ENGINEER_PROMPT)
+    const service = createBoardService(deps())
+    await service.build()
+    parsedIds()
+
+    // The session is older than the 30-day window: off the listing and the Board.
+    const old = new Date(NOW - 40 * 24 * 60 * 60_000)
+    const session = dirname(subagentsOf(repo))
+    await utimes(subagentsOf(repo), old, old)
+    await utimes(session, old, old)
+    expect((await service.build()).repos[0]!.agents).toEqual([])
+    expect(parsedIds()).toEqual([])
+
+    const back = new Date(NOW)
+    await utimes(subagentsOf(repo), back, back)
+    await utimes(session, back, back)
+    expect((await service.build()).repos[0]!.agents.map((x) => x.id)).toEqual(['eng1'])
+    expect(parsedIds()).toEqual(['eng1'])
+  })
+
+  test('a transcript deleted after a build drops off the Board', async () => {
+    const repo = copyFixture()
+    await register(repo)
+    await transcript(repo, 'eng1', 'pod:engineer', ENGINEER_PROMPT)
+    const service = createBoardService(deps())
+    expect((await service.build()).repos[0]!.agents).toHaveLength(1)
+    await rm(jsonlOf(repo, 'eng1'))
+    expect((await service.build()).repos[0]!.agents).toEqual([])
+  })
+
+  test('the Board built from the cache is byte for byte the Board built fresh, through appends, resumes, and rewrites', async () => {
+    const repo = copyFixture()
+    const second = copyFixture('second')
+    await register(repo)
+    await transcript(repo, 'eng1', 'pod:engineer', ENGINEER_PROMPT)
+    await transcript(repo, 'rev1', 'pod:reviewer', '- **plan:** sparring-ladder\n- **round:** 1\n')
+    await transcript(repo, 'other', 'general-purpose', 'not a pod agent')
+    const cached = createBoardService(deps())
+    const same = async (step: string) => {
+      const fromCache = json(await cached.build())
+      expect(fromCache, step).toBe(json(await createBoardService(deps()).build()))
+    }
+    await same('start')
+
+    await appendFile(jsonlOf(repo, 'eng1'), usage(3, 'm2', 500))
+    await same('appended')
+
+    // A record half written: skipped until it's whole, both ways.
+    const record = usage(4, 'm3', 70, { content: [{ type: 'tool_use', id: 'h1', name: 'SubagentHandback', input: {} }] })
+    await appendFile(jsonlOf(repo, 'eng1'), record.slice(0, 40))
+    await same('half a record')
+    await appendFile(jsonlOf(repo, 'eng1'), record.slice(40))
+    await same('the record finished: handed back')
+
+    // The coordinator resumes it (SendMessage): a second turn, then a second hand-back.
+    await appendFile(
+      jsonlOf(repo, 'eng1'),
+      line({ type: 'user', timestamp: ts(6), origin: { kind: 'coordinator' }, message: { role: 'user', content: 'fix pass' } }) +
+        usage(7, 'm4', 30),
+    )
+    await same('resumed')
+    await appendFile(jsonlOf(repo, 'eng1'), usage(8, 'm5', 9, { stop_reason: 'end_turn' }))
+    await same('handed back again')
+
+    // The same message streamed again with its final usage replaces its first count.
+    await appendFile(jsonlOf(repo, 'rev1'), usage(5, 'm1', 999))
+    await same('a streamed message')
+
+    await writeFile(metaOf(repo, 'other'), JSON.stringify({ agentType: 'pod:engineer' }))
+    await same('meta now a pod agent')
+    await writeFile(metaOf(repo, 'other'), 'not json')
+    await same('meta unreadable')
+
+    await writeFile(jsonlOf(repo, 'eng1'), line({ type: 'user', timestamp: ts(1), message: { role: 'user', content: ENGINEER_PROMPT } }))
+    await same('rewritten shorter')
+
+    await rm(jsonlOf(repo, 'rev1'))
+    await same('deleted')
+
+    await register(repo, second)
+    await transcript(second, 'eng9', 'pod:engineer', ENGINEER_PROMPT)
+    await same('a second repo')
+  })
+})
+
+describe('finalPrBranches', () => {
+  const README = '# pod docs\n\npod docs: 2\n'
+  const plan = (slug: string, status: string, sprints: [string, string][]) =>
+    [
+      `# Plan: ${slug}`,
+      '',
+      `_Generated: 2026-10-18 · Status: ${status} · Grilled-with: grilling_`,
+      '',
+      '## Sprint sequence',
+      '',
+      '| Sprint | Goal | Status | Depends on |',
+      '|--------|------|--------|------------|',
+      ...sprints.map(([s, st]) => `| ${s} | goal | ${st} | — |`),
+      '',
+    ].join('\n')
+  const handBack = (slug: string, pending = true) =>
+    `- \`[2026-10-20 · PENDING · orchestrator → human · plan: ${slug}]\` plan ${slug} complete — final PR https://github.com/o/r/pull/9 **Resolution:** ${pending ? 'pending' : '2026-10-20 — merged'}`
+  const branches = (plans: Record<string, string>, claimed: string[] = [], queue: string[] = []) =>
+    finalPrBranches(
+      model.buildRepoModel({
+        'pod-docs/README.md': README,
+        'pod-docs/handoff-queue.md': ['# Handoff Queue', '', ...queue, ''].join('\n'),
+        ...Object.fromEntries(Object.entries(plans).map(([slug, doc]) => [`pod-docs/plans/${slug}.md`, doc])),
+      }),
+      claimed.map((p) => ({ plan: p })),
+    )
+
+  test('a plan with every sprint done (final review, close-out) gives its slug; one mid-sprint gives none', () => {
+    expect(branches({ alpha: plan('alpha', 'active', [['one', 'done'], ['two', 'done']]) })).toEqual(['alpha'])
+    expect(branches({ alpha: plan('alpha', 'active', [['one', 'done'], ['two', 'active']]) })).toEqual([])
+    // No sprints yet is not close-out.
+    expect(branches({ alpha: plan('alpha', 'active', []) })).toEqual([])
+  })
+
+  test('an archived or done plan only while a claim names it', () => {
+    const plans = { alpha: plan('alpha', 'archived', [['one', 'done']]), beta: plan('beta', 'done', [['b', 'done']]) }
+    expect(branches(plans)).toEqual([])
+    expect(branches(plans, ['alpha', 'beta'])).toEqual(['alpha', 'beta'])
+  })
+
+  test('a pending hand-back is asked by number, not by branch; a resolved one is no hand-back', () => {
+    const plans = { alpha: plan('alpha', 'active', [['one', 'done']]) }
+    expect(branches(plans, [], [handBack('alpha')])).toEqual([])
+    expect(branches(plans, [], [handBack('alpha', false)])).toEqual(['alpha'])
+  })
+})

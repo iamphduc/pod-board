@@ -46,7 +46,7 @@ export type PrStatus = {
   checks: 'pass' | 'fail' | 'pending' | 'none'
   url?: string
   checkedAt: number
-  /** The head branch, set when the PR was found by its branch (a fix run's `fix-<slug>`). */
+  /** The head branch, set when the PR was found by its branch (a fix run's `fix-<slug>`, or a plan's final PR on `<plan-slug>`). */
   branch?: string
 }
 

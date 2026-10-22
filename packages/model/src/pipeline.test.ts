@@ -277,6 +277,28 @@ describe('buildPipeline', () => {
     expect(ship([queueLine('PENDING', 'orchestrator → human', 'plan: alpha', 'Plan complete, awaiting you')])).toEqual([['Final PR', 'wait', 'not open yet']])
   })
 
+  it('ship: the final PR found by its head branch, before the hand-back exists', () => {
+    const done = { sprints: [['one', 'done']] as SprintRow[], docs: { one: [[1, 'A1', 'merged', 'done']] as BoardRow[] } }
+    const byBranch = (n: number, state: PrStatus['state'], branch = 'alpha'): PrStatus => ({ number: n, state, checks: 'pass', checkedAt: NOW, branch })
+    const handBack = (n: number, pending = true) =>
+      queueLine('PENDING', 'orchestrator → human', 'plan: alpha', `Plan complete: merge https://github.com/o/r/pull/${n}`, pending)
+    const ship = (prs: PrStatus[], queue: string[] = []) => steps(build(repo(files({ ...done, queue }), { prs })), 'ship')
+
+    // Open: pod hands it back only after the final review, so it isn't yours to merge yet.
+    expect(ship([byBranch(12, 'open')])).toEqual([['Final PR', 'wait', 'PR #12 · after review']])
+    expect(ship([byBranch(12, 'merged')])).toEqual([['Final PR', 'done', 'merged PR #12']])
+    expect(ship([byBranch(12, 'closed')])).toEqual([['Final PR', 'blocked', 'PR #12 · closed']])
+    // Another branch's PR, or one found by number only, isn't this plan's final PR.
+    expect(ship([byBranch(12, 'open', 'beta')])).toEqual([['Final PR', 'wait', 'not open yet']])
+    expect(ship([byBranch(12, 'open', 'fix-alpha')])).toEqual([['Final PR', 'wait', 'not open yet']])
+    expect(ship([{ number: 12, state: 'open', checks: 'pass', checkedAt: NOW }])).toEqual([['Final PR', 'wait', 'not open yet']])
+    // Once the hand-back exists, its PR wins over the branch's.
+    expect(ship([byBranch(12, 'merged')], [handBack(13)])).toEqual([['Final PR', 'you', 'PR #13 · you merge']])
+    expect(ship([byBranch(13, 'open')], [handBack(13)])).toEqual([['Final PR', 'you', 'PR #13 · you merge']])
+    // A resolved hand-back is no hand-back: the branch's PR shows again.
+    expect(ship([byBranch(13, 'merged')], [handBack(13, false)])).toEqual([['Final PR', 'done', 'merged PR #13']])
+  })
+
   it('slice log', () => {
     const r = repo(
       files({

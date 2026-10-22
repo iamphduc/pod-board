@@ -21,7 +21,7 @@ import type { GhReader } from './gh.ts'
 import { ignoresCase as probeIgnoresCase, normalizeRepoPath, repoId, sameRepoPath } from './guard.ts'
 import { readRepoFiles } from './repo-files.ts'
 import { loadRepos } from './repos-config.ts'
-import { createAgentFileReader, listAgentFiles } from './transcript-files.ts'
+import { createAgentFileCache, listAgentFiles, type AgentFile } from './transcript-files.ts'
 
 export type BoardServiceDeps = {
   configFile: string
@@ -46,7 +46,8 @@ type RepoEntry = { path: string; caseless: boolean; registered: boolean; claims:
 export function createBoardService(deps: BoardServiceDeps): BoardService {
   const now = deps.now ?? Date.now
   const ignoresCase = deps.ignoresCase ?? probeIgnoresCase
-  const agentReader = createAgentFileReader()
+  // Each transcript's AgentRun (or undefined for a non-pod agent), never its text.
+  const agentRuns = createAgentFileCache((text) => parseAgentTranscript(text))
   // An unreadable config (a half-saved edit, say) keeps the last list it read.
   let lastRegistered: string[] = []
 
@@ -85,13 +86,14 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
     return { entries, configUnreadable: config.unreadable }
   }
 
-  async function agentsOf(repoPath: string): Promise<AgentRun[]> {
+  /** The repo's pod agents. Adds its listed files to `listed`, so the build keeps their cache. */
+  async function agentsOf(repoPath: string, listed: AgentFile[]): Promise<AgentRun[]> {
     const files = await listAgentFiles(deps.claudeDir, repoPath, deps.transcriptDays, now())
-    agentReader.retain(files)
+    listed.push(...files)
     const runs: AgentRun[] = []
     for (const file of files) {
       try {
-        const run = parseAgentTranscript(await agentReader.read(file))
+        const run = await agentRuns.read(file)
         if (run) runs.push(run)
       } catch {
         // A transcript deleted between listing and reading is left out.
@@ -100,7 +102,7 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
     return runs
   }
 
-  async function buildRepo(entry: RepoEntry): Promise<BoardRepo> {
+  async function buildRepo(entry: RepoEntry, listed: AgentFile[]): Promise<BoardRepo> {
     const base = {
       id: repoId(entry.path, deps.platform, entry.caseless),
       name: pathFor(deps.platform).basename(entry.path) || entry.path,
@@ -117,18 +119,21 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
     const numbered = livePrNumbers(model, entry.claims)
       .map((n) => deps.gh.get(entry.path, n))
       .filter((pr): pr is PrStatus => pr !== undefined)
-    // A fix run's PR, found by its head branch; it replaces the same PR found by number.
-    const byBranch = fixRunNames({ model, claims: entry.claims })
+    // A fix run's PR or a plan's final PR, found by its head branch; it replaces the same PR found by number.
+    const byBranch = prBranches({ model, claims: entry.claims })
       .map((b) => deps.gh.getBranch(entry.path, b))
       .filter((pr): pr is PrStatus => pr !== undefined)
     const prs = [...numbered.filter((p) => !byBranch.some((b) => b.number === p.number)), ...byBranch]
-    return { ...base, model, agents: await agentsOf(entry.path), prs }
+    return { ...base, model, agents: await agentsOf(entry.path, listed), prs }
   }
 
   return {
     async build() {
       const { entries, configUnreadable } = await repoEntries()
-      const repos = await Promise.all(entries.map(buildRepo))
+      const listed: AgentFile[] = []
+      const repos = await Promise.all(entries.map((e) => buildRepo(e, listed)))
+      // Forget transcripts no repo listed this time: out of the day window, deleted, or their repo gone.
+      agentRuns.retain(listed)
       repos.sort((a, b) => compare(a.name.toLowerCase(), b.name.toLowerCase()) || compare(a.path, b.path))
       const board: Board = { generatedAt: now(), gh: deps.gh.status(), repos }
       const checkedAt = deps.gh.checkedAt()
@@ -141,7 +146,7 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
       // One repo at a time: the first call settles `gh auth status` for the rest.
       for (const repo of board.repos) {
         if (repo.error !== undefined) continue
-        if (await deps.gh.refresh(repo.path, livePrNumbers(repo.model, repo.claims), fixRunNames(repo))) changed = true
+        if (await deps.gh.refresh(repo.path, livePrNumbers(repo.model, repo.claims), prBranches(repo))) changed = true
       }
       return changed
     },
@@ -170,6 +175,26 @@ export function livePrNumbers(model: RepoModel, claims: Pick<Claim, 'plan'>[] = 
   }
   return [...numbers]
 }
+
+/**
+ * The plan branches the board asks gh about by head, for a final PR pod opened before it wrote the
+ * hand-back: per plan in its final review or close-out with no pending hand-back (that PR is asked by
+ * number). In close-out: an archived or done plan a claim names, or any other plan with every sprint
+ * done. Any PR on the branch counts, whatever its base (a plan doc doesn't record its merge-target).
+ */
+export function finalPrBranches(model: RepoModel, claims: Pick<Claim, 'plan'>[] = []): string[] {
+  const finished = new Set(['archived', 'done'])
+  return model.plans
+    .filter((plan) => {
+      if (handBackPr(plan) !== undefined) return false
+      if (finished.has(plan.status)) return claims.some((c) => c.plan === plan.slug)
+      return plan.sprints.length > 0 && plan.sprints.every((s) => s.status === 'done')
+    })
+    .map((plan) => plan.slug)
+}
+
+/** The head branches gh is asked about: each fix run's, then each final PR's. */
+const prBranches = (repo: Pick<BoardRepo, 'model' | 'claims'>) => [...fixRunNames(repo), ...finalPrBranches(repo.model, repo.claims)]
 
 function folderError(err: unknown): string {
   const code = (err as NodeJS.ErrnoException | undefined)?.code

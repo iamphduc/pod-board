@@ -13,7 +13,7 @@ export type GhReader = {
   /** When `gh auth status` last ran. */
   checkedAt(): number | undefined
   get(repoPath: string, n: number): PrStatus | undefined
-  /** The PR found by its head branch (a fix run's `fix-<slug>`), with `branch` set. */
+  /** The PR found by its head branch (a fix run's `fix-<slug>`, or a plan's final PR on `<plan-slug>`), with `branch` set. */
   getBranch(repoPath: string, branch: string): PrStatus | undefined
   /**
    * Fetches the PRs that are due, by number and by head branch. `true` when the gh status or
@@ -114,7 +114,7 @@ export function createGhReader(opts: { exec?: GhExec; now?: () => number } = {})
   /**
    * Fetches an entry when it's due: not final, and not fetched in the last PR_CACHE_MS. By number,
    * merged and closed are final. By branch, only merged is: a closed PR can be reopened, or a new PR
-   * opened on the same branch, while the fix run's claim lasts.
+   * opened on the same branch, while the run lasts.
    */
   const refreshEntry = (key: string, fetch: (entry: Entry) => Promise<boolean>, isFinal: (pr: PrStatus) => boolean): Promise<boolean> => {
     let entry = cache.get(key)
