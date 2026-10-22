@@ -54,8 +54,16 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - **When.** For the selected plan or fix run, when `runReplies` gives anything (see [queue-and-replies.md](queue-and-replies.md)): under the bar and its banners, above the pipeline (also above the wave board, the fix run's agent log, and the engineer view). Nothing for a repo row, or while pod works or is halted.
 - **Shows** (`reply-view.ts`, `ReplyPanel.tsx`), a quiet `.inplace` panel headed `Reply pod waits for`: each reply's word in mono, its `why`, and a quiet `Copy`. Then the chat to paste it in: `Paste it in Session <id> · first agent HH:MM` (local time, left out when no start is known), the line `cd "<repo path>"`, and `claude --resume <id>`, each with its own `Copy`. With no session: `No pod session found for this run. Paste it in the chat that runs it.` With an id outside `^[A-Za-z0-9-]{1,64}$`: the session line and `cd` only, no resume line.
 - **Copy** (`copy.ts`): writes the exact text to the clipboard. The button reads `Copied` for 2 s. A missing clipboard, or one that refuses, shows the text in a read-only field, selected, with `Copy failed. Press Ctrl+C.` No request, nothing logged.
+- **Continue and Go** (`resume-flow.ts`, `reply-view.ts`). A row whose word `sendableReply` allows gets a primary button beside its Copy: `Continue` on a `continue` row whose signal is in `SEND_SIGNALS` (a merged wave, a done sprint, a merged final or fix PR), `Go` on the `go` row of a fresh plan. `try` and the `*-waiting` rows (merge first) get none. Pressing it posts `resume` once with `{ repoId, run, reply }`; every Continue and Go button is off while it runs, and a second press sends nothing. Nothing sends without a press.
+- **Result, in place** under the pressed row: started → `The session started again. A terminal open on it won't show the board's send: run claude --resume <id> to see it.`; failed → the server's message (fallback `The session didn't start.`); `logged: false` adds `Not saved to the action log.`. A refusal (`session is busy`, `resume in progress`, `not waiting on you`, `no session`) and the action client's errors show their message. The result stays after the Board drops the reply (the panel then holds only the result) until you press Close.
 - **Secrets.** Session ids and commands only, never prompt text.
-- At 375 px each row stacks, with its Copy button full width under its text; ids and paths wrap.
+- At 375 px each row stacks, with its Copy and Continue or Go buttons full width under its text, 44 px tall; ids and paths wrap.
+
+## Auto-continue switch
+
+- **Where.** In the run bar, right after the state chip, for every plan and fix run (not a repo row), whether or not a reply waits. Markup: `<button class="switch" role="switch" aria-checked>auto-continue</button>`; the knob's place and fill show on or off, in both themes.
+- **State** (`switchView`): on when `Board.autoContinue` lists the run's `{ repoId, run }`; off when it doesn't or the field is missing.
+- **Toggle** (`createToggleFlow`): a press posts `auto-continue` with `{ repoId, run, on }`, the opposite of what it shows. While it runs the switch shows the new value and is disabled. Success: it shows the server's `on` until the Board agrees, then follows the Board again. Failure: back to the Board's value (the one before the press), with the message beside the switch, until the next press. The switch never posts `resume`, so it never sends `go` (or anything) itself; the server's automatic check does the sending.
 
 ## Waiting on you
 
@@ -114,6 +122,9 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - At 375 px the Merge button sits inside the pipeline's sideways scroller, so on a phone you may need to scroll the pipeline to reach it. The confirm itself is full width.
 - With the API stopped, the Vite proxy answers `502` with an empty body; the action client reads that as `Can't reach the board.`. A `502` with a JSON `error` (the merge routes' `gh` failures) keeps its words.
 
+- The Continue and Go buttons follow `sendableReply` only, not the session: a run with no session, or an id outside `^[A-Za-z0-9-]{1,64}$`, still shows the button, and pressing it reads `no session`.
+- After `started`, the reply row usually stays (pod hasn't moved on yet) and the button stays pressable; a second press gets `session is busy` or `resume in progress` from the route.
+
 ## History
 
 - 2026-10-18: added in sprint server-runs (slice P1).
@@ -134,4 +145,5 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - 2026-10-21 · merge-actions P1 · one rule (`waitingPrs`) for PRs waiting on you; a handed-back wave reads `you` with `PR #N · you merge` and its run `needs-you`, and waiting steps carry `merge`.
 - 2026-10-21 · merge-actions U1 · a step with a PR waiting on you gets a Merge button that opens the confirm in place, shows GitHub's result, and the action log lists the newest 20 actions under Other activity.
 - 2026-10-21 · queue-and-replies R1 · a Reply panel under the bar names the reply pod waits for (`continue`, `try`, or `go`), why, and the chat to paste it in, each line with a Copy button.
+- 2026-10-22 · resume-runs U1 · an `auto-continue` switch beside the run's state chip turns the board's automatic `continue` on or off per run, and the Reply panel's sendable rows get Continue or Go buttons that resume the session from the board.
 - 2026-10-22 · queue-and-replies U2 · a Waiting on you list under the main view shows the run's queue entries for you, and an Answer button opens a form in place that appends your answer to the entry's line.
