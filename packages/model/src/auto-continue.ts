@@ -1,16 +1,50 @@
-// Stub: filled in by the feat commit.
-import type { Board, BoardRepo } from './board.ts'
-import type { RunReply } from './replies.ts'
+// Auto-continue: which reply the board may send for a run, and which toggled runs it sends now.
+// Pure. The rules and why are in pod-docs/feature-details/queue-and-replies.md.
 
+import type { Board, BoardRepo } from './board.ts'
+import { SEND_SIGNALS, replySession, runReplies, type RunReply } from './replies.ts'
+
+/** A run whose auto-continue toggle is on. `lastKey` is the stop it last sent for. */
 export type AutoToggle = { repoId: string; run: string; lastKey?: string }
+
+/** One automatic `continue` to send now. */
 export type AutoSend = { repoId: string; run: string; session: string; key: string }
 
-export function sendableFrom(_replies: RunReply[], _word: 'continue' | 'go'): RunReply | undefined {
+/**
+ * The reply of `word` the board may send, from a run's replies: `continue` only on a send signal
+ * (the `*-waiting` ones need your merge first), `go` only on `not-started`. Any other word, `try`
+ * included, gives nothing.
+ */
+export function sendableFrom(replies: RunReply[], word: 'continue' | 'go'): RunReply | undefined {
+  if (word === 'continue') return replies.find((r) => r.reply === 'continue' && SEND_SIGNALS.has(r.signal))
+  if (word === 'go') return replies.find((r) => r.reply === 'go' && r.signal === 'not-started')
   return undefined
 }
-export function sendableReply(_repo: BoardRepo, _run: string, _word: 'continue' | 'go', _now: number): RunReply | undefined {
-  return undefined
+
+/** The reply of `word` the board may send on a run now. The resume route and the buttons use this one rule. */
+export function sendableReply(repo: BoardRepo, run: string, word: 'continue' | 'go', now: number): RunReply | undefined {
+  return sendableFrom(runReplies(repo, run, now), word)
 }
-export function autoSends(_board: Board, _toggles: AutoToggle[], _now: number, _idle: (repo: BoardRepo, session: string) => boolean): AutoSend[] {
-  return []
+
+/**
+ * The `continue` sends due now: for each toggle, in order, its repo on the Board, a sendable
+ * `continue` whose key isn't the toggle's `lastKey`, a session with a safe id, and that session idle.
+ * At most one per session, the first toggle's. Never `go`, `try`, or a queue answer. `idle` is only
+ * asked about a safe session id.
+ */
+export function autoSends(board: Board, toggles: AutoToggle[], now: number, idle: (repo: BoardRepo, session: string) => boolean): AutoSend[] {
+  const out: AutoSend[] = []
+  const taken = new Set<string>()
+  for (const t of toggles) {
+    const repo = board.repos.find((r) => r.id === t.repoId)
+    if (!repo) continue
+    const reply = sendableFrom(runReplies(repo, t.run, now), 'continue')
+    if (!reply || reply.reply !== 'continue' || reply.key === t.lastKey) continue
+    const session = replySession(repo, t.run, now)
+    if (!session?.resume || taken.has(session.id)) continue
+    if (!idle(repo, session.id)) continue
+    taken.add(session.id)
+    out.push({ repoId: repo.id, run: t.run, session: session.id, key: reply.key })
+  }
+  return out
 }

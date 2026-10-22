@@ -76,4 +76,6 @@ export type Board = {
   repos: BoardRepo[]
   /** The action log, newest first, at most 50. */
   actions?: ActionEntry[]
+  /** The runs whose auto-continue toggle is on. Missing means all off. */
+  autoContinue?: { repoId: string; run: string }[]
 }
