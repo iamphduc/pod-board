@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -30,11 +30,44 @@ const alive = (pid: number) => {
   }
 }
 
-/** Installs the fake as `claude.cmd` (Windows, an npm-style shim) or `claude` (POSIX) in `dir`. */
-function installFake(dir: string): void {
+/** An npm-style `.cmd` shim, as `npm install -g` writes it for a JS bin. */
+const npmShim = (rel: string) =>
+  [
+    '@ECHO off',
+    'GOTO start',
+    ':find_dp0',
+    'SET dp0=%~dp0',
+    'EXIT /b',
+    ':start',
+    'SETLOCAL',
+    'CALL :find_dp0',
+    '',
+    'IF EXIST "%dp0%\\node.exe" (',
+    '  SET "_prog=%dp0%\\node.exe"',
+    ') ELSE (',
+    '  SET "_prog=node"',
+    '  SET PATHEXT=%PATHEXT:;.JS;=;%',
+    ')',
+    '',
+    `endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\${rel}" %*`,
+    '',
+  ].join('\r\n')
+
+/** A shim the runner can't read, so it goes through cmd.exe. */
+const plainShim = () => `@ECHO off\r\n"${process.execPath}" "${FAKE}" %*\r\n`
+
+/**
+ * Installs the fake in `dir`: on Windows as `claude.cmd`, an npm-style shim (with the
+ * extensionless sh twin npm also writes), on POSIX as an executable `claude`.
+ */
+function installFake(dir: string, shim: 'npm' | 'plain' = 'npm'): void {
   mkdirSync(dir, { recursive: true })
   if (WIN) {
-    writeFileSync(join(dir, 'claude.cmd'), `@ECHO off\r\n"${process.execPath}" "${FAKE}" %*\r\n`)
+    const pkg = join(dir, 'node_modules', 'fake-claude')
+    mkdirSync(pkg, { recursive: true })
+    copyFileSync(FAKE, join(pkg, 'cli.mjs'))
+    writeFileSync(join(dir, 'claude.cmd'), shim === 'npm' ? npmShim('node_modules\\fake-claude\\cli.mjs') : plainShim())
+    writeFileSync(join(dir, 'claude'), '#!/bin/sh\necho not this one\n')
   } else {
     const file = join(dir, 'claude')
     writeFileSync(file, `#!/bin/sh\nexec "${process.execPath}" "${FAKE}" "$@"\n`)
@@ -49,18 +82,19 @@ function envWith(extra: { [k: string]: string } = {}): NodeJS.ProcessEnv {
   return { ...env, PATH: binDir, FAKE_CLAUDE_RECORD: recordFile, ...extra }
 }
 
-const readRecord = (): Record => {
-  const r = JSON.parse(readFileSync(recordFile, 'utf8')) as Record
-  pids.add(r.pid)
-  return r
-}
-
 const waitFor = async (check: () => boolean, ms = 5000) => {
   const end = Date.now() + ms
   while (!check()) {
     if (Date.now() > end) throw new Error('timed out waiting')
     await new Promise((r) => setTimeout(r, 25))
   }
+}
+
+const readRecord = async (): Promise<Record> => {
+  await waitFor(() => existsSync(recordFile))
+  const r = JSON.parse(readFileSync(recordFile, 'utf8')) as Record
+  pids.add(r.pid)
+  return r
 }
 
 beforeEach(() => {
@@ -74,11 +108,11 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
-  if (existsSync(recordFile)) readRecord()
+  if (existsSync(recordFile)) await readRecord()
   for (const pid of pids) if (alive(pid)) process.kill(pid)
   await waitFor(() => [...pids].every((p) => !alive(p)))
   pids.clear()
-  rmSync(tmp, { recursive: true, force: true })
+  rmSync(tmp, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })
 })
 
 describe('createClaudeRunner', () => {
@@ -86,11 +120,11 @@ describe('createClaudeRunner', () => {
     const runner = createClaudeRunner({ bin: 'claude', logDir, env: envWith(), windowMs: 3000 })
     const res = await runner.start({ session: SESSION, word: 'continue', cwd: repo })
     expect(res).toEqual({ outcome: 'started' })
-    expect(readRecord().argv).toEqual(['-p', '--resume', SESSION, 'continue'])
+    expect((await readRecord()).argv).toEqual(['-p', '--resume', SESSION, 'continue'])
 
     rmSync(recordFile)
     await runner.start({ session: SESSION, word: 'go', cwd: repo })
-    const argv = readRecord().argv
+    const argv = (await readRecord()).argv
     expect(argv).toEqual(['-p', '--resume', SESSION, 'go'])
     expect(argv).not.toContain('--bare')
   })
@@ -105,10 +139,10 @@ describe('createClaudeRunner', () => {
     })
     const runner = createClaudeRunner({ bin: 'claude', logDir, env, windowMs: 3000 })
     expect(await runner.start({ session: SESSION, word: 'continue', cwd: repo })).toEqual({ outcome: 'started' })
-    const names = Object.keys(readRecord().env).map((k) => k.toUpperCase())
+    const names = Object.keys((await readRecord()).env).map((k) => k.toUpperCase())
     expect(names).not.toContain('ANTHROPIC_API_KEY')
     expect(names).not.toContain('ANTHROPIC_AUTH_TOKEN')
-    const seen = readRecord().env
+    const seen = (await readRecord()).env
     expect(seen.POD_BOARD_SMOKE).toBe('kept')
     expect(seen.ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:1')
     expect(env.ANTHROPIC_API_KEY).toBe('sk-1') // the board's own env is left alone
@@ -156,7 +190,7 @@ describe('createClaudeRunner', () => {
     const res = await runner.start({ session: SESSION, word: 'continue', cwd: repo })
     expect(res).toEqual({ outcome: 'started' })
     expect(Date.now() - t0).toBeGreaterThanOrEqual(550)
-    readRecord()
+    await readRecord()
     expect(runner.isRunning(SESSION)).toBe(true)
     expect(runner.isRunning('another-session')).toBe(false)
     await waitFor(() => existsSync(done))
@@ -166,7 +200,7 @@ describe('createClaudeRunner', () => {
   test('isRunning stays true while any child for the session lives', async () => {
     const runner = createClaudeRunner({ bin: 'claude', logDir, windowMs: 300, env: envWith({ FAKE_CLAUDE_MODE: 'wait:2500' }) })
     expect(await runner.start({ session: SESSION, word: 'continue', cwd: repo })).toEqual({ outcome: 'started' })
-    readRecord()
+    await readRecord()
     const quick = createClaudeRunner({ bin: 'claude', logDir, windowMs: 3000, env: envWith() })
     await quick.start({ session: SESSION, word: 'continue', cwd: repo })
     expect(quick.isRunning(SESSION)).toBe(false)
@@ -224,30 +258,32 @@ describe('createClaudeRunner', () => {
     })
     expect(out.stderr).toBe('')
     expect(JSON.parse(out.stdout.trim())).toEqual({ outcome: 'started' })
-    const record = readRecord()
+    const record = await readRecord()
     expect(record.cwd.toLowerCase()).toBe(repo.toLowerCase())
     expect(alive(record.pid)).toBe(true) // the host is gone, the run isn't
     await waitFor(() => existsSync(done))
   })
 
   test.skipIf(!WIN)('runs a cmd shim on windows', async () => {
-    // npm installs claude as a .cmd shim next to an extensionless sh script, which Windows can't run.
-    writeFileSync(join(binDir, 'claude'), '#!/bin/sh\necho not this one\n')
+    // npm installs claude as a .cmd shim next to an extensionless sh script Windows can't run.
     const runner = createClaudeRunner({ bin: 'claude', logDir, env: envWith(), windowMs: 3000 })
     expect(await runner.start({ session: SESSION, word: 'continue', cwd: repo })).toEqual({ outcome: 'started' })
-    expect(readRecord().argv).toEqual(['-p', '--resume', SESSION, 'continue'])
+    expect((await readRecord()).argv).toEqual(['-p', '--resume', SESSION, 'continue'])
 
+    // a shim the runner can't read goes through cmd.exe, with the same arguments
+    const plain = join(tmp, 'plain')
+    installFake(plain, 'plain')
     rmSync(recordFile)
-    const byPath = createClaudeRunner({ bin: join(binDir, 'claude.cmd'), logDir, env: envWith(), windowMs: 3000 })
+    const byPath = createClaudeRunner({ bin: join(plain, 'claude.cmd'), logDir, env: envWith(), windowMs: 3000 })
     expect(await byPath.start({ session: SESSION, word: 'go', cwd: repo })).toEqual({ outcome: 'started' })
-    expect(readRecord().argv).toEqual(['-p', '--resume', SESSION, 'go'])
+    expect((await readRecord()).argv).toEqual(['-p', '--resume', SESSION, 'go'])
 
-    // a shim path cmd.exe would read as commands is refused, not run
+    // and one whose path cmd.exe would read as commands is refused, not run
     const odd = join(tmp, 'a&calc')
-    installFake(odd)
-    const unsafe = createClaudeRunner({ bin: join(odd, 'claude.cmd'), logDir, env: envWith(), windowMs: 3000 })
+    installFake(odd, 'plain')
     rmSync(recordFile)
-    expect((await unsafe.start({ session: SESSION, word: 'go', cwd: repo })).outcome).toBe('failed')
+    const unsafe = createClaudeRunner({ bin: join(odd, 'claude.cmd'), logDir, env: envWith(), windowMs: 3000 })
+    expect(await unsafe.start({ session: SESSION, word: 'go', cwd: repo })).toEqual({ outcome: 'failed', message: 'unsafe claude path' })
     expect(existsSync(recordFile)).toBe(false)
   })
 })
