@@ -73,7 +73,8 @@ function ResumeOutcome({ view, flow }: { view: ResumeView; flow: ResumeFlow }) {
 
 /**
  * The reply pod waits for on the selected run, and the chat to paste it in. A row the board may
- * send gets Continue or Go beside its Copy; it sends only on a press. The last send's result stays
+ * send, on a run with a session the runner accepts, gets Continue or Go beside its Copy; it sends
+ * only on a press. Every row keeps Copy. The last send's result stays
  * after the Board drops the reply, until you close it.
  */
 export function ReplyPanel({ view, target }: { view: ReplyPanelView | undefined; target: RunTarget }) {
