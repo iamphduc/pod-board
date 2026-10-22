@@ -8,7 +8,11 @@ import type { PlanModel } from './run-model.ts'
 
 export type ReplyWord = 'continue' | 'go' | 'try'
 export type ReplySignal = 'wave-waiting' | 'wave-merged' | 'sprint-done' | 'final-waiting' | 'final-merged' | 'fix-waiting' | 'fix-merged' | 'not-started'
-export type RunReply = { reply: ReplyWord; signal: ReplySignal; why: string; pr?: number }
+/**
+ * `key` names one pod stop, so a stop gets one automatic send: `<signal>:<pr>` when `pr` is set,
+ * `sprint-done:<done sprint slug>`, `not-started:<plan slug>`, or `try:<plan slug>`. Never built from `why`.
+ */
+export type RunReply = { reply: ReplyWord; signal: ReplySignal; why: string; pr?: number; key: string }
 export type ReplySession = { id: string; startedAt?: number; repoPath: string; resume?: string }
 
 /** The signals where pod already waits for `continue`. The `*-waiting` ones need your merge first; `not-started` is never a send signal. */
@@ -17,8 +21,8 @@ export const SEND_SIGNALS: ReadonlySet<ReplySignal> = new Set<ReplySignal>(['wav
 /** A session id safe to put in a shell command. */
 const SESSION_ID = /^[A-Za-z0-9-]{1,64}$/
 
-const mergeFirst = (signal: ReplySignal, n: number): RunReply => ({ reply: 'continue', signal, why: `Merge PR #${n}, then reply continue.`, pr: n })
-const merged = (signal: ReplySignal, n: number, why = `PR #${n} merged.`): RunReply => ({ reply: 'continue', signal, why, pr: n })
+const mergeFirst = (signal: ReplySignal, n: number): RunReply => ({ reply: 'continue', signal, why: `Merge PR #${n}, then reply continue.`, pr: n, key: `${signal}:${n}` })
+const merged = (signal: ReplySignal, n: number, why = `PR #${n} merged.`): RunReply => ({ reply: 'continue', signal, why, pr: n, key: `${signal}:${n}` })
 
 /** The replies pod waits for on a run (a plan slug or `fix-<slug>`), at most one per word. None while pod works. */
 export function runReplies(repo: BoardRepo, run: string, now: number): RunReply[] {
@@ -32,7 +36,7 @@ function planReplies(repo: BoardRepo, plan: PlanModel, now: number): RunReply[] 
   if (!isRun(repo, plan, now) || isHalted(plan) || planAgentRunning(repo, plan, now)) return []
 
   const waiting = pendingHandBack(repo, plan)
-  if (waiting !== undefined) return [mergeFirst('final-waiting', waiting), { reply: 'try', signal: 'final-waiting', why: 'Starts the app so you can try it.' }]
+  if (waiting !== undefined) return [mergeFirst('final-waiting', waiting), { reply: 'try', signal: 'final-waiting', why: 'Starts the app so you can try it.', key: `try:${plan.slug}` }]
   // handBackPr reads only pending entries, so a merged PR here is a hand-back pod hasn't resolved yet.
   const handed = handBackPr(plan)
   if (handed !== undefined) return [merged('final-merged', handed, `PR #${handed} merged: pod cleans up.`)]
@@ -53,11 +57,11 @@ function planReplies(repo: BoardRepo, plan: PlanModel, now: number): RunReply[] 
       if (n !== undefined) return [merged('wave-merged', n)]
     }
     const done = plan.sprints.slice(0, index).findLast((s) => s.status === 'done')
-    if (!current.hasDoc && done) return [{ reply: 'continue', signal: 'sprint-done', why: `Sprint ${done.slug} is done.` }]
+    if (!current.hasDoc && done) return [{ reply: 'continue', signal: 'sprint-done', why: `Sprint ${done.slug} is done.`, key: `sprint-done:${done.slug}` }]
   }
 
   const fresh = plan.status !== 'archived' && plan.sprints.length > 0 && plan.sprints.every((s) => s.status === 'planned' && !s.hasDoc)
-  return fresh ? [{ reply: 'go', signal: 'not-started', why: 'Only if pod asked for go.' }] : []
+  return fresh ? [{ reply: 'go', signal: 'not-started', why: 'Only if pod asked for go.', key: `not-started:${plan.slug}` }] : []
 }
 
 function fixReplies(repo: BoardRepo, name: string, now: number): RunReply[] {

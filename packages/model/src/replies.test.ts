@@ -98,13 +98,13 @@ const FRESH: Opts = { sprints: [['one', 'planned'], ['two', 'planned']] }
 
 const replies = (r: BoardRepo, run = 'alpha') => runReplies(r, run, NOW)
 const words = (r: BoardRepo, run = 'alpha') => replies(r, run).map((x) => x.reply)
-const merge = (n: number): RunReply => ({ reply: 'continue', signal: 'wave-waiting', why: `Merge PR #${n}, then reply continue.`, pr: n })
+const merge = (n: number): RunReply => ({ reply: 'continue', signal: 'wave-waiting', why: `Merge PR #${n}, then reply continue.`, pr: n, key: `wave-waiting:${n}` })
 
 describe('runReplies', () => {
   it('final PR replies', () => {
     const both: RunReply[] = [
-      { reply: 'continue', signal: 'final-waiting', why: 'Merge PR #12, then reply continue.', pr: 12 },
-      { reply: 'try', signal: 'final-waiting', why: 'Starts the app so you can try it.' },
+      { reply: 'continue', signal: 'final-waiting', why: 'Merge PR #12, then reply continue.', pr: 12, key: 'final-waiting:12' },
+      { reply: 'try', signal: 'final-waiting', why: 'Starts the app so you can try it.', key: 'try:alpha' },
     ]
     // A pending hand-back: continue and try; try names no PR.
     expect(replies(repo(files(DONE)))).toEqual(both)
@@ -112,7 +112,7 @@ describe('runReplies', () => {
     expect(replies(repo(files(DONE)))[1]).not.toHaveProperty('pr')
     // Merged and still pending: continue only.
     expect(replies(closing({ prs: [gh(12, 'merged')] }))).toEqual([
-      { reply: 'continue', signal: 'final-merged', why: 'PR #12 merged: pod cleans up.', pr: 12 },
+      { reply: 'continue', signal: 'final-merged', why: 'PR #12 merged: pod cleans up.', pr: 12, key: 'final-merged:12' },
     ])
     // Once pod resolves the entry, nothing.
     expect(replies(closing({ prs: [gh(12, 'merged')] }, { ...DONE, queue: [handBack(12, false)] }))).toEqual([])
@@ -125,7 +125,7 @@ describe('runReplies', () => {
     expect(replies(pushed())).toEqual([merge(7)])
     expect(replies(pushed({ prs: [gh(7, 'open')] }))).toEqual([merge(7)])
     // gh merged → continue, it's merged.
-    expect(replies(pushed({ prs: [gh(7, 'merged')] }))).toEqual([{ reply: 'continue', signal: 'wave-merged', why: 'PR #7 merged.', pr: 7 }])
+    expect(replies(pushed({ prs: [gh(7, 'merged')] }))).toEqual([{ reply: 'continue', signal: 'wave-merged', why: 'PR #7 merged.', pr: 7, key: 'wave-merged:7' }])
     // Closed is neither: nothing.
     expect(replies(pushed({ prs: [gh(7, 'closed')] }))).toEqual([])
     // Two PRs, one merged, one unknown: the unknown one still waits.
@@ -142,7 +142,7 @@ describe('runReplies', () => {
   })
 
   it('sprint done asks to continue', () => {
-    expect(replies(repo(files(BETWEEN)))).toEqual([{ reply: 'continue', signal: 'sprint-done', why: 'Sprint one is done.' }])
+    expect(replies(repo(files(BETWEEN)))).toEqual([{ reply: 'continue', signal: 'sprint-done', why: 'Sprint one is done.', key: 'sprint-done:one' }])
     // The latest done sprint before the current one is named.
     const later: Opts = { sprints: [['one', 'done'], ['two', 'done'], ['three', 'planned']] }
     expect(replies(repo(files(later)))[0]?.why).toBe('Sprint two is done.')
@@ -154,7 +154,7 @@ describe('runReplies', () => {
   })
 
   it('go only on a plan not started', () => {
-    expect(replies(repo(files(FRESH)))).toEqual([{ reply: 'go', signal: 'not-started', why: 'Only if pod asked for go.' }])
+    expect(replies(repo(files(FRESH)))).toEqual([{ reply: 'go', signal: 'not-started', why: 'Only if pod asked for go.', key: 'not-started:alpha' }])
     // One sprint with a doc: not go.
     expect(words(repo(files({ ...FRESH, docs: { one: [[1, 'A1', '—', 'pending']] } })))).toEqual([])
     // An archived plan, kept a run by its claim and a recent ended agent: not go.
@@ -204,12 +204,12 @@ describe('runReplies', () => {
     const merged = gh(36, 'merged', { branch: name })
 
     // Reviewed and open: merge first.
-    expect(fix({ agents: [eng, rev], prs: [open] })).toEqual([{ reply: 'continue', signal: 'fix-waiting', why: 'Merge PR #36, then reply continue.', pr: 36 }])
+    expect(fix({ agents: [eng, rev], prs: [open] })).toEqual([{ reply: 'continue', signal: 'fix-waiting', why: 'Merge PR #36, then reply continue.', pr: 36, key: 'fix-waiting:36' }])
     // Not reviewed yet: nothing.
     expect(fix({ agents: [eng], prs: [open] })).toEqual([])
     // Merged while the run is listed (an agent wrote recently): continue.
     expect(fix({ agents: [eng, { ...rev, lastAt: NOW - 5 * MIN }], prs: [merged] })).toEqual([
-      { reply: 'continue', signal: 'fix-merged', why: 'PR #36 merged.', pr: 36 },
+      { reply: 'continue', signal: 'fix-merged', why: 'PR #36 merged.', pr: 36, key: 'fix-merged:36' },
     ])
     // Merged and stale: the run isn't listed, so nothing.
     expect(fix({ agents: [eng, rev], prs: [merged] })).toEqual([])
@@ -219,6 +219,38 @@ describe('runReplies', () => {
     // No PR yet, or no claim: nothing.
     expect(fix({ agents: [eng, rev] })).toEqual([])
     expect(runReplies(repo({ 'pod-docs/README.md': README }, { agents: [eng, rev], prs: [open] }), name, NOW)).toEqual([])
+  })
+
+  it('stop keys name one stop', () => {
+    const keys = (r: BoardRepo, run = 'alpha') => replies(r, run).map((x) => x.key)
+    // A PR names the stop: <signal>:<pr>.
+    expect(keys(pushed())).toEqual(['wave-waiting:7'])
+    expect(keys(pushed({ prs: [gh(7, 'merged')] }))).toEqual(['wave-merged:7'])
+    expect(keys(closing({ prs: [gh(12, 'merged')] }))).toEqual(['final-merged:12'])
+    // The final-waiting try has no PR: try:<plan slug>.
+    expect(keys(repo(files(DONE)))).toEqual(['final-waiting:12', 'try:alpha'])
+    // A done sprint names the done sprint, not the current one.
+    expect(keys(repo(files(BETWEEN)))).toEqual(['sprint-done:one'])
+    expect(keys(repo(files({ sprints: [['one', 'done'], ['two', 'done'], ['three', 'planned']] })))).toEqual(['sprint-done:two'])
+    // A fresh plan: not-started:<plan slug>.
+    expect(keys(repo(files(FRESH)))).toEqual(['not-started:alpha'])
+
+    // Two waves of one sprint, each merged in turn, are two stops.
+    const wave1: BoardRow[] = [[1, 'A1', link(5), 'pushed'], [2, 'B1', '—', 'pending']]
+    const wave2: BoardRow[] = [[1, 'A1', `${link(5)} merged`, 'done'], [2, 'B1', link(7), 'pushed']]
+    const k1 = keys(pushed({ prs: [gh(5, 'merged')] }, wave1))
+    const k2 = keys(pushed({ prs: [gh(5, 'merged'), gh(7, 'merged')] }, wave2))
+    expect(k1).toEqual(['wave-merged:5'])
+    expect(k2).toEqual(['wave-merged:7'])
+    expect(k1[0]).not.toBe(k2[0])
+
+    // Fix runs: the PR names the stop.
+    const name = 'fix-scroll'
+    const eng = ended({ branch: name, startedAt: NOW - 90 * MIN, lastAt: NOW - 60 * MIN })
+    const rev = ended({ type: 'pod:reviewer', kind: 'fix', branch: name, startedAt: NOW - 50 * MIN, lastAt: NOW - 5 * MIN })
+    const fixRepo = (pr: PrStatus) => repo({ 'pod-docs/README.md': README }, { claims: [claim(name)], agents: [eng, rev], prs: [pr] })
+    expect(keys(fixRepo(gh(36, 'open', { branch: name })), name)).toEqual(['fix-waiting:36'])
+    expect(keys(fixRepo(gh(36, 'merged', { branch: name })), name)).toEqual(['fix-merged:36'])
   })
 
   it('is exported from the package entry', () => {

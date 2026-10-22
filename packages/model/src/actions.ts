@@ -25,13 +25,20 @@ export type AnswerOutcome = 'answered' | 'changed' | 'failed'
 /** What the answer route sends back. */
 export type AnswerResult = { outcome: AnswerOutcome; message?: string; logged: boolean }
 
+export type ResumeOutcome = 'started' | 'failed'
+
+/** What the resume route sends back. */
+export type ResumeResult = { outcome: ResumeOutcome; message?: string; logged: boolean }
+
 /**
  * One logged action. A merge's `target` is `PR #N`; an answer's is the queue entry's
- * `<date> · <TYPE> · <from → to>`, never the answer text or the body.
+ * `<date> · <TYPE> · <from → to>`, never the answer text or the body. A resume's is
+ * `<run> · <word>`; `auto` marks one the automatic check sent.
  */
 export type ActionEntry = { at: number; repoId: string; repo: string; target: string; message?: string } & (
   | { action: 'merge'; result: MergeOutcome }
   | { action: 'answer'; result: AnswerOutcome }
+  | { action: 'resume'; result: ResumeOutcome; reply: 'continue' | 'go'; auto: boolean }
 )
 
 /** An entry before the log stamps its time. Omit spreads over the union, so `action` and `result` stay paired. */
