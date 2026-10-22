@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -264,7 +264,8 @@ describe('createClaudeRunner', () => {
     expect(out.stderr).toBe('')
     expect(JSON.parse(out.stdout.trim())).toEqual({ outcome: 'started' })
     const record = await readRecord()
-    expect(record.cwd.toLowerCase()).toBe(repo.toLowerCase())
+    // The OS may report the folder resolved (macOS /private/var) and in its own case, so compare resolved paths.
+    expect(realpathSync.native(record.cwd)).toBe(realpathSync.native(repo))
     expect(alive(record.pid)).toBe(true) // the host is gone, the run isn't
     await waitFor(() => existsSync(done))
   })
