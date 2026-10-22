@@ -102,3 +102,8 @@ Consequences: needs a check of Anthropic's current rules for headless use, and o
 Context: the human doesn't want building to start from a guess while planning is still going on.
 Decision: the board never sends `go` on its own, not even with the Continue toggle on. A Go button sends it only when the human presses it. The same holds for `try` and for queue answers.
 Consequences: the board never infers "waiting for go" from transcripts; the Go button is shown on a plan whose sprints haven't started, and the human decides.
+
+## 2026-10-21 — build queue answers before pod reads them
+Context: sprint `queue-and-replies` was planned to wait for claude-pod's `**Answer (human):**` queue format. claude-pod doesn't have it yet, and the human wants all hand-offs on the board website.
+Decision: build the board side now against the master plan's format: a `**Answer (human):** <text>` line on the entry in `pod-docs/handoff-queue.md`. The claude-pod change (pod reads the line like a chat answer) goes to the claude-pod agents in parallel.
+Consequences: until claude-pod reads the line, an answer written from the board sits in the queue unread, and pod still waits for the chat. The board says so where you answer. End-to-end verification of answers waits for the claude-pod change. If claude-pod settles on a different format, the board's writer follows it.
