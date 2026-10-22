@@ -2,7 +2,7 @@
 
 ## What it is
 
-The API server (`packages/server`) finds the repos to show, reads their pod docs, agent transcripts, and port claims, asks `gh` about live PRs, builds one `Board`, keeps it current as files change, and serves it to the web app. It only reads, except for its own config file. Covers the features.md rows API health, Board JSON, Live updates, Add repo, Request guard, and Error banners (the server side).
+The API server (`packages/server`) finds the repos to show, reads their pod docs, agent transcripts, and port claims, asks `gh` about live PRs, builds one `Board`, keeps it current as files change, and serves it to the web app. It only reads, except for its own config file and its session token. Covers the features.md rows API health, Board JSON, Live updates, Add repo, Request guard, and Error banners (the server side).
 
 ## How it works
 
@@ -14,7 +14,9 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - **Rebuilds.** After 300 ms with no events (800 ms when polling), but never later than 1.5 s after a burst's first event. One at a time; a rebuild that throws keeps the last Board.
 - **Sending.** Subscribers get a Board only when its JSON changed, ignoring `generatedAt`, each PR's `checkedAt`, and `ghCheckedAt` while `gh` is `ok`.
 - **Unreadable config.** The last repo list stays, and `configError: 'config unreadable'` is set on every build until the file reads again. A missing file is no error.
-- **API.** `GET /api/health`, `GET /api/board` (from memory), `GET /api/events` (SSE, `: ping` every 15 s), `GET /api/agents/:repoId/:agentId/timeline`, `POST /api/repos` (`201`, `409`, `400`, `415`, `500`). Every route is behind the request guard: a loopback `Host` on the API or web port, and an exact `Origin` on writes; no CORS headers. Both ports bind `127.0.0.1` only.
+- **API.** `GET /api/health`, `GET /api/board` (from memory), `GET /api/events` (SSE, `: ping` every 15 s), `GET /api/agents/:repoId/:agentId/timeline`, `POST /api/repos` (`201`, `409`, `400`, `415`, `500`). Every route is behind the request guard: a loopback `Host` on the API or web port, and an exact `Origin` on writes; no CORS headers (the Vite dev server's own CORS is off too). Both ports bind `127.0.0.1` only.
+- **Session token.** At each start the API writes 32 random bytes as base64url (43 chars) to `<config dir>/session-token` (the folder of `config.json`): a temp file, owner-only on POSIX, renamed over the last launch's token. If it can't, the API stops with an error naming the file, before it listens. The token is never printed and never in the Board, SSE, a URL, or a cookie. The Vite dev server's `tokenMetaPlugin` (from `@pod-board/server/session-token`, `apply: 'serve'`) reads the file on every page load and adds `<meta name="pod-board-token">` to `index.html`; no file, no meta. `pnpm build` never runs it, so `dist` has no token. The page's `postAction` (`packages/web/src/actions-client.ts`) sends it as `X-Pod-Board-Token`.
+- **Action guard.** Every route under `/api/actions/` (the bare `/api/actions` too) runs `actionGuard` after the request guard. The first failing check answers, in this order, and the action never runs: Host `403 forbidden host`, Origin on any method but GET and HEAD `403 forbidden origin`, not POST `405 method not allowed`, not `application/json` `415 unsupported media type`, token missing or wrong `403 bad token` (constant-time compare), body not a JSON object `400 bad request`. `createApp({ token, actions })` mounts `actions` at `/api/actions`; with none, a request past the guard gets `404`. `POST /api/repos` needs no token.
 
 ## Why it's this way
 
@@ -27,6 +29,11 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - **Case rule probed per folder**, not taken from the OS name: a Mac volume ignores case and a Windows folder can be case-sensitive.
 
 ## Watch out
+
+- The token file is replaced on every API start, so a page loaded before a restart holds a dead token: its actions get `403 bad token`, and `postAction` says to reload.
+- Vite's dev server sends `Access-Control-Allow-Origin` for any `localhost` or `127.0.0.1` origin unless `cors: false`. Keep it off: with it on, a page on another local port could read the Board through the web port.
+- An action handler reads the body with `c.req.json()`: the guard already read it, and Hono caches it.
+- Through the web proxy, a stopped API answers `502` with an empty body, so `postAction` reads `HTTP 502`, not `Can't reach the board.`
 
 - Tests and manual runs must point `POD_BOARD_CONFIG_DIR` and `POD_BOARD_PORTS_DIR` at temp folders: the real ones belong to live pod runs.
 - chokidar 5 doesn't see a watched path that doesn't exist yet, and it runs `ignored` on the watched folder itself; a target's filter must keep its own folder or the watch reports nothing.
@@ -41,6 +48,8 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - `Claim`, `PrStatus`, and `GhStatus` come from `@pod-board/model`; change the shapes there.
 
 ## History
+
+- 2026-10-21 · merge-actions S1: per-launch session token, the action guard on `/api/actions/`, the page's token meta, and the action client. Vite's dev CORS turned off.
 
 - 2026-10-18 · server-runs A1: board service, watcher, SSE, and repo routes.
 - 2026-10-19 · board-engineer T1: agent timeline route.
