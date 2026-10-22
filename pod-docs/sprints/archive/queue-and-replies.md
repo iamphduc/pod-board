@@ -1,16 +1,15 @@
 # Sprint: Answer the queue, and copy the reply pod waits for
 
-_From plan: pod-docs/plans/board-actions.md · Slug: queue-and-replies · Status: active · Generated: 2026-10-21_
+_From plan: pod-docs/plans/board-actions.md · Slug: queue-and-replies · Status: done · Generated: 2026-10-21_
 
-<!-- autopilot-run: started=2026-10-21T23:01:35-07:00 sprints=0 waves=1 -->
 
 ## Status board
 
 | Wave | Slice | Title | Branch | PR | Status | Confidence | Depends on |
 |------|-------|-------|--------|----|--------|------------|------------|
-| 1 | A1 | Queue answers: model fields, the safe queue write, the answer route, the wider action log | queue-and-replies-A1 | — | pending | — | — |
-| 1 | R1 | Replies: which reply pod waits for, the chat to paste it in, and copy-the-reply | queue-and-replies-R1 | — | pending | — | — |
-| 2 | U2 | Waiting on you: the needs-you list and the answer form in place | queue-and-replies-U2 | — | pending | — | A1, R1 |
+| 1 | A1 | Queue answers: model fields, the safe queue write, the answer route, the wider action log | queue-and-replies-A1 | #29 | merged | medium | — |
+| 1 | R1 | Replies: which reply pod waits for, the chat to paste it in, and copy-the-reply | queue-and-replies-R1 | #29 | merged | medium | — |
+| 2 | U2 | Waiting on you: the needs-you list and the answer form in place | queue-and-replies-U2 | #30 | merged | medium | A1, R1 |
 
 ## Shared contract
 
@@ -83,7 +82,7 @@ replySession(repo: BoardRepo, run: string, now: number): ReplySession | undefine
   - `answer-routes.ts`: `createAnswerRoutes(deps) → Hono`, with the merge routes' deps shape (`board`, `rebuild`, `log`). `main.ts` mounts it beside the merge routes under the one `actions` Hono.
   - Widen `ActionEntry` in `actions.ts`, `action-log.ts`'s reader, and `action-log-view.ts`'s chips together, so every package still typechecks.
   - Tests use temp folders only. Docs: add the route to `actions.md` and `server.md`. In `codebase-structure.md`, say the server now writes one file in a repo, and add a smoke line: on a fixture copy, take an entry's `line` from `/api/board`, POST an answer, then `grep "Answer (human)"` in the copy's queue. A repeat gives `404`, and no token gives `403`.
-- **Files owned:** `packages/model/src/queue-answer.ts` (new), `packages/model/src/queue-answer.test.ts` (new), `packages/model/src/run-model.ts`, `packages/model/src/run-model.test.ts`, `packages/model/src/actions.ts`, `packages/model/test/fixtures.test.ts`, `packages/server/src/queue-writer.ts` (new), `packages/server/src/queue-writer.test.ts` (new), `packages/server/src/answer-routes.ts` (new), `packages/server/src/answer-routes.test.ts` (new), `packages/server/src/action-log.ts`, `packages/server/src/action-log.test.ts`, `packages/server/src/action-routes.ts`, `packages/server/src/main.ts`, `packages/web/src/screens/runs/action-log-view.ts`, `packages/web/src/screens/runs/action-log-view.test.ts`, `pod-docs/feature-details/actions.md`, `pod-docs/feature-details/server.md`, `pod-docs/feature-details/run-model.md`, `pod-docs/codebase-structure.md`
+- **Files owned:** `packages/server/src/action-routes.test.ts` (added at wave 1, gate 1 exception), `packages/model/src/queue-answer.ts` (new), `packages/model/src/queue-answer.test.ts` (new), `packages/model/src/run-model.ts`, `packages/model/src/run-model.test.ts`, `packages/model/src/actions.ts`, `packages/model/test/fixtures.test.ts`, `packages/server/src/queue-writer.ts` (new), `packages/server/src/queue-writer.test.ts` (new), `packages/server/src/answer-routes.ts` (new), `packages/server/src/answer-routes.test.ts` (new), `packages/server/src/action-log.ts`, `packages/server/src/action-log.test.ts`, `packages/server/src/action-routes.ts`, `packages/server/src/main.ts`, `packages/web/src/screens/runs/action-log-view.ts`, `packages/web/src/screens/runs/action-log-view.test.ts`, `pod-docs/feature-details/actions.md`, `pod-docs/feature-details/server.md`, `pod-docs/feature-details/run-model.md`, `pod-docs/codebase-structure.md`
 - **Success criteria:**
   - `[test] each item carries its trimmed line and date; the line list matches parseQueue's count and order on odd input — packages/model/src/queue-answer.test.ts › lines match parseQueue`
   - `[test] an answer at the line's end, or before Resolution, fills answer and stays out of body; no answer → undefined — packages/model/src/queue-answer.test.ts › reads the answer apart from the body`
@@ -159,3 +158,17 @@ replySession(repo: BoardRepo, run: string, now: number): ReplySession | undefine
 - **Depends on:** A1, R1
 - **One-way door:** none. Saving writes only through A1's route.
 - **Model:** opus
+
+## Sprint summary
+
+- **Synced with merge-target:** up to date (`origin/pod-staging` had no new commits at the start of the sprint)
+- **Slices shipped:** A1, R1 (wave 1, PR #29), U2 (wave 2, PR #30)
+- **Queue entries:** resolved 1 (the gate-1 BLOCKED for the pod-side answer format: human chose to build the board side first), deferred 2 ([handoff-queue.md](../../handoff-queue.md): the closed hand-back PR question from merge-actions P1, and unlisted plans' entries from U2)
+- **Slice log:**
+  - A1: opus · medium · test-first yes · runtime answer route on a chess-web fixture copy (one-line diff, repeat 404, log after restart) · 8 NOTEs · time lost ~2 min (agent-browser hang). BLOCKED once on a one-line type change in `action-routes.test.ts`; gate 1 exception added it and the same engineer finished
+  - R1: opus · medium · test-first yes · runtime reply logic on live `/api/board` through tsx; panel not opened (agent-browser hung twice) · 7 NOTEs · time lost ~3 min
+  - U2: opus · medium · test-first yes · runtime `waitingRows` and the answer route on a fixture copy; UI not opened (agent-browser hung twice) · 6 NOTEs + 1 PENDING · time lost ~4 min
+  - Wave 1 fix (`queue-and-replies-w1-fix`): opus · medium · CI failed on macOS and Windows in `queue-writer.test.ts › stays inside the repo` (test built paths from an unresolved temp folder); test-only fix, red reproduced behind a junction
+  - Orchestrator wave checks: wave 1 on R1's fixture (Reply panel, Copy → `Copied`, 375 px; answer route one-line diff, repeat 404, Action log); wave 2 on the same fixture (answer form in the browser end to end, 375 px, Escape)
+  - Stalls: none. A1 left background work after its report; stopped
+- **Agent context at hand-back:** 601,475 tokens — *each agent's final context size, not tokens billed*
