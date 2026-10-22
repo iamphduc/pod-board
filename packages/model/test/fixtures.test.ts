@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { buildPipeline, buildRepoModel, listRuns, parseAgentTranscript, parseQueue, type AgentRun, type BoardRepo, type Claim, type PrStatus } from '../src/index.ts'
+import { buildPipeline, buildRepoModel, listRuns, parseAgentTranscript, parseQueue, queueLines, type AgentRun, type BoardRepo, type Claim, type PrStatus } from '../src/index.ts'
 import { loadFixture } from './load-fixture.ts'
 
 const docKeys = (files: Record<string, string>, folder: string) =>
@@ -124,6 +124,28 @@ describe('run model on real-run fixtures', () => {
       'scripts/calibrate/__tests__/cli.test.ts',
     ])
     expect(slices.H1?.filesOwned).toHaveLength(11)
+  })
+
+  test('fixture queue items keep their lines', () => {
+    let checked = 0
+    for (const name of ['chess-web', 'ytb-feed', 'chess-web-ui-polish', 'skyscraper-view', 'speak-out']) {
+      const files = loadFixture(name)
+      const md = files['pod-docs/handoff-queue.md']
+      if (md === undefined) continue
+      const repo = buildRepoModel(files)
+      if (!repo.docs.supported) continue
+      const fileLines = new Set(md.split(/\r?\n/).map((l) => l.trim()))
+      // Same bodies as the ported parser (no fixture holds an answer), and each line is one of the file's.
+      expect(repo.queue.map((e) => e.body), name).toEqual(parseQueue(md).map((e) => e.body))
+      expect(repo.queue.map((e) => e.line), name).toEqual(queueLines(md))
+      for (const e of repo.queue) {
+        expect(fileLines.has(e.line), e.line).toBe(true)
+        expect(e.line).not.toBe('')
+        expect(e.answer).toBeUndefined()
+        checked++
+      }
+    }
+    expect(checked).toBeGreaterThan(10)
   })
 
   test('old layout repos are unsupported', () => {

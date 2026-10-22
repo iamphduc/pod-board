@@ -4,12 +4,19 @@
 // The rules and why are in pod-docs/feature-details/run-model.md.
 
 import { docsVersion, needsYou, planExtras, prRef, sliceDeps, type DocsVersion, type PrRef } from './formats.ts'
+import { QUEUE_LINE, queueLines, splitAnswer } from './queue-answer.ts'
 import { isDone, parsePlan, parseQueue, parseSprint, readTable, type PlanDoc, type QueueEntry, type Row, type SprintDoc } from './pod-flow/model.ts'
 
 /** Repo-relative path → file text. Keys may use `/` or `\`. A file not in the map doesn't exist. */
 export type RepoFiles = Record<string, string>
 
-export type QueueItem = QueueEntry & { needsYou: boolean }
+export { cleanAnswer, isAnswerable, queueLines, splitAnswer, withAnswer, type CleanAnswer } from './queue-answer.ts'
+
+/**
+ * A handoff queue entry. `line` is its whole line, trimmed, and is its identity for writes; `date` the
+ * header's first part; `answer` the text after the first `**Answer (human):**`. `body` never holds the answer.
+ */
+export type QueueItem = QueueEntry & { needsYou: boolean; line: string; date?: string; answer?: string }
 
 export type SliceModel = {
   code: string
@@ -61,12 +68,27 @@ export function buildRepoModel(files: RepoFiles): RepoModel {
   const docs = docsVersion(repo.get(README))
   if (!docs.supported) return { docs, plans: [], queue: [] }
 
-  const queue = parseQueue(repo.get(QUEUE) ?? '').map((entry) => ({ ...entry, needsYou: needsYou(entry) }))
+  const queue = readQueue(repo.get(QUEUE) ?? '')
   const planDocs = readPlans(repo)
   const sprintDocs = readSprints(repo)
   const joined = joinSprints(planDocs, sprintDocs)
   const plans = planDocs.map(({ doc, md }) => buildPlan(doc, md, joined.get(doc.slug) ?? [], queue))
   return { docs, plans, queue }
+}
+
+/** The queue's entries, each with its line, date, and answer. `parseQueue` and `queueLines` match one for one. */
+function readQueue(md: string): QueueItem[] {
+  const lines = queueLines(md)
+  return parseQueue(md).map((entry, i) => {
+    const line = lines[i] ?? ''
+    const m = QUEUE_LINE.exec(line)
+    const date = (m?.[1] ?? '').split('·')[0]?.trim()
+    const { body, answer } = splitAnswer(m?.[2] ?? '')
+    const item: QueueItem = { ...entry, body, needsYou: needsYou(entry), line }
+    if (date) item.date = date
+    if (answer !== undefined) item.answer = answer
+    return item
+  })
 }
 
 function normalizeKeys(files: RepoFiles): Map<string, string> {

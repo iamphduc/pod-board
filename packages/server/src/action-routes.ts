@@ -2,7 +2,7 @@
 // merge. The repo comes from the current Board by id, and the PR must be waiting on you. The
 // rules and why are in pod-docs/feature-details/actions.md.
 
-import { waitingPrs, type ActionEntry, type Board, type BoardRepo, type GhStatus, type MergeResult } from '@pod-board/model'
+import { waitingPrs, type Board, type BoardRepo, type GhStatus, type MergeResult, type NewActionEntry } from '@pod-board/model'
 import { Hono, type Context } from 'hono'
 import { mergePr, readPr } from './gh-actions.ts'
 import type { GhExec } from './gh.ts'
@@ -16,7 +16,7 @@ export type ActionRouteDeps = {
   refreshGh(board: Board): Promise<unknown>
   /** Rebuilds the Board and sends it to every client (the watcher's `rebuild`). */
   rebuild(): Promise<void>
-  log: { append(entry: Omit<ActionEntry, 'at'>): Promise<boolean> }
+  log: { append(entry: NewActionEntry): Promise<boolean> }
   now?: () => number
 }
 
@@ -60,7 +60,7 @@ export function createActionRoutes(deps: ActionRouteDeps): Hono {
       if (run.ran) await settle(() => afterMerge(t.repo.path, n))
       const { ran: _ran, ...result } = run
       const message = run.outcome === 'stale' && run.headSha ? `head now ${run.headSha.slice(0, 7)}` : run.message
-      const entry: Omit<ActionEntry, 'at'> = { action: 'merge', repoId, repo: t.repo.name, target: `PR #${n}`, result: run.outcome }
+      const entry: NewActionEntry = { action: 'merge', repoId, repo: t.repo.name, target: `PR #${n}`, result: run.outcome }
       if (message !== undefined) entry.message = message
       const logged = await settle(() => deps.log.append(entry))
       // The Board carries the new log entry (and, after a merge, the PR's fresh state) before the response.

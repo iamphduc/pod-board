@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { ActionEntry } from '@pod-board/model'
+import type { NewActionEntry } from '@pod-board/model'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { ACTION_LOG_MAX, createActionLog } from './action-log.ts'
 
@@ -17,13 +17,22 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
-const entry = (n: number, over: Partial<ActionEntry> = {}): Omit<ActionEntry, 'at'> => ({
+const entry = (n: number, over: { result?: 'merged' | 'failed' | 'stale'; message?: string } = {}): NewActionEntry => ({
   action: 'merge',
   repoId: 'id-r',
   repo: 'r',
   target: `PR #${n}`,
   result: 'merged',
   ...over,
+})
+
+const answer = (result: 'answered' | 'changed' | 'failed', message?: string): NewActionEntry => ({
+  action: 'answer',
+  repoId: 'id-r',
+  repo: 'r',
+  target: '2026-10-21 · PENDING · engineer → human',
+  result,
+  ...(message === undefined ? {} : { message }),
 })
 
 describe('action log', () => {
@@ -58,6 +67,26 @@ describe('action log', () => {
     expect(read[0]?.at).toBe(59)
     expect(read[49]?.at).toBe(10)
     expect(read.every((e) => e.result === 'merged' && e.action === 'merge')).toBe(true)
+
+    // Answer entries append and read back, beside old merge lines; a mixed-up or unknown action or result is skipped.
+    const mixed = createActionLog({ file: join(root, 'mixed.jsonl'), now: () => 7 })
+    expect(await mixed.append(answer('answered'))).toBe(true)
+    expect(await mixed.append(answer('changed', 'The entry changed since you looked.'))).toBe(true)
+    const oldMerge = JSON.stringify({ at: 1, action: 'merge', repoId: 'id-r', repo: 'r', target: 'PR #3', result: 'stale', message: 'head now bbbbbbb' })
+    const skipped = [
+      JSON.stringify({ at: 2, ...answer('answered'), result: 'merged' }),
+      JSON.stringify({ at: 3, ...entry(4), result: 'answered' }),
+      JSON.stringify({ at: 4, ...answer('answered'), action: 'reply' }),
+      JSON.stringify({ at: 5, ...answer('answered'), result: 'saved' }),
+      JSON.stringify({ at: 6, ...answer('answered'), message: 9 }),
+    ]
+    const mixedText = await readFile(join(root, 'mixed.jsonl'), 'utf8')
+    await writeFile(join(root, 'mixed.jsonl'), [oldMerge, ...skipped, mixedText].join('\n'))
+    expect(createActionLog({ file: join(root, 'mixed.jsonl'), now: () => 8 }).recent()).toEqual([
+      { at: 7, ...answer('changed', 'The entry changed since you looked.') },
+      { at: 7, ...answer('answered') },
+      { at: 1, action: 'merge', repoId: 'id-r', repo: 'r', target: 'PR #3', result: 'stale', message: 'head now bbbbbbb' },
+    ])
 
     // The list stays at 50 after more appends.
     const capped = createActionLog({ file, now: () => 100 })

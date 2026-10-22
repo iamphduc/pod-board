@@ -2,7 +2,7 @@
 
 ## What it is
 
-Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per sprint, Check, Ship) and its slice log, plus the Add a repo form, the live chip, and the empty and error states. Also `/pod:fix` runs, with their own pipeline and agent log, and the Other activity strip. Covers the features.md rows Screen 1, Screen 1 live state, Screen 1 close-out run, Screen 1 fix run, Other activity, Screen 1 Add repo, and Unsupported docs and no runs. The logic is pure in `packages/model/src/runs.ts`, `pipeline.ts`, and `fix-runs.ts` and in `packages/web/src/screens/runs/view.ts`; components are glue.
+Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per sprint, Check, Ship) and its slice log, plus the Add a repo form, the live chip, and the empty and error states. Also `/pod:fix` runs, with their own pipeline and agent log, and the Other activity strip. Also the Reply panel. Covers the features.md rows Screen 1, Screen 1 live state, Screen 1 close-out run, Screen 1 fix run, Other activity, Screen 1 Add repo, and Unsupported docs and no runs. The logic is pure in `packages/model/src/runs.ts`, `pipeline.ts`, and `fix-runs.ts` and in `packages/web/src/screens/runs/view.ts`; components are glue.
 
 ## How it works
 
@@ -48,6 +48,14 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - **Errors** from the action client (`Actions need a page reload.`, `The board restarted. Reload the page.`, `Can't reach the board.`, or the server's `error`) show in the panel with Try again, which reads the PR afresh. It never resends the merge: a merge request that failed in transit may still have run.
 - **The result stays** after the Board rebuilds and the step drops `merge`: the panel follows the flow, not the step, until you close it.
 - **Action log** (`action-log-view.ts`, `ActionLog.tsx`), under Other activity whenever the Board is loaded: the newest 20 of `board.actions` across repos, newest first. Each row: time (`HH:MM` today, else `MMM D HH:MM`, local), repo, target, and a result chip (merged ok; queued and auto-merge run; stale and unconfirmed you; failed bad). Empty: `No actions yet.`
+
+## Reply panel
+
+- **When.** For the selected plan or fix run, when `runReplies` gives anything (see [queue-and-replies.md](queue-and-replies.md)): under the bar and its banners, above the pipeline (also above the wave board, the fix run's agent log, and the engineer view). Nothing for a repo row, or while pod works or is halted.
+- **Shows** (`reply-view.ts`, `ReplyPanel.tsx`), a quiet `.inplace` panel headed `Reply pod waits for`: each reply's word in mono, its `why`, and a quiet `Copy`. Then the chat to paste it in: `Paste it in Session <id> · first agent HH:MM` (local time, left out when no start is known), the line `cd "<repo path>"`, and `claude --resume <id>`, each with its own `Copy`. With no session: `No pod session found for this run. Paste it in the chat that runs it.` With an id outside `^[A-Za-z0-9-]{1,64}$`: the session line and `cd` only, no resume line.
+- **Copy** (`copy.ts`): writes the exact text to the clipboard. The button reads `Copied` for 2 s. A missing clipboard, or one that refuses, shows the text in a read-only field, selected, with `Copy failed. Press Ctrl+C.` No request, nothing logged.
+- **Secrets.** Session ids and commands only, never prompt text.
+- At 375 px each row stacks, with its Copy button full width under its text; ids and paths wrap.
 
 ## Why it's this way
 
@@ -112,3 +120,4 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - 2026-10-20 · fix-show-fix-runs round 1 · an open fix PR reads `review · idle` with Ship `after review` until the agent that wrote last is an ended reviewer, and a closed fix PR is asked about again, so a reopen shows.
 - 2026-10-21 · merge-actions P1 · one rule (`waitingPrs`) for PRs waiting on you; a handed-back wave reads `you` with `PR #N · you merge` and its run `needs-you`, and waiting steps carry `merge`.
 - 2026-10-21 · merge-actions U1 · a step with a PR waiting on you gets a Merge button that opens the confirm in place, shows GitHub's result, and the action log lists the newest 20 actions under Other activity.
+- 2026-10-21 · queue-and-replies R1 · a Reply panel under the bar names the reply pod waits for (`continue`, `try`, or `go`), why, and the chat to paste it in, each line with a Copy button.

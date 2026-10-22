@@ -20,5 +20,19 @@ export type MergeOutcome = 'merged' | 'queued' | 'auto-merge' | 'stale' | 'faile
 /** `merged` only ever comes from re-reading the PR after the merge call. */
 export type MergeResult = { outcome: MergeOutcome; number: number; message?: string; headSha?: string; logged: boolean }
 
-/** One logged action. `target` is `PR #N`. Later sprints widen `action` and `result`. */
-export type ActionEntry = { at: number; action: 'merge'; repoId: string; repo: string; target: string; result: MergeOutcome; message?: string }
+export type AnswerOutcome = 'answered' | 'changed' | 'failed'
+
+/** What the answer route sends back. */
+export type AnswerResult = { outcome: AnswerOutcome; message?: string; logged: boolean }
+
+/**
+ * One logged action. A merge's `target` is `PR #N`; an answer's is the queue entry's
+ * `<date> · <TYPE> · <from → to>`, never the answer text or the body.
+ */
+export type ActionEntry = { at: number; repoId: string; repo: string; target: string; message?: string } & (
+  | { action: 'merge'; result: MergeOutcome }
+  | { action: 'answer'; result: AnswerOutcome }
+)
+
+/** An entry before the log stamps its time. Omit spreads over the union, so `action` and `result` stay paired. */
+export type NewActionEntry = ActionEntry extends infer E ? (E extends ActionEntry ? Omit<E, 'at'> : never) : never

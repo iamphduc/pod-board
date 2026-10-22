@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { ActionEntry, MergeOutcome } from '@pod-board/model'
+import type { ActionEntry, AnswerOutcome, MergeOutcome } from '@pod-board/model'
 import { ACTION_LOG_CAP, NO_ACTIONS, actionLogRows, outcomeChip } from './action-log-view.ts'
 
 const at = (y: number, m: number, d: number, h: number, min: number) => new Date(y, m - 1, d, h, min).getTime()
 const NOW = at(2026, 10, 21, 14, 30)
 
-const entry = (over: Partial<ActionEntry>): ActionEntry => ({
+type MergeOver = Partial<Omit<Extract<ActionEntry, { action: 'merge' }>, 'action'>>
+
+const entry = (over: MergeOver): ActionEntry => ({
   at: NOW,
   action: 'merge',
   repoId: 'r1',
@@ -41,6 +43,15 @@ describe('action log view', () => {
     for (const [result, want] of Object.entries(cls) as [MergeOutcome, string][]) {
       expect(outcomeChip(result), result).toEqual({ cls: want, label: result })
       expect(actionLogRows([entry({ result })], NOW)[0]!.chip).toEqual({ cls: want, label: result })
+    }
+
+    // Answer rows: answered ok, changed you, failed bad; the target is the entry's header.
+    const answerCls: Record<AnswerOutcome, string> = { answered: 's-ok', changed: 's-you', failed: 's-bad' }
+    for (const [result, want] of Object.entries(answerCls) as [AnswerOutcome, string][]) {
+      const row = actionLogRows([{ at: NOW, action: 'answer', repoId: 'r1', repo: 'chess-web', target: '2026-10-21 · PENDING · engineer → human', result }], NOW)[0]!
+      expect(row.chip, result).toEqual({ cls: want, label: result })
+      expect(row.target).toBe('2026-10-21 · PENDING · engineer → human')
+      expect(outcomeChip(result)).toEqual({ cls: want, label: result })
     }
 
     // Newest 20, newest first, even if the list comes unsorted or longer than 50.

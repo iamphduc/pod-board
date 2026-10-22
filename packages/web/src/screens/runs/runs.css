@@ -589,6 +589,102 @@
   gap: 8px;
 }
 
+/* Reply panel: the reply pod waits for, under the bar, and the chat to paste it in. Quiet: .inplace's panel, no state colour. */
+.reply-panel {
+  max-width: 760px;
+}
+
+.reply-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.reply-row,
+.reply-cmd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.reply-word {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  font-size: var(--size-small);
+  font-weight: 600;
+}
+
+.reply-why {
+  flex: 1 1 14rem;
+  min-width: 0;
+  font-size: var(--size-small);
+  overflow-wrap: anywhere;
+}
+
+.reply-chat {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  min-width: 0;
+}
+
+.reply-session {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.reply-cmd code {
+  flex: 1 1 14rem;
+  min-width: 0;
+  font-size: var(--size-small);
+  overflow-wrap: anywhere;
+}
+
+.reply-copy {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.reply-failed {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.reply-failed .input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Phone: each row stacks, the copy button under its text. */
+@media (max-width: 480px) {
+  .reply-row,
+  .reply-cmd {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .reply-copy,
+  .reply-copy .btn {
+    width: 100%;
+  }
+}
+
 /* Narrow: the runs list stacks above the main view. */
 
 @media (max-width: 820px) {
