@@ -1,23 +1,25 @@
 // The action log list under Other activity: the newest actions across every repo,
 // each with its time, repo, target, and a result chip.
 
-import type { ActionEntry, MergeOutcome } from '@pod-board/model'
+import type { ActionEntry } from '@pod-board/model'
 import type { Chip, ChipClass } from './view.ts'
 
 export const ACTION_LOG_CAP = 20
 export const NO_ACTIONS = 'No actions yet.'
 
-const OUTCOME_CLS: Record<MergeOutcome, ChipClass> = {
+const OUTCOME_CLS: Record<ActionEntry['result'], ChipClass> = {
   merged: 's-ok',
+  answered: 's-ok',
   queued: 's-run',
   'auto-merge': 's-run',
   stale: 's-you',
   unconfirmed: 's-you',
+  changed: 's-you',
   failed: 's-bad',
 }
 
-/** merged → ok; queued and auto-merge → run; stale and unconfirmed → you; failed → bad. */
-export const outcomeChip = (result: MergeOutcome): Chip => ({ cls: OUTCOME_CLS[result], label: result })
+/** merged and answered → ok; queued and auto-merge → run; stale, unconfirmed, and changed → you; failed → bad. */
+export const outcomeChip = (result: ActionEntry['result']): Chip => ({ cls: OUTCOME_CLS[result], label: result })
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const pad = (n: number) => String(n).padStart(2, '0')

@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { ActionEntry, Board, GhStatus, MergePreview, MergeResult } from '@pod-board/model'
+import type { ActionEntry, Board, GhStatus, MergePreview, MergeResult, NewActionEntry } from '@pod-board/model'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { createActionRoutes } from './action-routes.ts'
 import { createApp } from './app.ts'
@@ -140,7 +140,7 @@ function fakeGh(): FakeGh {
 async function setup(opts: { status?: GhStatus; append?: (e: Omit<ActionEntry, 'at'>) => Promise<boolean> } = {}) {
   const gh = fakeGh()
   const reader = createGhReader({ exec: gh.exec, now: () => NOW })
-  const logged: Omit<ActionEntry, 'at'>[] = []
+  const logged: NewActionEntry[] = []
   const service: BoardService = createBoardService({
     configFile: join(root, 'cfg', 'config.json'),
     portsDir: join(root, 'ports'),
