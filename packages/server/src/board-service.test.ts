@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import type { Board } from '@pod-board/model'
 import * as model from '@pod-board/model'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { createBoardService, type BoardServiceDeps } from './board-service.ts'
+import { createBoardService, finalPrBranches, type BoardServiceDeps } from './board-service.ts'
 import type { GhReader, GhStatus, PrStatus } from './gh.ts'
 import { normalizeRepoPath, repoId } from './guard.ts'
 import { projectDirName } from './transcript-files.ts'
@@ -399,6 +399,23 @@ describe('board service', () => {
     expect(model.listRuns(board, NOW).find((x) => x.fix === 'clock')).toMatchObject({ plan: 'fix-clock', where: 'review', state: 'running', portBase: 3200 })
   })
 
+  test("a claimed archived plan with no hand-back yet: refreshGh asks gh for the plan's branch; the Board has its final PR", async () => {
+    // chess-web's ui-polish close-out before pod writes the hand-back: the final PR is open on `ui-polish`.
+    const repo = copyFixture('chess-web', 'chess-web-ui-polish')
+    await writeFile(join(repo, 'pod-docs', 'handoff-queue.md'), '# Handoff Queue\n')
+    await claim(3200, repo, 'ui-polish')
+    const path = normalizeRepoPath(repo, platform)
+    const pr: PrStatus = { number: 91, state: 'open', checks: 'pass', checkedAt: NOW, branch: 'ui-polish' }
+    const gh = fakeGh({}, 'ok', { 'ui-polish': pr })
+    const service = createBoardService(deps(gh))
+    const board = await service.build()
+    await service.refreshGh(board)
+    expect(gh.refreshed).toEqual([{ repoPath: path, numbers: [], branches: ['ui-polish'] }])
+    expect(board.repos[0]!.prs).toEqual([pr])
+    const ship = model.buildPipeline(board.repos[0]!, 'ui-polish', NOW)?.stages.find((s) => s.key === 'ship')?.steps
+    expect(ship).toEqual([{ key: 'final-pr', label: 'Final PR', state: 'wait', detail: 'PR #91 · after review' }])
+  })
+
   test('a PR found by branch that is also a numbered live PR is on the Board once', async () => {
     const repo = copyFixture()
     // A hand-back linking #77 makes #77 a live PR by number too.
@@ -591,5 +608,52 @@ describe('transcript cache', () => {
     await register(repo, second)
     await transcript(second, 'eng9', 'pod:engineer', ENGINEER_PROMPT)
     await same('a second repo')
+  })
+})
+
+describe('finalPrBranches', () => {
+  const README = '# pod docs\n\npod docs: 2\n'
+  const plan = (slug: string, status: string, sprints: [string, string][]) =>
+    [
+      `# Plan: ${slug}`,
+      '',
+      `_Generated: 2026-10-18 · Status: ${status} · Grilled-with: grilling_`,
+      '',
+      '## Sprint sequence',
+      '',
+      '| Sprint | Goal | Status | Depends on |',
+      '|--------|------|--------|------------|',
+      ...sprints.map(([s, st]) => `| ${s} | goal | ${st} | — |`),
+      '',
+    ].join('\n')
+  const handBack = (slug: string, pending = true) =>
+    `- \`[2026-10-20 · PENDING · orchestrator → human · plan: ${slug}]\` plan ${slug} complete — final PR https://github.com/o/r/pull/9 **Resolution:** ${pending ? 'pending' : '2026-10-20 — merged'}`
+  const branches = (plans: Record<string, string>, claimed: string[] = [], queue: string[] = []) =>
+    finalPrBranches(
+      model.buildRepoModel({
+        'pod-docs/README.md': README,
+        'pod-docs/handoff-queue.md': ['# Handoff Queue', '', ...queue, ''].join('\n'),
+        ...Object.fromEntries(Object.entries(plans).map(([slug, doc]) => [`pod-docs/plans/${slug}.md`, doc])),
+      }),
+      claimed.map((p) => ({ plan: p })),
+    )
+
+  test('a plan with every sprint done (final review, close-out) gives its slug; one mid-sprint gives none', () => {
+    expect(branches({ alpha: plan('alpha', 'active', [['one', 'done'], ['two', 'done']]) })).toEqual(['alpha'])
+    expect(branches({ alpha: plan('alpha', 'active', [['one', 'done'], ['two', 'active']]) })).toEqual([])
+    // No sprints yet is not close-out.
+    expect(branches({ alpha: plan('alpha', 'active', []) })).toEqual([])
+  })
+
+  test('an archived or done plan only while a claim names it', () => {
+    const plans = { alpha: plan('alpha', 'archived', [['one', 'done']]), beta: plan('beta', 'done', [['b', 'done']]) }
+    expect(branches(plans)).toEqual([])
+    expect(branches(plans, ['alpha', 'beta'])).toEqual(['alpha', 'beta'])
+  })
+
+  test('a pending hand-back is asked by number, not by branch; a resolved one is no hand-back', () => {
+    const plans = { alpha: plan('alpha', 'active', [['one', 'done']]) }
+    expect(branches(plans, [], [handBack('alpha')])).toEqual([])
+    expect(branches(plans, [], [handBack('alpha', false)])).toEqual(['alpha'])
   })
 })
