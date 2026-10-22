@@ -1,17 +1,16 @@
 # Sprint: Resume runs from the board
 
-_From plan: pod-docs/plans/board-actions.md · Slug: resume-runs · Status: active · Generated: 2026-10-22_
+_From plan: pod-docs/plans/board-actions.md · Slug: resume-runs · Status: done · Generated: 2026-10-22_
 
-<!-- autopilot-run: started=2026-10-21T23:01:35-07:00 sprints=1 waves=3 -->
 
 ## Status board
 
 | Wave | Slice | Title | Branch | PR | Status | Confidence | Depends on |
 |------|-------|-------|--------|----|--------|------------|------------|
-| 1 | K1 | Spike: headless resume on a throwaway session, and the claude runner | resume-runs-K1 | — | pending | — | — |
-| 1 | M1 | Resume model: sendable replies, stop keys, auto-send rule, resume log entries | resume-runs-M1 | — | pending | — | — |
-| 2 | S1 | Resume and auto-continue routes, the toggle store, and the automatic check | resume-runs-S1 | — | pending | — | K1, M1 |
-| 2 | U1 | The auto-continue switch in the run bar, and Continue and Go buttons | resume-runs-U1 | — | pending | — | K1, M1 |
+| 1 | K1 | Spike: headless resume on a throwaway session, and the claude runner | resume-runs-K1 | #31 | merged | medium | — |
+| 1 | M1 | Resume model: sendable replies, stop keys, auto-send rule, resume log entries | resume-runs-M1 | #31 | merged | medium | — |
+| 2 | S1 | Resume and auto-continue routes, the toggle store, and the automatic check | resume-runs-S1 | #32 | merged | medium | K1, M1 |
+| 2 | U1 | The auto-continue switch in the run bar, and Continue and Go buttons | resume-runs-U1 | #32 | merged | medium | K1, M1 |
 
 ## Shared contract
 
@@ -207,3 +206,19 @@ A failed send isn't retried for that stop, because the key is saved. After a res
 - **Depends on:** K1, M1
 - **One-way door:** none
 - **Model:** opus
+
+## Sprint summary
+
+- **Synced with merge-target:** up to date (`origin/pod-staging` had no new commits)
+- **Slices shipped:** K1, M1 (wave 1, PR #31), S1, U1 (wave 2, PR #32)
+- **Queue entries:** resolved 1 (the flaky `claude-runner.test.ts` teardown, fixed in the wave 2 fix), deferred 5 ([handoff-queue.md](../../handoff-queue.md): headless resume rules to confirm, the macOS/Linux spike run, the permission-mode and open-terminal risks, the three copies of the session id rule, plus the two earlier questions still open)
+- **Slice log:**
+  - K1: opus · medium · test-first yes · runtime the spike on Windows with `claude` 2.1.308 on one throwaway session (5 tiny calls): `verdict: go` with conditions · 6 PENDINGs, 4 NOTEs · time lost ~15 min (Windows spawn and stderr handles)
+  - M1: opus · medium · test-first yes · runtime the model on live `/api/board` through tsx; page not opened (agent-browser hang) · 5 NOTEs · time lost ~2 min
+  - S1: opus · medium · test-first yes · runtime the real API with a fake `claude` through a `.cmd` shim: manual send, toggle, auto send once per stop across a restart, busy on main and subagent files · 3 PENDINGs, 4 NOTEs · time lost ~13 min
+  - U1: opus · medium · test-first yes · runtime components rendered from the live Board, both flows through the real `postAction`; page not opened (agent-browser hang) · 1 PENDING, 4 NOTEs · time lost ~2 min
+  - Wave 1 fix (`resume-runs-w1-fix`): CI failed on macOS (`/private/var` vs `/var`) in `claude-runner.test.ts`; test-only, every test now runs behind a link
+  - Wave 2 fix (`resume-runs-w2-fix`): the runner test's teardown (`EPERM`/`EBUSY` while Windows releases a killed child's folder) and hiding Continue and Go without a safe session
+  - Orchestrator wave checks: wave 1 smoke on the fixture; wave 2 on the fixture with a missing `claude` binary (switch on and off, toggle file, 375 px, no send on a merge-waiting run)
+  - Stalls: none
+- **Agent context at hand-back:** 849,037 tokens — *each agent's final context size, not tokens billed*
