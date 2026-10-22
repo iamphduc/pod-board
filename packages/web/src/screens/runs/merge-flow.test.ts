@@ -200,7 +200,8 @@ describe('merge flow', () => {
     for (const checks of ['fail', 'pending'] as const) {
       const t = await atConfirm({ checks })
       const w = confirmView(t.flow.state())
-      expect(w, checks).toMatchObject({ canMerge: true, blockReason: undefined })
+      expect(w, checks).toMatchObject({ canMerge: true })
+      expect(w?.blockReason, checks).toBeUndefined()
       expect(w?.checks).toEqual(checks === 'fail' ? { cls: 's-bad', label: 'checks fail' } : { cls: 's-run', label: 'checks pending' })
     }
     expect(confirmView((await atConfirm({ checks: 'pass' })).flow.state())?.checks).toEqual({ cls: 's-ok', label: 'checks pass' })

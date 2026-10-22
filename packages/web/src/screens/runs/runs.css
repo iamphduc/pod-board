@@ -407,6 +407,73 @@
   }
 }
 
+/* Merge: a button on the step with a PR waiting on you, and its confirm in place under the pipeline. */
+
+.step .step-merge {
+  justify-self: start;
+  margin-top: 4px;
+  padding: 4px 12px;
+  font-size: var(--size-dense);
+}
+
+.step[data-open="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.merge-confirm {
+  margin-top: 10px;
+  max-width: 640px;
+  border-left: 3px solid var(--accent);
+}
+
+.merge-confirm:focus {
+  outline: none;
+}
+
+.merge-confirm:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.merge-head {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.merge-title {
+  color: var(--fg);
+}
+
+.merge-facts,
+.merge-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: var(--size-small);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.merge-why,
+.merge-error,
+.merge-status {
+  margin: 0;
+  font-size: var(--size-small);
+  overflow-wrap: anywhere;
+}
+
+.merge-why {
+  color: var(--warn-ink);
+}
+
+.merge-error {
+  color: var(--bad-ink);
+}
+
 /* Slice log */
 
 .slice-log {
