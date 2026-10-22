@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { MERGE_TIMEOUT_MS, VIEW_FIELDS, mergePr, readPr } from './gh-actions.ts'
+import { MERGE_TIMEOUT_MS, QUEUE_QUERY, VIEW_FIELDS, mergePr, readPr } from './gh-actions.ts'
 import type { ExecResult, GhExec } from './gh.ts'
 
 const REPO = 'E:\\Projects\\chess-web'
@@ -37,17 +37,32 @@ const view = (over: View = {}): ExecResult => ({
 
 type Call = { args: string[]; cwd: string; timeoutMs?: number }
 
-/** A fake gh: answers each `pr view` from `views` in turn (the last repeats) and `pr merge` with `merge`. */
-function fakeGh(views: (ExecResult | Error)[], merge: ExecResult | Error = { status: 'ok', stdout: '' }) {
+/** GitHub's GraphQL answer for the PR's merge-queue entry (`null` → not in a queue). */
+const queue = (entry: unknown): ExecResult => ({
+  status: 'ok',
+  stdout: JSON.stringify({ data: { repository: { pullRequest: { mergeQueueEntry: entry } } } }),
+})
+const QUEUED = queue({ state: 'QUEUED' })
+
+/**
+ * A fake gh: answers each `pr view` from `views` in turn (the last repeats), `pr merge` with `merge`,
+ * and `api graphql` with `graphql`.
+ */
+function fakeGh(views: (ExecResult | Error)[], merge: ExecResult | Error = { status: 'ok', stdout: '' }, graphql: ExecResult | Error = queue(null)) {
   const calls: Call[] = []
   let i = 0
   const exec: GhExec = async (args, cwd, opts) => {
     calls.push({ args, cwd, ...(opts?.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}) })
-    const answer = args[1] === 'merge' ? merge : views[Math.min(i++, views.length - 1)]!
+    const answer = args[0] === 'api' ? graphql : args[1] === 'merge' ? merge : views[Math.min(i++, views.length - 1)]!
     if (answer instanceof Error) throw answer
     return answer
   }
-  return { calls, exec, merges: () => calls.filter((c) => c.args[1] === 'merge') }
+  return {
+    calls,
+    exec,
+    merges: () => calls.filter((c) => c.args[1] === 'merge'),
+    graphqls: () => calls.filter((c) => c.args[0] === 'api'),
+  }
 }
 
 describe('merge', () => {
@@ -63,17 +78,74 @@ describe('merge', () => {
   })
 
   test('outcome comes from the re-read', async () => {
-    const run = async (reread: ExecResult | Error, merge?: ExecResult) => mergePr(fakeGh([view(), reread], merge).exec, REPO, 7, SHA)
+    const run = async (reread: ExecResult | Error, merge?: ExecResult, graphql?: ExecResult | Error) =>
+      mergePr(fakeGh([view(), reread], merge, graphql).exec, REPO, 7, SHA)
     expect(await run(view({ state: 'MERGED' }))).toEqual({ outcome: 'merged', number: 7, ran: true })
     expect(await run(view({ autoMergeRequest: { enabledAt: '2026-10-21T00:00:00Z', mergeMethod: 'MERGE' } }))).toMatchObject({ outcome: 'auto-merge' })
-    // gh has no merge-queue field: an open PR with no auto-merge after a successful call is queued.
-    expect(await run(view())).toMatchObject({ outcome: 'queued' })
+    // Open with no auto-merge after a successful call: queued only when GitHub shows a merge-queue entry.
+    expect(await run(view(), undefined, QUEUED)).toEqual({ outcome: 'queued', number: 7, ran: true })
+    expect(await run(view(), undefined, queue({ state: 'UNMERGEABLE' }))).toMatchObject({ outcome: 'queued' })
+    const notQueued = await run(view(), undefined, queue(null))
+    expect(notQueued).toMatchObject({ outcome: 'unconfirmed', ran: true })
+    expect(notQueued.message).toMatch(/GitHub hasn't confirmed the merge yet/)
+    // The queue question fails → unconfirmed, never queued.
+    const answers: (ExecResult | Error)[] = [
+      { status: 'failed', stdout: '', stderr: 'HTTP 502' },
+      new Error('spawn'),
+      { status: 'ok', stdout: 'not json' },
+      { status: 'ok', stdout: JSON.stringify({ data: { repository: { pullRequest: null } }, errors: [{ type: 'NOT_FOUND' }] }) },
+      { status: 'ok', stdout: JSON.stringify({ data: { repository: null } }) },
+      { status: 'ok', stdout: JSON.stringify({ data: { repository: { pullRequest: { mergeQueueEntry: 'QUEUED' } } } }) },
+      { status: 'failed', stdout: QUEUED.stdout },
+    ]
+    for (const answer of answers) {
+      expect(await run(view(), undefined, answer), String(answer instanceof Error ? answer : answer.stdout)).toMatchObject({
+        outcome: 'unconfirmed',
+        message: expect.stringMatching(/GitHub hasn't confirmed the merge yet/),
+      })
+    }
     expect(await run(view({ state: 'CLOSED' }))).toEqual({ outcome: 'failed', number: 7, message: 'PR is closed', ran: true })
     const unread = await run({ status: 'failed', stdout: '' })
     expect(unread).toMatchObject({ outcome: 'unconfirmed', ran: true })
     expect(unread.message).toMatch(/couldn't read the PR again/i)
     expect((await run(new Error('spawn'))).outcome).toBe('unconfirmed')
     expect((await run({ status: 'ok', stdout: 'not json' })).outcome).toBe('unconfirmed')
+  })
+
+  test('the merge queue is asked only for an open PR after a successful call', async () => {
+    // The one case: one GraphQL call, after the merge, on the re-read url's owner and name, default timeout.
+    const gh = fakeGh([view(), view({ url: 'https://github.com/123/9.x/pull/7' })], undefined, QUEUED)
+    expect((await mergePr(gh.exec, REPO, 7, SHA)).outcome).toBe('queued')
+    // Owner and name as raw strings (-f): -F would turn "123" into a number.
+    expect(gh.graphqls()).toEqual([
+      { args: ['api', 'graphql', '-f', `query=${QUEUE_QUERY}`, '-f', 'owner=123', '-f', 'name=9.x', '-F', 'number=7'], cwd: REPO },
+    ])
+    expect(gh.calls.findIndex((c) => c.args[0] === 'api')).toBeGreaterThan(gh.calls.findIndex((c) => c.args[1] === 'merge'))
+    expect(QUEUE_QUERY).toMatch(/pullRequest\(number: \$number\)\s*\{\s*mergeQueueEntry\s*\{\s*state\s*\}/)
+
+    const failed: ExecResult = { status: 'failed', stdout: '', stderr: 'no' }
+    const none: [string, (ExecResult | Error)[], (ExecResult | Error)?][] = [
+      ['merged', [view(), view({ state: 'MERGED' })]],
+      ['closed', [view(), view({ state: 'CLOSED' })]],
+      ['auto-merge', [view(), view({ autoMergeRequest: { mergeMethod: 'MERGE' } })]],
+      ['failed call, open re-read', [view(), view()], failed],
+      ['failed call, thrown', [view(), view()], new Error('boom')],
+      ['failed re-read', [view(), { status: 'failed', stdout: '' }]],
+      ['stale', [view({ headRefOid: OTHER })]],
+      ['failed first read', [{ status: 'failed', stdout: '' }]],
+    ]
+    for (const [name, views, merge] of none) {
+      const g = fakeGh(views, merge, QUEUED)
+      const r = await mergePr(g.exec, REPO, 7, SHA)
+      expect(g.graphqls(), name).toEqual([])
+      expect(r.outcome, name).not.toBe('queued')
+    }
+    // A failed call with an open re-read keeps gh's text.
+    expect(await mergePr(fakeGh([view(), view()], failed, QUEUED).exec, REPO, 7, SHA)).toMatchObject({ outcome: 'failed', message: 'no' })
+    // The preview never asks.
+    const p = fakeGh([view()], undefined, QUEUED)
+    await readPr(p.exec, REPO, 7)
+    expect(p.graphqls()).toEqual([])
   })
 
   test('failure shows gh\'s text', async () => {
