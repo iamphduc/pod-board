@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { createGhReader, type ExecResult, type GhExec } from './gh.ts'
+import { createExec, createGhReader, type ExecResult, type GhExec } from './gh.ts'
 
 const REPO = 'E:\\Projects\\chess-web'
 const PR_FIELDS = 'number,state,url,statusCheckRollup'
@@ -518,5 +518,53 @@ describe('PRs found by head branch (fix runs)', () => {
     await reader.refresh(REPO, [], ['fix-scroll'])
     expect(reader.get(REPO, 36)).toBeUndefined()
     expect(reader.getBranch('E:\Projects\other', 'fix-scroll')).toBeUndefined()
+  })
+})
+
+describe('forget and stderr', () => {
+  test('forget re-fetches a PR', async () => {
+    // stderr is captured, and a timeout counts as failed: a real child process stands in for gh.
+    const node = createExec(process.execPath)
+    const failed = await node(['-e', "process.stdout.write('out'); process.stderr.write('\u001b[31mboom\u001b[0m'); process.exit(1)"], process.cwd())
+    expect(failed).toEqual({ status: 'failed', stdout: 'out', stderr: '\u001b[31mboom\u001b[0m' })
+    const passed = await node(['-e', "process.stderr.write('warn')"], process.cwd())
+    expect(passed).toEqual({ status: 'ok', stdout: '', stderr: 'warn' })
+    const slow = await node(['-e', 'setTimeout(() => {}, 10000)'], process.cwd(), { timeoutMs: 200 })
+    expect(slow.status).toBe('failed')
+
+    // A merged PR is final, by number and by branch; forget makes the next refresh ask again.
+    const calls: string[][] = []
+    const exec: GhExec = async (args) => {
+      calls.push(args)
+      if (args[0] === 'auth') return ok('')
+      if (args[1] === 'list') return ok(JSON.stringify([{ number: 36, state: 'MERGED', url: 'https://github.com/o/r/pull/36', statusCheckRollup: [], headRefName: 'fix-a' }]))
+      return ok(prJson(Number(args[2]), args[2] === '36' ? 'MERGED' : 'OPEN'))
+    }
+    const c = clock()
+    const reader = createGhReader({ exec, now: c.now })
+    await reader.refresh(REPO, [36, 8], ['fix-a'])
+    const prCalls = () => calls.filter((a) => a[0] === 'pr').length
+    expect(prCalls()).toBe(3)
+    await reader.refresh(REPO, [36, 8], ['fix-a'])
+    expect(prCalls()).toBe(3)
+
+    reader.forget(REPO, 36)
+    expect(reader.get(REPO, 36)).toBeUndefined()
+    expect(reader.getBranch(REPO, 'fix-a')).toBeUndefined()
+    await reader.refresh(REPO, [36, 8], ['fix-a'])
+    // 36 by number and fix-a by branch again; 8 (open, inside its 30 s) is left alone.
+    expect(calls.filter((a) => a[0] === 'pr').slice(3).map((a) => a.slice(0, 4))).toEqual([
+      ['pr', 'view', '36', '--json'],
+      ['pr', 'list', '--head', 'fix-a'],
+    ])
+    expect(reader.get(REPO, 36)?.state).toBe('merged')
+
+    // An open PR inside its cache time is fetched again too, and forget on another repo does nothing.
+    reader.forget('E:\Projects\other', 8)
+    await reader.refresh(REPO, [8])
+    expect(prCalls()).toBe(5)
+    reader.forget(REPO, 8)
+    await reader.refresh(REPO, [8])
+    expect(prCalls()).toBe(6)
   })
 })

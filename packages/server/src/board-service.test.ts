@@ -132,6 +132,20 @@ describe('board service', () => {
     expect(r!.prs).toEqual([])
   })
 
+  test('board carries the action log', async () => {
+    const entries = [
+      { at: NOW - 1, action: 'merge', repoId: 'id-r', repo: 'r', target: 'PR #8', result: 'merged' },
+      { at: NOW - 2, action: 'merge', repoId: 'id-r', repo: 'r', target: 'PR #7', result: 'stale', message: 'head now bbbbbbb' },
+    ] as const
+    let list: model.ActionEntry[] = []
+    const withLog = createBoardService({ ...deps(), actions: () => list })
+    expect((await withLog.build()).actions).toEqual([])
+    list = [...entries]
+    // Read on every build, so a new entry is on the next Board.
+    expect((await withLog.build()).actions).toEqual(entries)
+    expect(await createBoardService(deps()).build()).not.toHaveProperty('actions')
+  })
+
   test('serves no agent description, so a secret in the meta file appears nowhere on the Board', async () => {
     const repo = copyFixture()
     await register(repo)
