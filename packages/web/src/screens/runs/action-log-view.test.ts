@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ActionEntry, AnswerOutcome, MergeOutcome } from '@pod-board/model'
+import type { ActionEntry, AnswerOutcome, MergeOutcome, ResumeOutcome } from '@pod-board/model'
 import { ACTION_LOG_CAP, NO_ACTIONS, actionLogRows, outcomeChip } from './action-log-view.ts'
 
 const at = (y: number, m: number, d: number, h: number, min: number) => new Date(y, m - 1, d, h, min).getTime()
@@ -70,5 +70,38 @@ describe('action log view', () => {
     expect(NO_ACTIONS).toBe('No actions yet.')
     expect(actionLogRows([], NOW)).toEqual([])
     expect(actionLogRows(undefined, NOW)).toEqual([])
+  })
+
+  it('resume rows', () => {
+    const resume = (result: ResumeOutcome, auto: boolean, reply: 'continue' | 'go' = 'continue'): ActionEntry => ({
+      at: NOW,
+      action: 'resume',
+      repoId: 'r1',
+      repo: 'chess-web',
+      target: `alpha · ${reply}`,
+      result,
+      reply,
+      auto,
+    })
+    // started ok, failed bad.
+    const cls: Record<ResumeOutcome, string> = { started: 's-ok', failed: 's-bad' }
+    for (const [result, want] of Object.entries(cls) as [ResumeOutcome, string][]) {
+      expect(outcomeChip(result), result).toEqual({ cls: want, label: result })
+      expect(actionLogRows([resume(result, false)], NOW)[0]!.chip).toEqual({ cls: want, label: result })
+    }
+    // The target reads <run> · <word>; an automatic one is marked auto in the text the list shows.
+    expect(actionLogRows([resume('started', false)], NOW)[0]).toMatchObject({ target: 'alpha · continue', auto: false })
+    expect(actionLogRows([resume('failed', true)], NOW)[0]).toMatchObject({ target: 'alpha · continue · auto', auto: true })
+    expect(actionLogRows([resume('started', false, 'go')], NOW)[0]).toMatchObject({ target: 'alpha · go', auto: false })
+
+    // Merge and answer rows are unchanged, and never marked auto.
+    expect(actionLogRows([entry({ result: 'merged' })], NOW)[0]).toMatchObject({ target: 'PR #41', auto: false, chip: { cls: 's-ok', label: 'merged' } })
+    const answer: ActionEntry = { at: NOW, action: 'answer', repoId: 'r1', repo: 'chess-web', target: '2026-10-21 · PENDING · engineer → human', result: 'answered' }
+    expect(actionLogRows([answer], NOW)[0]).toMatchObject({ target: '2026-10-21 · PENDING · engineer → human', auto: false, chip: { cls: 's-ok', label: 'answered' } })
+
+    // A mixed log keeps its order and distinct keys.
+    const rows = actionLogRows([entry({ at: NOW - 2 }), resume('started', true), entry({ at: NOW - 1, target: 'PR #42' })], NOW)
+    expect(rows.map((r) => r.target)).toEqual(['alpha · continue · auto', 'PR #42', 'PR #41'])
+    expect(new Set(rows.map((r) => r.key)).size).toBe(3)
   })
 })

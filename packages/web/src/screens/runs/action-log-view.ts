@@ -10,6 +10,7 @@ export const NO_ACTIONS = 'No actions yet.'
 const OUTCOME_CLS: Record<ActionEntry['result'], ChipClass> = {
   merged: 's-ok',
   answered: 's-ok',
+  started: 's-ok',
   queued: 's-run',
   'auto-merge': 's-run',
   stale: 's-you',
@@ -18,7 +19,7 @@ const OUTCOME_CLS: Record<ActionEntry['result'], ChipClass> = {
   failed: 's-bad',
 }
 
-/** merged and answered → ok; queued and auto-merge → run; stale, unconfirmed, and changed → you; failed → bad. */
+/** merged, answered, and started → ok; queued and auto-merge → run; stale, unconfirmed, and changed → you; failed → bad. */
 export const outcomeChip = (result: ActionEntry['result']): Chip => ({ cls: OUTCOME_CLS[result], label: result })
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -33,7 +34,10 @@ function when(at: number, now: number): string {
   return today ? clock : `${MONTHS[d.getMonth()]} ${d.getDate()} ${clock}`
 }
 
-export type ActionLogRow = { key: string; time: string; repo: string; target: string; chip: Chip }
+/** `auto` marks a resume the automatic check sent; its `target` then ends in ` · auto`, so the list shows it. */
+export type ActionLogRow = { key: string; time: string; repo: string; target: string; auto: boolean; chip: Chip }
+
+const isAuto = (e: ActionEntry): boolean => e.action === 'resume' && e.auto
 
 /** The newest ACTION_LOG_CAP entries, newest first. */
 export function actionLogRows(entries: ActionEntry[] | undefined, now: number): ActionLogRow[] {
@@ -45,7 +49,8 @@ export function actionLogRows(entries: ActionEntry[] | undefined, now: number): 
       key: `${e.at}-${e.repoId}-${e.target}-${i}`,
       time: when(e.at, now),
       repo: e.repo,
-      target: e.target,
+      target: isAuto(e) ? `${e.target} · auto` : e.target,
+      auto: isAuto(e),
       chip: outcomeChip(e.result),
     }))
 }
