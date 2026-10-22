@@ -75,17 +75,28 @@ afterEach(async () => {
 
 type GhState = { state: 'OPEN' | 'MERGED' | 'CLOSED'; head: string; autoMerge?: boolean }
 
-function fakeGh() {
+type FakeGh = {
+  calls: string[][]
+  prs: Map<number, GhState>
+  auth: ExecResult['status']
+  onMerge: (n: number) => ExecResult
+  hold: Set<number>
+  release: (n: number) => void
+  merges: () => string[][]
+  exec: GhExec
+}
+
+function fakeGh(): FakeGh {
   const calls: string[][] = []
   const prs = new Map<number, GhState>([
     [7, { state: 'OPEN', head: SHA }],
     [12, { state: 'OPEN', head: SHA }],
   ])
   const holds = new Map<number, () => void>()
-  const gh = {
+  const gh: FakeGh = {
     calls,
     prs,
-    auth: 'ok' as ExecResult['status'],
+    auth: 'ok',
     /** What `pr merge` does to the PR before it answers. */
     onMerge: (n: number): ExecResult => {
       prs.get(n)!.state = 'MERGED'
@@ -95,7 +106,6 @@ function fakeGh() {
     hold: new Set<number>(),
     release: (n: number) => holds.get(n)?.(),
     merges: () => calls.filter((a) => a[1] === 'merge'),
-    actionViews: () => calls.filter((a) => a[1] === 'view' && a[4] === VIEW_FIELDS),
     exec: (async (args) => {
       calls.push(args)
       if (args[0] === 'auth') return { status: gh.auth, stdout: '' }

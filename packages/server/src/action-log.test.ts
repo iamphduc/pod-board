@@ -64,6 +64,8 @@ describe('action log', () => {
     await capped.append(entry(100))
     expect(capped.recent()).toHaveLength(50)
     expect(capped.recent()[0]?.target).toBe('PR #100')
+    // The cut-short last line didn't swallow the new entry.
+    expect(createActionLog({ file, now: () => 100 }).recent()[0]?.target).toBe('PR #100')
   })
 
   test('an append that fails reports false and keeps the list', async () => {
