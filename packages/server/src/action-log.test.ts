@@ -97,6 +97,46 @@ describe('action log', () => {
     expect(createActionLog({ file, now: () => 100 }).recent()[0]?.target).toBe('PR #100')
   })
 
+  test('reads resume entries', async () => {
+    const resume = (result: 'started' | 'failed', auto: boolean, message?: string): NewActionEntry => ({
+      action: 'resume',
+      repoId: 'id-r',
+      repo: 'r',
+      target: 'alpha · continue',
+      result,
+      reply: 'continue',
+      auto,
+      ...(message === undefined ? {} : { message }),
+    })
+    const first = createActionLog({ file, now: () => 3 })
+    expect(await first.append(resume('started', false))).toBe(true)
+    expect(await first.append(resume('failed', true, 'claude not found'))).toBe(true)
+    const ok = { at: 4, ...resume('started', true), reply: 'go', target: 'alpha · go' }
+
+    const oldMerge = JSON.stringify({ at: 1, ...entry(3, { result: 'stale' }) })
+    const oldAnswer = JSON.stringify({ at: 2, ...answer('answered') })
+    const skipped = [
+      JSON.stringify({ at: 5, ...resume('started', false), result: 'merged' }),
+      JSON.stringify({ at: 6, ...resume('started', false), result: 'answered' }),
+      JSON.stringify({ at: 7, ...resume('started', false), reply: 'try' }),
+      JSON.stringify({ at: 8, ...resume('started', false), reply: undefined }),
+      JSON.stringify({ at: 9, ...resume('started', false), auto: 'yes' }),
+      JSON.stringify({ at: 10, ...resume('started', false), auto: undefined }),
+      JSON.stringify({ at: 11, ...entry(4), result: 'started' }),
+    ]
+    const text = await readFile(file, 'utf8')
+    await writeFile(file, [oldMerge, oldAnswer, text.trimEnd(), JSON.stringify(ok), ...skipped, ''].join('\n'))
+
+    // After a restart: resume lines read back, beside old merge and answer lines.
+    expect(createActionLog({ file, now: () => 20 }).recent()).toEqual([
+      ok,
+      { at: 3, ...resume('failed', true, 'claude not found') },
+      { at: 3, ...resume('started', false) },
+      { at: 2, ...answer('answered') },
+      { at: 1, ...entry(3, { result: 'stale' }) },
+    ])
+  })
+
   test('an append that fails reports false and keeps the list', async () => {
     // The log's folder is a file, so the append can't write.
     await writeFile(join(root, 'blocker'), '')

@@ -20,7 +20,7 @@ let binDir: string
 let logDir: string
 let repo: string
 let recordFile: string
-const pids = new Set<number>()
+let pidsFile: string
 
 const alive = (pid: number) => {
   try {
@@ -80,7 +80,7 @@ function installFake(dir: string, shim: 'npm' | 'plain' = 'npm'): void {
 function envWith(extra: { [k: string]: string } = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {}
   for (const [k, v] of Object.entries(process.env)) if (k.toUpperCase() !== 'PATH') env[k] = v
-  return { ...env, PATH: binDir, FAKE_CLAUDE_RECORD: recordFile, ...extra }
+  return { ...env, PATH: binDir, FAKE_CLAUDE_RECORD: recordFile, FAKE_CLAUDE_PIDS: pidsFile, ...extra }
 }
 
 const waitFor = async (check: () => boolean, ms = 5000) => {
@@ -93,9 +93,31 @@ const waitFor = async (check: () => boolean, ms = 5000) => {
 
 const readRecord = async (): Promise<Record> => {
   await waitFor(() => existsSync(recordFile))
-  const r = JSON.parse(readFileSync(recordFile, 'utf8')) as Record
-  pids.add(r.pid)
-  return r
+  return JSON.parse(readFileSync(recordFile, 'utf8')) as Record
+}
+
+/** Every fake the test started, from the pid file each one appends to. */
+const startedPids = (): number[] =>
+  existsSync(pidsFile)
+    ? readFileSync(pidsFile, 'utf8').split('\n').filter(Boolean).map(Number)
+    : []
+
+/**
+ * Removes `path`, trying again on EPERM, EBUSY, and ENOTEMPTY. On Windows a killed child's
+ * handles (its working folder, its log) close a moment after `kill(pid, 0)` already says it's
+ * gone, and Node's own `maxRetries` doesn't retry that EPERM.
+ */
+const removeWithRetry = async (path: string, opts: { recursive?: boolean } = {}) => {
+  for (let tries = 1; ; tries++) {
+    try {
+      rmSync(path, { ...opts, force: true })
+      return
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code ?? ''
+      if (tries >= 40 || !['EPERM', 'EBUSY', 'ENOTEMPTY'].includes(code)) throw err
+      await new Promise((r) => setTimeout(r, 50))
+    }
+  }
 }
 
 beforeEach(() => {
@@ -107,17 +129,18 @@ beforeEach(() => {
   logDir = join(tmp, 'logs')
   repo = join(tmp, 'repo')
   recordFile = join(tmp, 'record.json')
+  pidsFile = join(tmp, 'pids.txt')
   mkdirSync(repo)
   installFake(binDir)
 })
 
 afterEach(async () => {
-  if (existsSync(recordFile)) await readRecord()
+  // Stop every fake this test started, wait for each to exit, then remove the folders they ran in.
+  const pids = startedPids()
   for (const pid of pids) if (alive(pid)) process.kill(pid)
-  await waitFor(() => [...pids].every((p) => !alive(p)))
-  pids.clear()
-  rmSync(tmp, { force: true, maxRetries: 20, retryDelay: 100 })
-  rmSync(realTmp, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })
+  await waitFor(() => pids.every((p) => !alive(p)))
+  await removeWithRetry(tmp)
+  await removeWithRetry(realTmp, { recursive: true })
 })
 
 describe('createClaudeRunner', () => {

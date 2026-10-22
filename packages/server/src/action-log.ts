@@ -1,14 +1,16 @@
-// The action log: one JSON line per merge or answer request in `<config dir>/actions.jsonl`, and the newest
+// The action log: one JSON line per merge, answer, or resume request in `<config dir>/actions.jsonl`, and the newest
 // 50 in memory for the Board. Read once at start; bad lines are skipped. The rules and why are in
 // pod-docs/feature-details/actions.md.
 
 import { readFileSync } from 'node:fs'
 import { appendFile } from 'node:fs/promises'
-import type { ActionEntry, AnswerOutcome, MergeOutcome, NewActionEntry } from '@pod-board/model'
+import type { ActionEntry, AnswerOutcome, MergeOutcome, NewActionEntry, ResumeOutcome } from '@pod-board/model'
 
 export const ACTION_LOG_MAX = 50
 const MERGE_RESULTS = new Set<string>(['merged', 'queued', 'auto-merge', 'stale', 'failed', 'unconfirmed'] satisfies MergeOutcome[])
 const ANSWER_RESULTS = new Set<string>(['answered', 'changed', 'failed'] satisfies AnswerOutcome[])
+const RESUME_RESULTS = new Set<string>(['started', 'failed'] satisfies ResumeOutcome[])
+const RESUME_REPLIES = new Set<unknown>(['continue', 'go'])
 
 export type ActionLog = {
   /** Stamps the entry with `now()` and appends it as one line. `false` when it couldn't be written; then it isn't listed either. */
@@ -71,6 +73,8 @@ function parseEntry(line: string): ActionEntry | undefined {
   let entry: ActionEntry
   if (e.action === 'merge' && MERGE_RESULTS.has(e.result as string)) entry = { ...base, action: 'merge', result: e.result as MergeOutcome }
   else if (e.action === 'answer' && ANSWER_RESULTS.has(e.result as string)) entry = { ...base, action: 'answer', result: e.result as AnswerOutcome }
+  else if (e.action === 'resume' && RESUME_RESULTS.has(e.result as string) && RESUME_REPLIES.has(e.reply) && typeof e.auto === 'boolean')
+    entry = { ...base, action: 'resume', result: e.result as ResumeOutcome, reply: e.reply as 'continue' | 'go', auto: e.auto }
   else return undefined
   if (e.message !== undefined) entry.message = e.message as string
   return entry
