@@ -6,6 +6,8 @@ import {
   RESUME_FAILED,
   createResumeFlow,
   createToggleFlow,
+  reduceResume,
+  reduceToggle,
   resumeView,
   startedText,
   switchView,
@@ -121,16 +123,16 @@ describe('auto-continue switch', () => {
     expect(toggleView(true, flow.state())).toEqual({ on: true, disabled: false, error: 'not a run' })
   })
 
-  it('a reply for an older press is dropped', async () => {
-    // Not reachable through the buttons (disabled while saving), but the flow guards it.
-    const p = fakePost()
-    const flow = createToggleFlow(T, () => {}, p.post)
-    flow.board(false)
-    flow.press()
-    p.calls[0]!.resolve(ok({ on: true }))
-    p.calls[0]!.resolve(fail(500, 'late'))
-    await tick()
-    expect(toggleView(false, flow.state())).toEqual({ on: true, disabled: false })
+  it('a reply for an older press is dropped', () => {
+    // Not reachable through the switch (disabled while saving), but the reducer guards it.
+    const saving: ToggleState = { kind: 'saving', seq: 2, on: true }
+    expect(reduceToggle(saving, { type: 'reply', seq: 1, reply: fail(500, 'late'), boardOn: false })).toBe(saving)
+    const saved: ToggleState = { kind: 'saved', seq: 2, on: true }
+    expect(reduceToggle(saved, { type: 'reply', seq: 2, reply: fail(500, 'late'), boardOn: false })).toBe(saved)
+    const sending: ResumeState = { kind: 'sending', seq: 3, word: 'continue' }
+    expect(reduceResume(sending, { type: 'reply', seq: 2, reply: fail(409, 'late') })).toBe(sending)
+    const result: ResumeState = { kind: 'result', seq: 3, word: 'continue', result: { outcome: 'started', logged: true } }
+    expect(reduceResume(result, { type: 'reply', seq: 3, reply: fail(409, 'late') })).toBe(result)
   })
 
   it('never posts go or resume', async () => {
@@ -175,9 +177,6 @@ describe('Continue and Go', () => {
     calls[0]!.resolve(ok(started()))
     await tick()
     expect(resumeView(flow.state(), RESUME)).toMatchObject({ busy: false, word: 'continue' })
-    // A late duplicate reply changes nothing.
-    calls[0]!.resolve(ok({ outcome: 'failed', message: 'late', logged: true }))
-    await tick()
     expect(flow.state()).toMatchObject({ kind: 'result', result: { outcome: 'started' } })
 
     // A new press after the result is a new send; Go sends go.

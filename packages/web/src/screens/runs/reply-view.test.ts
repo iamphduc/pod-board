@@ -77,6 +77,15 @@ describe('reply panel', () => {
     })
     expect(NO_SESSION).toBe('No pod session found for this run. Paste it in the chat that runs it.')
 
+    // A sendable row with no session still gets its button (the route answers no session).
+    const lone = repo()
+    lone.prs = [{ number: 7, state: 'merged', checks: 'pass', checkedAt: NOW }]
+    expect(replyPanel(run(), lone, NOW)).toEqual({
+      target: { repoId: 'id-r', run: 'alpha' },
+      rows: [{ key: 'continue', word: 'continue', why: 'PR #7 merged.', send: 'continue' }],
+      noSession: NO_SESSION,
+    })
+
     // Nothing for a repo row, no run, no repo, or a run with no reply.
     expect(replyPanel(run({ plan: undefined, where: 'no active plan', state: 'idle' }), repo(), NOW)).toBeUndefined()
     expect(replyPanel(undefined, repo(), NOW)).toBeUndefined()
