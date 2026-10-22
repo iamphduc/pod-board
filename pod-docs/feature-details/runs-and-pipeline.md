@@ -8,9 +8,14 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 
 - **Joins (agent → plan).** An agent belongs to a plan by its `plan` (reviewers, sprint planners, and reporters carry one), by one of the plan's sprints, or by a role: a `pod:reviewer` whose plan matches is a review round; an engineer on `<plan>-fix` is the fix pass; one on `<sprint>-w<N>-fix` is wave N's fix (wave time and tokens, never a slice row); else its slice. Running means active within the last 30 minutes.
 - **Which runs.** One row per plan that isn't archived or finished (all sprints done, no pending hand-back, not halted, no agent running), plus each plan a claim names (`<temp>/pod-ports/<B>` holding `<repo> <plan>`): a claimed plan that isn't archived always, and a claimed archived plan while its hand-back is pending, it's halted, or one of its agents wrote in the last 30 minutes (ended or not). A repo with an error, unsupported docs, or no live plan gets one repo row instead.
-- **Run state**, first match: `blocked` (halted, or a blocked slice in the current sprint) → `needs-you` (any queue item for the human) → `running` → `idle`. Where-text: `<sprint> · wave w/n`, `drafting` / `not drafted`, or `final review` / `final PR` / `closing out` / `all sprints done`. A claimed archived plan reads `final PR` while its hand-back is pending, else `closing out`; a running reviewer still reads `final review`.
+- **Run state**, first match: `blocked` (halted, or a blocked slice in the current sprint) → `needs-you` (any queue item for the human, or a wave PR waiting on you) → `running` → `idle`. Where-text: `<sprint> · wave w/n`, `drafting` / `not drafted`, or `final review` / `final PR` / `closing out` / `all sprints done`. A claimed archived plan reads `final PR` while its hand-back is pending, else `closing out`; a running reviewer still reads `final review`.
 - **Ship step** (`Final PR`): the hand-back's PR once it exists (`PR #N · you merge`, then `merged PR #N`). Before it, the PR `gh` found on head branch `<plan-slug>`: `PR #N · after review` (wait) while open, `merged PR #N`, or `PR #N · closed` (blocked); else `not open yet`.
-- **Wave step state**, first match: `blocked` → `done` → `you` (an ask naming an unfinished slice) → `live` → `wait`. Detail shows engineers, minutes, and tokens, left out when unknown.
+- **Wave step state**, first match: `blocked` → `done` → `you` (an ask naming an unfinished slice, or a PR waiting on you) → `live` → `wait`. Detail shows engineers, minutes, and tokens, left out when unknown; a wave with a waiting PR reads `PR #N · you merge` instead.
+- **PRs waiting on you** (`waitingPrs` in `packages/model/src/waiting-prs.ts`), the one rule the Merge button and the merge routes share. Only runs the runs list lists count.
+  - `final`: the plan's pending hand-back PR (Ship `PR #N · you merge`).
+  - `fix`: a fix run's PR while it's open and reviewed (Ship `you merge`).
+  - `wave`: a wave of the current sprint that isn't blocked or done, where every unfinished slice is `pushed`, none of its engineers (slice or `<sprint>-w<N>-fix`) runs, and an unfinished slice's PR cell holds an open number that `gh` doesn't report merged or closed (unknown counts as open). The first such number, once per wave.
+  - A step that shows a waiting PR carries `merge: { number }`; no other step does. `url` comes from `gh` only.
 - **Slice log.** One group per wave of every sprint with a doc; rows hold model, confidence, minutes, and tokens from that slice's agents.
 - **Live.** The page reads `/api/events` and recomputes on each board and every 30 s. While a stream is open it also checks `/api/health` every 5 s; a failure shows `lost · retrying` and keeps the last board.
 - **States.** Banners in order: `lost · retrying`, `config unreadable`, `gh missing` / `gh logged out` with "Last checked HH:MM". The empty main view names an unsupported docs version or its absence; no repos shows `No repos yet`.
@@ -49,6 +54,8 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - **The slug, not the task text, titles a fix run:** the task text is prompt text, which can quote findings and pasted output, and the board serves none.
 - **Other activity's 2 hours and 8 agents** keep it quiet: long enough to see a research run or a just-closed fix, short enough not to list a day's history.
 
+- **A wave PR waits on you once its engineers stop**, not when pod writes a hand-back: pod has no wave hand-back entry, and every unfinished slice `pushed` with no engineer running is the moment the wave PR is the human's (or autopilot's) to merge. Autopilot merges its own, so the board can read `you merge` until it does; `--match-head-commit` covers the race.
+
 ## Watch out
 
 - Ship's final PR before the hand-back comes from `gh` on head branch `<plan-slug>`, so a fixture copy shows it only as a git repo whose `origin` is the real GitHub repo; a plain copy makes `gh pr list` fail and Ship stays `not open yet`. With that `origin`, a hand-back's #91 also reads merged, not `you merge`.
@@ -68,6 +75,9 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - `blocked` and `you` wave steps show done-style detail with tokens (queued, someday).
 - Agents older than the transcript window lose their time and tokens; the wave then reads `<s> slices`.
 
+- A wave engineer that goes quiet for 30 minutes without ending counts as not running, so its wave can read `you merge` while it's still stuck.
+- A closed (not merged) hand-back PR still reads `you merge` and carries `merge`, as before; Merge then reports `PR is closed`.
+
 ## History
 
 - 2026-10-18: added in sprint server-runs (slice P1).
@@ -85,3 +95,4 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - 2026-10-20 · fix-show-fix-runs round 2 · a continued agent reads running until it hands back again, and its turns are their own steps and log rows: the engineer resumed after the review is the fix pass, the reviewer resumed after it round 2. So a running round 2 no longer reads `needs you`.
 - 2026-10-21 · fix-final-pr-early · Ship shows the final PR found by head branch `<plan-slug>` before the hand-back exists, so the final review and close-out no longer read `not open yet` ([decision](../decisions.md#2026-10-21--find-a-plans-final-pr-by-its-branch-any-base-agent-default--override-anytime)).
 - 2026-10-20 · fix-show-fix-runs round 1 · an open fix PR reads `review · idle` with Ship `after review` until the agent that wrote last is an ended reviewer, and a closed fix PR is asked about again, so a reopen shows.
+- 2026-10-21 · merge-actions P1 · one rule (`waitingPrs`) for PRs waiting on you; a handed-back wave reads `you` with `PR #N · you merge` and its run `needs-you`, and waiting steps carry `merge`.
