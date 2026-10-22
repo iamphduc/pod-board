@@ -271,6 +271,11 @@ describe('resume route', () => {
     await expectRes(await s.toggle({ repoId: 'id-r', run: 'alpha', on: true }), 403, { error: 'bad token' })
     expect(s.starts).toEqual([])
     expect(s.store.list()).toEqual([])
+    // The same requests with the token pass: the guard, not a missing route, refused them.
+    const ok = setup({ board: boardOf(planRepo(SPRINT_DONE)), store: createAutoContinueStore({ file: join(root, 'ok.json') }) })
+    expect((await ok.resume({ repoId: 'id-r', run: 'alpha', reply: 'continue' })).status).toBe(200)
+    expect(ok.starts).toHaveLength(1)
+    await expectRes(await ok.toggle({ repoId: 'id-r', run: 'alpha', on: true }), 200, { on: true })
   })
 })
 
