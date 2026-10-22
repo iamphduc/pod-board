@@ -146,6 +146,19 @@ describe('board service', () => {
     expect(await createBoardService(deps()).build()).not.toHaveProperty('actions')
   })
 
+  test('carries auto-continue toggles', async () => {
+    let toggles: model.AutoToggle[] = []
+    const withToggles = createBoardService({ ...deps(), autoContinue: () => toggles })
+    expect((await withToggles.build()).autoContinue).toEqual([])
+    toggles = [{ repoId: 'id-r', run: 'alpha', lastKey: 'sprint-done:one' }, { repoId: 'id-x', run: 'fix-scroll' }]
+    // Read on every build; the stop keys stay in the store, off the Board.
+    expect((await withToggles.build()).autoContinue).toEqual([
+      { repoId: 'id-r', run: 'alpha' },
+      { repoId: 'id-x', run: 'fix-scroll' },
+    ])
+    expect(await createBoardService(deps()).build()).not.toHaveProperty('autoContinue')
+  })
+
   test('serves no agent description, so a secret in the meta file appears nowhere on the Board', async () => {
     const repo = copyFixture()
     await register(repo)
