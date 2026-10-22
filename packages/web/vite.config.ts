@@ -16,7 +16,10 @@ export default defineConfig({
     host: '127.0.0.1',
     port: webPort,
     strictPort: true,
+    // Vite's default CORS lets any localhost origin read responses, the proxied API's
+    // included. The board is same-origin only: no response carries Access-Control-Allow-*.
+    cors: false,
     proxy: { '/api': `http://127.0.0.1:${apiPort}` },
   },
-  preview: { host: '127.0.0.1', port: webPort, strictPort: true },
+  preview: { host: '127.0.0.1', port: webPort, strictPort: true, cors: false },
 })
