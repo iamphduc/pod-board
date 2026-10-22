@@ -1,12 +1,14 @@
 import { homedir, tmpdir } from 'node:os'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { serve } from '@hono/node-server'
+import { createActionLog } from './action-log.ts'
+import { createActionRoutes } from './action-routes.ts'
 import { createTimelineSource } from './agent-timeline.ts'
 import { createApp } from './app.ts'
 import { createBoardService } from './board-service.ts'
 import { portsDir } from './claims.ts'
 import { configPath, listenConfig, portFromEnv } from './config.ts'
-import { createGhReader } from './gh.ts'
+import { createGhReader, defaultGhExec } from './gh.ts'
 import { addRepo } from './repos-config.ts'
 import { createSessionToken, writeSessionToken } from './session-token.ts'
 import { claudeDir, transcriptDays } from './transcript-files.ts'
@@ -40,7 +42,10 @@ try {
   process.exit(1)
 }
 
-const service = createBoardService({ ...settings, platform, gh: createGhReader() })
+// The action log sits next to the token: `<config dir>/actions.jsonl`, read once here.
+const log = createActionLog({ file: join(dirname(configFile), 'actions.jsonl'), now: Date.now })
+const gh = createGhReader({ exec: defaultGhExec })
+const service = createBoardService({ ...settings, platform, gh, actions: log.recent })
 const watcher = createBoardWatcher({ service, ...settings, poll: env.POD_BOARD_POLL === '1' })
 await watcher.start()
 
@@ -50,6 +55,14 @@ const app = createApp({
   source: watcher,
   addRepo: (p) => addRepo(configFile, p, platform),
   timeline: createTimelineSource({ board: () => watcher.board(), ...settings, now: Date.now }).timeline,
+  actions: createActionRoutes({
+    board: () => watcher.board(),
+    gh,
+    exec: defaultGhExec,
+    refreshGh: (board) => service.refreshGh(board),
+    rebuild: () => watcher.rebuild(),
+    log,
+  }),
 })
 
 const server = serve({ fetch: app.fetch, hostname: listen.hostname, port: listen.port }, () => {
