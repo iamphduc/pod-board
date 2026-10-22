@@ -1,6 +1,6 @@
 # Plan: Pod Board, phase 2 — approve from the board
 
-_Generated: 2026-10-21 · Status: active · Grilled-with: pod (fast)_
+_Generated: 2026-10-21 · Status: archived · Grilled-with: pod (fast)_
 
 Port base: 3000
 

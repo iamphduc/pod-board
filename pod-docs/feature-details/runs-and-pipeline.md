@@ -2,128 +2,65 @@
 
 ## What it is
 
-Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per sprint, Check, Ship) and its slice log, plus the Add a repo form, the live chip, and the empty and error states. Also `/pod:fix` runs, with their own pipeline and agent log, and the Other activity strip. Also the Reply panel and the Waiting on you list with its answer form. Covers the features.md rows Screen 1, Screen 1 live state, Screen 1 close-out run, Screen 1 fix run, Other activity, Screen 1 Add repo, and Unsupported docs and no runs. The logic is pure in `packages/model/src/runs.ts`, `pipeline.ts`, and `fix-runs.ts` and in `packages/web/src/screens/runs/view.ts`; components are glue.
+Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per sprint, Check, Ship) and slice log, with the Add a repo form, the live chip, and the empty and error states. Also `/pod:fix` runs, the Other activity strip, and the controls phase 2 added: the Merge confirm, the action log, the Reply panel with Continue and Go, the `auto-continue` switch, and the Waiting on you list with its answer form. Covers the features.md rows Screen 1 (all five), Other activity, Unsupported docs and no runs, Merge from the board (page side), Reply panel, Waiting on you, and Continue and auto-continue (page side). Logic is pure in `packages/model/src` and `packages/web/src/screens/runs`; components are glue.
 
 ## How it works
 
-- **Joins (agent → plan).** An agent belongs to a plan by its `plan` (reviewers, sprint planners, and reporters carry one), by one of the plan's sprints, or by a role: a `pod:reviewer` whose plan matches is a review round; an engineer on `<plan>-fix` is the fix pass; one on `<sprint>-w<N>-fix` is wave N's fix (wave time and tokens, never a slice row); else its slice. Running means active within the last 30 minutes.
-- **Which runs.** One row per plan that isn't archived or finished (all sprints done, no pending hand-back, not halted, no agent running), plus each plan a claim names (`<temp>/pod-ports/<B>` holding `<repo> <plan>`): a claimed plan that isn't archived always, and a claimed archived plan while its hand-back entry is pending (also after `gh` says its PR merged, since pod still waits for `continue`), it's halted, or one of its agents wrote in the last 30 minutes (ended or not). A repo with an error, unsupported docs, or no live plan gets one repo row instead.
-- **Run state**, first match: `blocked` (halted, or a blocked slice in the current sprint) → `needs-you` (any queue item for the human, or a wave PR waiting on you) → `running` → `idle`. Where-text: `<sprint> · wave w/n`, `drafting` / `not drafted`, or `final review` / `final PR` / `closing out` / `all sprints done`. A claimed archived plan reads `final PR` while its hand-back is pending, else `closing out`; a running reviewer still reads `final review`.
-- **Ship step** (`Final PR`): the hand-back's PR once it exists (`PR #N · you merge`, then `merged PR #N`). Before it, the PR `gh` found on head branch `<plan-slug>`: `PR #N · after review` (wait) while open, `merged PR #N`, or `PR #N · closed` (blocked); else `not open yet`.
-- **Wave step state**, first match: `blocked` → `done` → `you` (an ask naming an unfinished slice, or a PR waiting on you) → `live` → `wait`. Detail shows engineers, minutes, and tokens, left out when unknown; a wave with a waiting PR reads `PR #N · you merge` instead.
-- **PRs waiting on you** (`waitingPrs` in `packages/model/src/waiting-prs.ts`), the one rule the Merge button and the merge routes share. Only runs the runs list lists count.
-  - `final`: the plan's pending hand-back PR (Ship `PR #N · you merge`).
-  - `fix`: a fix run's PR while it's open and reviewed (Ship `you merge`).
-  - `wave`: a wave of the current sprint that isn't blocked or done, where every unfinished slice is `pushed`, none of its engineers (slice or `<sprint>-w<N>-fix`) runs, and an unfinished slice's PR cell holds an open number that `gh` doesn't report merged or closed (unknown counts as open). The first such number, once per wave.
-  - A step that shows a waiting PR carries `merge: { number }`; no other step does. `url` comes from `gh` only.
-- **Slice log.** One group per wave of every sprint with a doc; rows hold model, confidence, minutes, and tokens from that slice's agents.
-- **Live.** The page reads `/api/events` and recomputes on each board and every 30 s. While a stream is open it also checks `/api/health` every 5 s; a failure shows `lost · retrying` and keeps the last board.
-- **States.** Banners in order: `lost · retrying`, `config unreadable`, `gh missing` / `gh logged out` with "Last checked HH:MM". The empty main view names an unsupported docs version or its absence; no repos shows `No repos yet`.
-- **Add a repo** posts to `/api/repos`; a repeat shows "Already registered."; Escape clears the error.
+- **Joins:** an agent belongs to a plan by its `plan` field, one of the plan's sprints, or its role (a plan reviewer is a review round; `<plan>-fix` the fix pass; `<sprint>-w<N>-fix` wave N's fix). Running means it wrote in the last 30 minutes.
+- **Which runs:** each plan not archived or finished, plus each plan a claim file names. A claimed archived plan stays while its hand-back entry is pending (also after its PR merged, since pod still waits for `continue`), while halted, or while one of its agents wrote in the last 30 minutes.
+- **State,** first match: `blocked` → `needs-you` (a queue item for the human, or a PR waiting on you) → `running` → `idle`. Wave steps: `blocked` → `done` → `you` → `live` → `wait`.
+- **PRs waiting on you** (`waitingPrs`, one rule for the Merge button and the merge routes): the pending hand-back PR (`final`); a reviewed open fix PR (`fix`); a current-sprint wave whose unfinished slices are all `pushed`, no engineer runs, and whose PR is open (`wave`). Only that step carries `merge`.
+- **Live:** the page reads `/api/events`, recomputes every 30 s, and checks `/api/health` every 5 s; a failure shows `lost · retrying` and keeps the last board.
 
-## Fix runs
+### Fix runs
 
-- **Which.** Each claim `<repo> fix-<slug>` whose name matches no plan of the repo, once per name (`fixRunNames`). A claim named like a plan stays that plan's; a claim not named `fix-…` that names no plan is ignored. The run's `RunSummary` has `plan: 'fix-<slug>'` (the route key, since no plan has that name) and `fix: '<slug>'`.
-- **Agents.** Engineers whose dispatch `branch` is `fix-<slug>`; reviewers with `kind: fix` whose `branch` is `fix-<slug>` or whose `pr` is the run's PR number. Each counts once per turn: an agent continued with SendMessage (`AgentRun.turns`, see `run-model.md`) gives one entry per turn, with that turn's start, last write, and tokens; earlier turns read `ended`. An engineer turn that started after the first matched review is a fix pass, whether a new agent or the same one resumed, else the build (a re-dispatch before any review is still the build). A reviewer's first turn takes its `round` field; else, and for a resumed turn, 2 when it started after a fix pass, else 1. Several turns of one step read `<n> engineers`, `<n> passes`, or `<n> runs`, and its minutes add up each turn's own time (to now while one runs), never the idle time between turns. A `kind: fix` reviewer is never a plan's review round (`roleOf`), even with a plan field.
-- **PR.** The PR on `repo.prs` whose `branch` is `fix-<slug>`: the server asks `gh pr list --head fix-<slug> --state all` for each fix claim and keeps the open PR, else the newest. A closed one is asked about again every 30 s (a reopen or a new PR shows); a merged one isn't.
-- **Listed** while its claim exists, unless its PR merged and none of its agents wrote in the last 30 minutes (a leftover claim).
-- **Reviewed** means the run's agent that wrote last is a reviewer that ended (one that went quiet without ending doesn't count). Last write, not start: an engineer continued for the fix pass (the same transcript) keeps its first start but writes after the review.
-- **Where:** the newest running agent's step (`build`, `review`, `fix pass`, `review round 2`); else `review` while the PR is open and not reviewed; else `PR` once there is one; else the newest agent's step; else `build` (pod claims ports before it dispatches). **State:** an agent running → `running`; the PR open and reviewed → `needs-you`; else `idle`.
-- **Pipeline** (`buildFixPipeline`): Build (Engineer: `not started`, `<n> min so far`, or `<n> min · <k> tok`, with `<n> engineers` when there are several; Fix pass: `only if review fails` until one starts), Review (Round 1; Round 2: `only after a fix pass`), Ship (PR: `not open yet`, `PR #N · after review` waiting while the PR is open and not reviewed, then `PR #N · you merge`, `PR #N · merged`, or `PR #N · closed` as blocked).
-- **Agent log** below the pipeline, oldest first, one row per turn (a continued engineer shows an `engineer` row and a `fix pass` row): role (`engineer`, `fix pass`, `reviewer · round N`), `HH:MM → HH:MM` (`→ now` while running), and a running / ended / stale chip. Each engineer row links to `#/<repoId>/fix-<slug>/agent/<id>`, which opens the engineer view under the log (no slice, so Files owned reads `not listed`), headed by its latest turn. An unknown agent id falls back to the pipeline.
-- **No wave board:** no tabs, and `#/<repoId>/fix-<slug>/board` falls back to the pipeline. The title is the slug, never the task text.
+A claim `fix-<slug>` naming no plan is a fix run: Build, Review, Ship (the PR on head branch `fix-<slug>`), an agent log with one row per turn, and no wave board. An open PR reads `after review` until the agent that wrote last is an ended reviewer. The slug, never the task text, is its title.
 
-## Other activity
+### Other activity
 
-- **Which.** The repo's agents that belong to no plan of the repo (`isPlanAgent`, listed or not) and to no listed fix run, whose last write is under 2 hours old (`OTHER_WINDOW_MS`), newest first, 8 at most (`OTHER_CAP`): researchers, scouts, planners with no plan, stray engineers and reviewers, and a fix run's agents once its claim is gone.
-- **Shows** under the main view of any run of that repo (the repo row's too): `<role>` (the type without `pod:`), ` · <field>` (branch, else plan, else sprint), the last write as `HH:MM`, and a state chip. No description, prompt, or task text.
-- **Not a run:** it adds nothing to `Runs · N active` and no `needs you`.
+The repo's agents in no plan and no listed fix run, last write under 2 hours, newest 8: role, branch or plan, `HH:MM`, and a state chip. It's not a run and adds no `needs you`.
 
-## Merge from the board
+### Merge and the action log
 
-- **Button.** A pipeline step that carries `merge` (a PR waiting on you: a wave PR, a plan's final PR, or a reviewed fix PR) shows a `Merge` button, in the plan pipeline and the fix pipeline alike. Pressing it opens the confirm in place, right under the pipeline (outside its sideways scroller), headed by the step's stage and name. One confirm is open at a time; every Merge button is off while a merge runs.
-- **Flow** (`packages/web/src/screens/runs/merge-flow.ts`, a pure reducer and a small driver): idle → loading (`merge-preview`) → confirm → merging (`merge` with `{ repoId, number, headSha }` from the preview) → result, or → error. Cancel and Escape close it, except while merging. Each reply carries the number of the request it answers, so a reply that lands after a cancel or another open is dropped.
-- **Confirm** shows the title, a checks chip, mergeability, and the 7-char head sha, with a primary `Merge (merge commit)` and a quiet Cancel. Conflicts, or a PR already merged or closed, turn Merge off and say why. Failing or pending checks are shown and don't block.
-- **Result words:** `Merged` (only for `merged`), `Added to the merge queue`, `Auto-merge on: GitHub merges it when checks pass`, `The PR changed since you looked (head now <sha7>).` with Check again, and the server's message for `failed` and `unconfirmed` (fallbacks `The merge failed.` and `GitHub hasn't confirmed the merge.`). `logged: false` adds `Not saved to the action log.`
-- **Errors** from the action client (`Actions need a page reload.`, `The board restarted. Reload the page.`, `Can't reach the board.`, or the server's `error`) show in the panel with Try again, which reads the PR afresh. It never resends the merge: a merge request that failed in transit may still have run.
-- **The result stays** after the Board rebuilds and the step drops `merge`: the panel follows the flow, not the step, until you close it.
-- **Action log** (`action-log-view.ts`, `ActionLog.tsx`), under Other activity whenever the Board is loaded: the newest 20 of `board.actions` across repos, newest first. Each row: time (`HH:MM` today, else `MMM D HH:MM`, local), repo, target, and a result chip (merged ok; queued and auto-merge run; stale and unconfirmed you; failed bad). Empty: `No actions yet.`
+A step with `merge` shows Merge, which opens the confirm in place under the pipeline: title, checks, mergeability, short head sha, and `Merge (merge commit)`. Then the result in GitHub's words (`Merged` only for `merged`). Try again reads the PR again; it never resends a merge. The Action log under Other activity lists the newest 20 actions with a result chip.
 
-## Reply panel
+### Reply panel
 
-- **When.** For the selected plan or fix run, when `runReplies` gives anything (see [queue-and-replies.md](queue-and-replies.md)): under the bar and its banners, above the pipeline (also above the wave board, the fix run's agent log, and the engineer view). Nothing for a repo row, or while pod works or is halted.
-- **Shows** (`reply-view.ts`, `ReplyPanel.tsx`), a quiet `.inplace` panel headed `Reply pod waits for`: each reply's word in mono, its `why`, and a quiet `Copy`. Then the chat to paste it in: `Paste it in Session <id> · first agent HH:MM` (local time, left out when no start is known), the line `cd "<repo path>"`, and `claude --resume <id>`, each with its own `Copy`. With no session: `No pod session found for this run. Paste it in the chat that runs it.` With an id outside `^[A-Za-z0-9-]{1,64}$`: the session line and `cd` only, no resume line.
-- **Copy** (`copy.ts`): writes the exact text to the clipboard. The button reads `Copied` for 2 s. A missing clipboard, or one that refuses, shows the text in a read-only field, selected, with `Copy failed. Press Ctrl+C.` No request, nothing logged.
-- **Continue and Go** (`resume-flow.ts`, `reply-view.ts`). A row whose word `sendableReply` allows gets a primary button beside its Copy: `Continue` on a `continue` row whose signal is in `SEND_SIGNALS` (a merged wave, a done sprint, a merged final or fix PR), `Go` on the `go` row of a fresh plan. `try` and the `*-waiting` rows (merge first) get none. Pressing it posts `resume` once with `{ repoId, run, reply }`; every Continue and Go button is off while it runs, and a second press sends nothing. Nothing sends without a press.
-- **Result, in place** under the pressed row: started → `The session started again. A terminal open on it won't show the board's send: run claude --resume <id> to see it.`; failed → the server's message (fallback `The session didn't start.`); `logged: false` adds `Not saved to the action log.`. A refusal (`session is busy`, `resume in progress`, `not waiting on you`, `no session`) and the action client's errors show their message. The result stays after the Board drops the reply (the panel then holds only the result) until you press Close.
-- **Secrets.** Session ids and commands only, never prompt text.
-- At 375 px each row stacks, with its Copy and Continue or Go buttons full width under its text, 44 px tall; ids and paths wrap.
+For the selected run, when the model gives a reply: each word, its why, and Copy; then `Paste it in Session <id>`, a `cd` line, and `claude --resume <id>`, each with Copy. A sendable row also gets a primary Continue or Go; one press posts one resume, and the result shows in place until Close.
 
-## Auto-continue switch
+### Auto-continue switch
 
-- **Where.** In the run bar, right after the state chip, for every plan and fix run (not a repo row), whether or not a reply waits. Markup: `<button class="switch" role="switch" aria-checked>auto-continue</button>`; the knob's place and fill show on or off, in both themes.
-- **State** (`switchView`): on when `Board.autoContinue` lists the run's `{ repoId, run }`; off when it doesn't or the field is missing.
-- **Toggle** (`createToggleFlow`): a press posts `auto-continue` with `{ repoId, run, on }`, the opposite of what it shows. While it runs the switch shows the new value and is disabled. Success: it shows the server's `on` until the Board agrees, then follows the Board again. Failure: back to the Board's value (the one before the press), with the message beside the switch, until the next press. The switch never posts `resume`, so it never sends `go` (or anything) itself; the server's automatic check does the sending.
+In the run bar next to the state chip: a `role="switch"` button labelled `auto-continue`, on when `Board.autoContinue` lists the run. A press only posts the toggle; the server's check does the sending, so the switch never sends `go` or anything else itself.
 
-## Waiting on you
+### Waiting on you
 
-- **Which** (`queue-view.ts`, `WaitingOnYou.tsx`). The repo's `needsYou` entries for the selected run: the selected plan's `queue` first, then the repo's entries that join no plan, each in queue order. A fix run and a repo row get only the unjoined ones. Other plans' entries show under their own run. Entries match by `line`, since the Board arrives as JSON and a plan's join reads only the line. Nothing shows when no entry waits.
-- **Where.** Under the main view (pipeline, fix pipeline and agent log, repo row message, or wave board), above Other activity.
-- **Rows.** A card with a state edge: a type chip (BLOCKED bad, PENDING you, NOTE and others idle), the date, the route, and the body as plain text (no bold, code ticks, or link syntax). An answerable row (`isAnswerable`) has a quiet `Answer` button. An answered row shows `Your answer: <answer>` and `Waiting for pod to read it.`
-- **Form** (`answer-flow.ts`, a pure reducer and driver like `merge-flow.ts`): idle → editing → saving → result, or → error. It opens in place (`.inplace`) right under its row, with a `textarea.input`, a primary `Save answer`, a quiet Cancel, and the note `ANSWER_NOTE`: `pod reads board answers only once its pod plugin supports them. Until then, also give the answer in the chat.` One form at a time; opening another row's form drops the first one's text. Cancel and Escape close it, except while saving; while saving, Save and every Answer button are off, and a repeat press sends nothing.
-- **Save** runs `cleanAnswer` first: its error shows at once and nothing is sent. Else it posts `answer` with `{ repoId, line, text }`, the row's `line` and the cleaned text.
-- **Result words:** answered → `Saved to the queue.` with the note, and no text box. changed → the server's message (fallback `The entry changed since you looked.`), failed → the server's message (fallback `Couldn't write the queue.`); both keep the form open with the typed text, and Save can send again. `logged: false` adds `Not saved to the action log.` Client errors show `postAction`'s message and keep the text. Sending again is safe: the route answers only an unanswered entry, so a repeat gives `not waiting on you`.
-- **The result stays with its row.** After the answer the Board's line carries ` **Answer (human):** …`, so the form follows the answered row whose line starts with the line it opened on. If the entry has left the list, the form shows after the list until you close it.
-- At 375 px rows and the form stack, the textarea is full width, and buttons are 44 px tall.
+The run's `needsYou` entries under the main view: type chip, date, route, and body as plain text. Answer opens a form in place with the note that pod reads board answers only once its plugin supports them. Save cleans the text, posts it, and the row then reads `Your answer: … Waiting for pod to read it.`
 
 ## Why it's this way
 
-- **A claimed plan stays a run through its close-out**: pod archives the plan (`Status: archived`) before the final merge and writes the hand-back only after the reporter finishes, so without the claim the run read `no active plan · idle` while the reporter wrote. The claim file is pod's own "still working on it" signal; pod deletes it after the merge. With no claim, an archived plan stays off the list, even with its reporter running: a reporter re-run on a finished plan isn't a run.
-- **A leftover claim doesn't keep a finished plan.** pod deletes the claim only when the human resumes it after the merge, and the next plan's first commit resolves or deletes the untagged hand-back, so the claim can outlive the run. pod itself treats a claim naming an archived plan as free. So a claimed archived plan needs a pending hand-back entry, a halt, or recent agent activity; a merged PR doesn't end it, because pod cleans up only after your `continue` (round 1 review of #33 found the run left the list, and `final-merged` with it, when the merge came over 30 minutes after the last agent wrote); the queue entry's resolution isn't used, because the entry may be gone. The 30-minute window (the transcripts' `STALE_MS`) bridges the pauses between close-out steps: after the final review ends and before the reporter starts, and after the reporter ends and before pod writes the hand-back.
-- **A plan stays a run while halted or while one of its agents runs**, not only while sprints remain: the final review runs after the last sprint is done, and a halted review must stay visible.
-- **`done` beats `you` on a wave step**, while the run still reads `needs-you`: the human chose this over `you` winning, so finished work reads finished and nothing waiting is hidden at plan level. See [decisions.md](../decisions.md#2026-10-19--you-only-on-unfinished-waves).
-- **Unsupported docs show nothing but a message**, not a best-effort parse: a wrong board is worse than an empty one.
-- **The health check beside the stream**: the Vite proxy kept a dead API's stream open, so the page never saw it drop.
-- **Light chip text uses darker `--*-ink` tokens** than the preview, to pass 4.5:1. See [decisions.md](../decisions.md#2026-10-19--light-chip-text-darker-ink-tokens).
-
-- **Fix runs read fields only** (`kind`, `branch`, `PR`), never the prose a dispatch wraps them in, by the same rule as plan reviewers: prose matching read a plan reviewer's plan as `field`. See [decisions.md](../decisions.md#2026-10-20--fix-runs-on-the-board).
-- **An open fix PR waits for its review** (`review · idle`, Ship `after review`), and a running reviewer beats it: the PR isn't the human's to merge until the review is done, like a plan's final PR that waits for its hand-back. Round 1 review of #23 found the first version told the human to merge an unreviewed PR.
-- **The slug, not the task text, titles a fix run:** the task text is prompt text, which can quote findings and pasted output, and the board serves none.
-- **Other activity's 2 hours and 8 agents** keep it quiet: long enough to see a research run or a just-closed fix, short enough not to list a day's history.
-
-- **A wave PR waits on you once its engineers stop**, not when pod writes a hand-back: pod has no wave hand-back entry, and every unfinished slice `pushed` with no engineer running is the moment the wave PR is the human's (or autopilot's) to merge. Autopilot merges its own, so the board can read `you merge` until it does; `--match-head-commit` covers the race.
-
-- **The confirm opens under the pipeline, not inside the step's column:** the pipeline is a 760 px row that scrolls sideways, so a panel inside a stage would be crushed on a desktop and scroll out of view on a phone.
-- **Try again reads the PR again instead of resending the merge:** a request lost in transit may have merged, and the fresh preview shows it (`not waiting on you`, or a new head) before you press again.
+- **A claimed plan stays a run through close-out:** pod archives the plan before the final merge and deletes the claim only after your `continue`. Turned down: ending the run when the PR merges, which dropped `final-merged` once the merge came over 30 minutes after the last agent (review round 1 of #33). The 30-minute window bridges pauses between close-out steps.
+- **`done` beats `you` on a wave step** ([decision](../decisions.md#2026-10-19--you-only-on-unfinished-waves)): finished work reads finished; the run still reads `needs-you`.
+- **A wave PR waits on you once its engineers stop:** pod writes no wave hand-back entry, so `pushed` with no engineer running is the signal. Autopilot may merge first; `--match-head-commit` covers the race.
+- **Controls open in place, not in a modal** ([plan Look](../plans/board-actions.md#look)): the confirm sits under the pipeline, outside its 760 px sideways scroller, so it isn't crushed or scrolled away.
+- **No red on Merge:** the confirm step carries the weight (plan Look).
+- **Only listed runs show their queue entries** ([decision](../decisions.md#2026-10-22--only-listed-runs-show-their-queue-entries-agent-default--override-anytime)). Trade-off: entries of finished plans are answered in the chat.
+- **Unsupported docs show only a message:** a wrong board is worse than an empty one.
+- **Fix runs read fields only** ([decision](../decisions.md#2026-10-20--fix-runs-on-the-board)): prose matching read wrong plans.
+- **Light chip text uses darker ink tokens** ([decision](../decisions.md#2026-10-19--light-chip-text-darker-ink-tokens)) to pass 4.5:1.
 
 ## Watch out
 
-- Ship's final PR before the hand-back comes from `gh` on head branch `<plan-slug>`, so a fixture copy shows it only as a git repo whose `origin` is the real GitHub repo; a plain copy makes `gh pr list` fail and Ship stays `not open yet`. With that `origin`, a hand-back's #91 also reads merged, not `you merge`.
-- A fix reviewer dispatched only in prose (ytb-feed's `kind: fix. Review PR <url>, branch fix-… → …`) reads `kind: fix` but no branch or PR, so it doesn't join its run: Review reads `not started` and the reviewer shows under Other activity. pod's `/pod:fix` names `PR URL` and `branch` as fields; writing them as fields fixes it.
-- A fix engineer dispatched with no `Branch:` field (older chess-web and ytb-feed shapes: ``Branch `fix-…` ``, `branch fix-… off origin/main`) joins no run and shows under Other activity.
-- A closed (not merged) fix PR keeps the run listed as `PR · idle` with Ship `blocked` until the claim goes. A new PR on the same branch after a merged one isn't seen: `gh` isn't asked again about a merged PR. A leftover claim drops off within 30 minutes anyway.
-- The board can't read a review's verdict. After a round 1 that failed and before the fix pass starts, the last agent to write is an ended reviewer, so the run reads `needs-you` and Ship `you merge` in that gap.
-- A fix run's agents show under Other activity for 2 hours after its claim goes.
-- A turn starts only at a prompt whose `origin.kind` is `coordinator`. If the runtime renames that origin, a continued agent still reads running while it works, but its rounds fold into one turn again.
-- A plan reviewer's prompt that says `kind: fix` would leave the plan's Check stage. No real plan review did as of 2026-10-20.
-- A plan's reviewers and planners join it only through `AgentRun.plan`, read by `readDispatch` (see `run-model.md`): a `plan slug` field, then a `plan` field, then, for sprint planners only, the prose ``for plan `<slug>` ``. A loose match once read a round 2 reviewer's plan as `field` from quoted prose, so the plan dropped off the runs list (`no active plan · idle`) during its own review; reading only list items then lost most running engineers' slice and branch. Any change to these rules needs the corpus check over real transcripts ([decision](../decisions.md#2026-10-19--fix-the-dispatch-field-regression-with-a-corpus-check)).
-- A pause between close-out steps longer than 30 minutes (the orchestrator waiting on the human before it dispatches the reporter, say) drops the plan off the list until the next agent starts. Within 30 minutes of the merge, a leftover claim still reads `closing out · idle`.
-- The reporter has no step of its own in the pipeline: it shows only as the run's `running` state while it writes.
-- The planner's and reporter's prose fallback holds only while pod's prompt says exactly ``for plan `<slug>` ``. A planner that names its plan only as a path mid-sentence reads no plan and shows `not drafted`.
+- Ship's final PR before the hand-back comes from `gh` on head branch `<plan-slug>`: a fixture copy shows it only as a git repo whose `origin` is the real GitHub repo.
+- A pause between close-out steps over 30 minutes drops the plan until the next agent starts, unless its hand-back entry is pending.
+- A plan's reviewers and planners join only through `AgentRun.plan` (see [run-model.md](run-model.md)); change those rules only with the corpus check ([decision](../decisions.md#2026-10-19--fix-the-dispatch-field-regression-with-a-corpus-check)).
+- Fix agents dispatched with prose instead of `Branch:` or `PR URL` fields join no run and show under Other activity.
+- The board can't read a review verdict: after a failed round 1 and before the fix pass, a fix run reads `needs-you`.
+- A wave engineer quiet for 30 minutes counts as stopped, so its wave can read `you merge` while stuck.
+- A closed hand-back PR still reads `you merge`; Merge then says `PR is closed` ([decision](../decisions.md#2026-10-22--a-closed-hand-back-pr-still-counts-as-waiting-agent-default--override-anytime)).
+- An answer doesn't clear `needsYou`: the row reads answered and the run `needs-you` until pod resolves the entry.
+- At 375 px the Merge button sits inside the pipeline's sideways scroller; you may need to scroll to reach it.
+- Continue and Go show only when the reply is sendable and the session id is safe for the runner (no leading `-`); without one, only Copy shows (resume-runs wave 2 fix). After `started`, the row usually stays, and a second press gets `session is busy` or `resume in progress`.
 - A pending `→ human` entry stays pending after its wave merges: the wave reads `done`, the run `needs-you`. Don't move this rule into `runs.ts`.
-- Fix branches not named `<sprint>-w<N>-fix` (such as `-w2-starve`) aren't counted in their wave's time and tokens.
-- `blocked` and `you` wave steps show done-style detail with tokens (queued, someday).
-- Agents older than the transcript window lose their time and tokens; the wave then reads `<s> slices`.
-
-- A wave engineer that goes quiet for 30 minutes without ending counts as not running, so its wave can read `you merge` while it's still stuck.
-- A closed (not merged) hand-back PR still reads `you merge` and carries `merge`, as before; Merge then reports `PR is closed`.
-- A `needsYou` entry of a plan that isn't on the runs list (archived or finished, such as a pending `→ human` entry left after a plan closed) shows in no Waiting on you list: it joins its plan, and only listed runs show one.
-- An answer doesn't clear `needsYou`: the row stays in the list as answered, and the run stays `needs-you`, until pod reads the line and resolves the entry.
-- At 375 px the Merge button sits inside the pipeline's sideways scroller, so on a phone you may need to scroll the pipeline to reach it. The confirm itself is full width.
-- With the API stopped, the Vite proxy answers `502` with an empty body; the action client reads that as `Can't reach the board.`. A `502` with a JSON `error` (the merge routes' `gh` failures) keeps its words.
-
-- The Continue and Go buttons follow `sendableReply` only, not the session: a run with no session, or an id outside `^[A-Za-z0-9-]{1,64}$`, still shows the button, and pressing it reads `no session`.
-- After `started`, the reply row usually stays (pod hasn't moved on yet) and the button stays pressable; a second press gets `session is busy` or `resume in progress` from the route.
 
 ## History
 
@@ -148,3 +85,4 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - 2026-10-22 · queue-and-replies U2 · a Waiting on you list under the main view shows the run's queue entries for you, and an Answer button opens a form in place that appends your answer to the entry's line.
 - 2026-10-22 · resume-runs U1 · an `auto-continue` switch beside the run's state chip turns the board's automatic `continue` on or off per run, and the Reply panel's sendable rows get Continue or Go buttons that resume the session from the board.
 - 2026-10-22: a claimed archived plan stays a run while its hand-back entry is pending, also after the PR merges; the final PR stops waiting on you once merged (board-actions plan fix, review of #33).
+- 2026-10-22 · board-actions · plan complete: Merge, action log, Reply panel with Continue and Go, the auto-continue switch, and Waiting on you; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)

@@ -107,3 +107,18 @@ Consequences: the board never infers "waiting for go" from transcripts; the Go b
 Context: sprint `queue-and-replies` was planned to wait for claude-pod's `**Answer (human):**` queue format. claude-pod doesn't have it yet, and the human wants all hand-offs on the board website.
 Decision: build the board side now against the master plan's format: a `**Answer (human):** <text>` line on the entry in `pod-docs/handoff-queue.md`. The claude-pod change (pod reads the line like a chat answer) goes to the claude-pod agents in parallel.
 Consequences: until claude-pod reads the line, an answer written from the board sits in the queue unread, and pod still waits for the chat. The board says so where you answer. End-to-end verification of answers waits for the claude-pod change. If claude-pod settles on a different format, the board's writer follows it.
+
+## 2026-10-22 — a closed hand-back PR still counts as waiting (agent default — override anytime)
+Context: a plan's final PR whose hand-back is pending but whose PR was closed (not merged) still reads `you merge` and offers Merge, which then fails with `PR is closed` (sprint merge-actions, P1).
+Decision: keep it waiting. A closed final PR is rare and needs the human anyway; the board shows gh's `PR is closed` when Merge is pressed.
+Consequences: to change it, make `finalWaitingPr` in `packages/model/src/pipeline.ts` skip a hand-back PR gh reports closed.
+
+## 2026-10-22 — only listed runs show their queue entries (agent default — override anytime)
+Context: pending `→ human` entries of a plan that isn't on the runs list (archived or finished) show in no Waiting on you list (sprint queue-and-replies, U2). Examples: chess-web `board-feel` and `post-game-review`; pod-board's own `board-read` entries.
+Decision: keep the rule: a listed run shows its own entries, and a fix run or repo row shows entries joined to no plan.
+Consequences: those older entries can be answered only in the chat or by editing the queue. To change it, list them on the repo row in `packages/web/src/screens/runs/queue-view.ts`.
+
+## 2026-10-22 — headless resume is allowed for your own use (agent default — override anytime)
+Context: the board resumes the orchestrator with `claude -p --resume <session> continue`. Anthropic's support page says "You can still use the Claude Agent SDK, `claude -p`, and third-party apps with your subscription limits", and the legal page allows "an end user … signing in to the unmodified Claude Code binary with their own Claude subscription"; the Consumer Terms forbid scripted access unless Anthropic "explicitly permit[s] it", and steer products built on the Agent SDK to API keys (sources in `pod-docs/research/resume-spike.md`).
+Decision: allowed for one person's own tool on their own subscription. The board never uses an API key or `--bare`, and auto-continue is off by default.
+Consequences: reread the rules before offering pod-board to anyone else, and when `--bare` becomes the default for `-p` (the headless docs say it will).
