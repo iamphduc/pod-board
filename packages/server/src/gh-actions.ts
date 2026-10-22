@@ -1,13 +1,16 @@
 // The merge action's gh calls: the fresh PR read (preview, and before and after a merge), the
-// merge call itself, and how the re-read maps to an outcome. Never passes --admin, --auto,
+// merge call itself, the merge-queue question, and how the re-read maps to an outcome. Never passes --admin, --auto,
 // --squash, --rebase, or --delete-branch. The rules and why are in pod-docs/feature-details/actions.md.
 
 import type { MergeOutcome, MergePreview, MergeResult } from '@pod-board/model'
 import { rollupChecks, type ExecResult, type GhExec } from './gh.ts'
 
 export const MERGE_TIMEOUT_MS = 60_000
-/** gh has no merge-queue field (checked against gh 2.92 `pr view --json`), so none is read. */
+/** gh 2.92's `pr view --json` has no merge-queue field; the queue is asked with QUEUE_QUERY instead. */
 export const VIEW_FIELDS = 'number,state,url,title,headRefOid,mergeable,mergeStateStatus,statusCheckRollup,autoMergeRequest'
+/** GitHub GraphQL: the PR's merge-queue entry, `null` when it isn't in a queue. */
+export const QUEUE_QUERY =
+  'query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { mergeQueueEntry { state } } } }'
 const MESSAGE_MAX = 500
 const SHA = /^[0-9a-f]{40}$/
 const STATES: Record<string, MergePreview['state']> = { OPEN: 'open', MERGED: 'merged', CLOSED: 'closed' }
@@ -72,9 +75,27 @@ function parseView(stdout: string, n: number): ReadResult | undefined {
   }
 }
 
-const isPullUrl = (url: string, n: number) => {
+/** Owner and name from `https://github.com/<owner>/<name>/pull/<n>`; undefined for any other url. */
+const pullRepo = (url: string, n: number): { owner: string; name: string } | undefined => {
   const m = /^https:\/\/github\.com\/([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+)\/pull\/([1-9]\d*)$/.exec(url)
-  return m !== null && Number(m[3]) === n
+  return m && Number(m[3]) === n ? { owner: m[1]!, name: m[2]! } : undefined
+}
+const isPullUrl = (url: string, n: number) => pullRepo(url, n) !== undefined
+
+/** Whether GitHub shows PR `n` (at `url`) in a merge queue. False when the question fails. */
+async function inMergeQueue(exec: GhExec, repoPath: string, url: string, n: number): Promise<boolean> {
+  const repo = pullRepo(url, n)
+  if (!repo) return false
+  // -f for owner and name: -F would turn a name like "123" into a number.
+  const args = ['api', 'graphql', '-f', `query=${QUEUE_QUERY}`, '-f', `owner=${repo.owner}`, '-f', `name=${repo.name}`, '-F', `number=${n}`]
+  const r = await safeExec(exec, args, repoPath)
+  if (r.status !== 'ok') return false
+  try {
+    const entry = (JSON.parse(r.stdout) as { data?: { repository?: { pullRequest?: { mergeQueueEntry?: unknown } } } })?.data?.repository?.pullRequest?.mergeQueueEntry
+    return entry !== null && typeof entry === 'object'
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -89,16 +110,24 @@ export async function mergePr(exec: GhExec, repoPath: string, n: number, headSha
 
   const call = await safeExec(exec, ['pr', 'merge', before.preview.url, '--merge', '--match-head-commit', headSha], repoPath, MERGE_TIMEOUT_MS)
   const after = await readPr(exec, repoPath, n)
-  const { outcome, message } = mergeOutcome(call, after)
+  // Asked only when the call succeeded and the re-read is open with no auto-merge.
+  const queued = isOpenAfterSuccess(call, after) && (await inMergeQueue(exec, repoPath, after.preview.url, n))
+  const { outcome, message } = mergeOutcome(call, after, queued)
   return { outcome, number: n, ...(message !== undefined ? { message } : {}), ran: true }
 }
 
-/** The contract's step 3, in order. */
-function mergeOutcome(call: ExecResult, after: ReadResult): { outcome: MergeOutcome; message?: string } {
+const isOpenAfterSuccess = (call: ExecResult, after: ReadResult): after is Extract<ReadResult, { ok: true }> =>
+  call.status === 'ok' && after.ok && after.preview.state === 'open' && !after.autoMerge
+
+/** The contract's step 3, in order. `queued`: GitHub showed the PR in a merge queue. */
+function mergeOutcome(call: ExecResult, after: ReadResult, queued: boolean): { outcome: MergeOutcome; message?: string } {
   if (after.ok && after.preview.state === 'merged') return { outcome: 'merged' }
   if (after.ok && after.preview.state === 'open' && after.autoMerge) return { outcome: 'auto-merge' }
-  // No merge-queue field: an open PR with no auto-merge after a successful call is taken as queued.
-  if (after.ok && after.preview.state === 'open' && call.status === 'ok') return { outcome: 'queued' }
+  // Open after a successful call: queued only on GitHub's word; else it may be a re-read lagging a merge.
+  if (isOpenAfterSuccess(call, after)) {
+    if (queued) return { outcome: 'queued' }
+    return { outcome: 'unconfirmed', message: "gh ran the merge, but GitHub hasn't confirmed the merge yet. Check it on GitHub." }
+  }
   if (call.status !== 'ok') return { outcome: 'failed', message: ghText(call.stderr, 'gh pr merge failed') }
   if (after.ok) return { outcome: 'failed', message: 'PR is closed' }
   return { outcome: 'unconfirmed', message: "gh ran the merge, but couldn't read the PR again to confirm it. Check it on GitHub." }
