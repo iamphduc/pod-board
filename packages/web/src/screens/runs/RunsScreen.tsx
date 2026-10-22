@@ -8,6 +8,8 @@ import { Chip } from './Chip.tsx'
 import { FixRun } from './FixRun.tsx'
 import { OtherActivity } from './OtherActivity.tsx'
 import { Pipeline } from './Pipeline.tsx'
+import { ReplyPanel } from './ReplyPanel.tsx'
+import { replyPanel } from './reply-view.ts'
 import { RunsList } from './RunsList.tsx'
 import { SliceLog } from './SliceLog.tsx'
 import { ThemeControl } from './ThemeControl.tsx'
@@ -40,6 +42,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
   const tabs = selected?.plan !== undefined && pipeline !== undefined
   const others = repo ? otherActivity(repo, now) : []
   const notices = banners(board, stream)
+  const reply = replyPanel(selected, repo, now)
   return (
     <div className="screen">
       <aside className="side">
@@ -76,6 +79,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
             ))}
           </div>
         )}
+        {reply && repo && selected && <ReplyPanel key={`${repo.id}/${selected.plan}`} view={reply} />}
         {!board ? (
           <p className="muted">{stream === 'lost' ? 'Waiting for the server…' : 'Connecting to the server…'}</p>
         ) : !selected ? (
