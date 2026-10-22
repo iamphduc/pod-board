@@ -121,6 +121,10 @@ describe('tokens', () => {
     }
     // Both dark selectors hold the same set, value for value.
     expect(darkAttr()).toEqual(d)
+    // Every colour token has a dark value, and dark adds none of its own.
+    const colours = (t: Record<string, string>) =>
+      Object.keys(t).filter((k) => /^(#|hsl\(|rgb\()/i.test(t[k]!)).sort()
+    expect(colours(d), 'dark colour tokens').toEqual(colours(l))
     expect(Object.keys(d).length).toBeGreaterThan(0)
     // Dark also flips native controls and scrollbars.
     for (const sel of [':root[data-theme="dark"]', '@media (prefers-color-scheme: dark)']) {
