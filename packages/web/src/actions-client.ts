@@ -34,10 +34,18 @@ export async function postAction<T>(path: string, body: object, deps: ActionDeps
   } catch {
     return { ok: false, status: 0, message: UNREACHABLE }
   }
+  let text = ''
+  try {
+    text = await res.text()
+  } catch {
+    // An unreadable body reads like an empty one.
+  }
+  // The Vite proxy answers 502 with no body when the API isn't running.
+  if (res.status === 502 && text.trim() === '') return { ok: false, status: 502, message: UNREACHABLE }
   let data: unknown
   let parsed = true
   try {
-    data = await res.json()
+    data = JSON.parse(text)
   } catch {
     parsed = false
   }

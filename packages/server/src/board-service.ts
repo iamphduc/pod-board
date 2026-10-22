@@ -9,6 +9,7 @@ import {
   fixRunNames,
   handBackPr,
   parseAgentTranscript,
+  type ActionEntry,
   type AgentRun,
   type Board,
   type BoardRepo,
@@ -32,6 +33,8 @@ export type BoardServiceDeps = {
   gh: GhReader
   now?: () => number
   ignoresCase?: (dir: string) => Promise<boolean>
+  /** The action log's newest entries, read on every build. No dep, no `actions` on the Board. */
+  actions?: () => ActionEntry[]
 }
 
 export type BoardService = {
@@ -139,6 +142,7 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
       const checkedAt = deps.gh.checkedAt()
       if (checkedAt !== undefined) board.ghCheckedAt = checkedAt
       if (configUnreadable) board.configError = 'config unreadable'
+      if (deps.actions) board.actions = deps.actions()
       return board
     },
     async refreshGh(board) {

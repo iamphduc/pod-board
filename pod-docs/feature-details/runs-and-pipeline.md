@@ -39,6 +39,16 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - **Shows** under the main view of any run of that repo (the repo row's too): `<role>` (the type without `pod:`), ` · <field>` (branch, else plan, else sprint), the last write as `HH:MM`, and a state chip. No description, prompt, or task text.
 - **Not a run:** it adds nothing to `Runs · N active` and no `needs you`.
 
+## Merge from the board
+
+- **Button.** A pipeline step that carries `merge` (a PR waiting on you: a wave PR, a plan's final PR, or a reviewed fix PR) shows a `Merge` button, in the plan pipeline and the fix pipeline alike. Pressing it opens the confirm in place, right under the pipeline (outside its sideways scroller), headed by the step's stage and name. One confirm is open at a time; every Merge button is off while a merge runs.
+- **Flow** (`packages/web/src/screens/runs/merge-flow.ts`, a pure reducer and a small driver): idle → loading (`merge-preview`) → confirm → merging (`merge` with `{ repoId, number, headSha }` from the preview) → result, or → error. Cancel and Escape close it, except while merging. Each reply carries the number of the request it answers, so a reply that lands after a cancel or another open is dropped.
+- **Confirm** shows the title, a checks chip, mergeability, and the 7-char head sha, with a primary `Merge (merge commit)` and a quiet Cancel. Conflicts, or a PR already merged or closed, turn Merge off and say why. Failing or pending checks are shown and don't block.
+- **Result words:** `Merged` (only for `merged`), `Added to the merge queue`, `Auto-merge on: GitHub merges it when checks pass`, `The PR changed since you looked (head now <sha7>).` with Check again, and the server's message for `failed` and `unconfirmed` (fallbacks `The merge failed.` and `GitHub hasn't confirmed the merge.`). `logged: false` adds `Not saved to the action log.`
+- **Errors** from the action client (`Actions need a page reload.`, `The board restarted. Reload the page.`, `Can't reach the board.`, or the server's `error`) show in the panel with Try again, which reads the PR afresh. It never resends the merge: a merge request that failed in transit may still have run.
+- **The result stays** after the Board rebuilds and the step drops `merge`: the panel follows the flow, not the step, until you close it.
+- **Action log** (`action-log-view.ts`, `ActionLog.tsx`), under Other activity whenever the Board is loaded: the newest 20 of `board.actions` across repos, newest first. Each row: time (`HH:MM` today, else `MMM D HH:MM`, local), repo, target, and a result chip (merged ok; queued and auto-merge run; stale and unconfirmed you; failed bad). Empty: `No actions yet.`
+
 ## Why it's this way
 
 - **A claimed plan stays a run through its close-out**: pod archives the plan (`Status: archived`) before the final merge and writes the hand-back only after the reporter finishes, so without the claim the run read `no active plan · idle` while the reporter wrote. The claim file is pod's own "still working on it" signal; pod deletes it after the merge. With no claim, an archived plan stays off the list, even with its reporter running: a reporter re-run on a finished plan isn't a run.
@@ -55,6 +65,9 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - **Other activity's 2 hours and 8 agents** keep it quiet: long enough to see a research run or a just-closed fix, short enough not to list a day's history.
 
 - **A wave PR waits on you once its engineers stop**, not when pod writes a hand-back: pod has no wave hand-back entry, and every unfinished slice `pushed` with no engineer running is the moment the wave PR is the human's (or autopilot's) to merge. Autopilot merges its own, so the board can read `you merge` until it does; `--match-head-commit` covers the race.
+
+- **The confirm opens under the pipeline, not inside the step's column:** the pipeline is a 760 px row that scrolls sideways, so a panel inside a stage would be crushed on a desktop and scroll out of view on a phone.
+- **Try again reads the PR again instead of resending the merge:** a request lost in transit may have merged, and the fresh preview shows it (`not waiting on you`, or a new head) before you press again.
 
 ## Watch out
 
@@ -77,6 +90,8 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 
 - A wave engineer that goes quiet for 30 minutes without ending counts as not running, so its wave can read `you merge` while it's still stuck.
 - A closed (not merged) hand-back PR still reads `you merge` and carries `merge`, as before; Merge then reports `PR is closed`.
+- At 375 px the Merge button sits inside the pipeline's sideways scroller, so on a phone you may need to scroll the pipeline to reach it. The confirm itself is full width.
+- With the API stopped, the Vite proxy answers `502` with an empty body; the action client reads that as `Can't reach the board.`. A `502` with a JSON `error` (the merge routes' `gh` failures) keeps its words.
 
 ## History
 
@@ -96,3 +111,4 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - 2026-10-21 · fix-final-pr-early · Ship shows the final PR found by head branch `<plan-slug>` before the hand-back exists, so the final review and close-out no longer read `not open yet` ([decision](../decisions.md#2026-10-21--find-a-plans-final-pr-by-its-branch-any-base-agent-default--override-anytime)).
 - 2026-10-20 · fix-show-fix-runs round 1 · an open fix PR reads `review · idle` with Ship `after review` until the agent that wrote last is an ended reviewer, and a closed fix PR is asked about again, so a reopen shows.
 - 2026-10-21 · merge-actions P1 · one rule (`waitingPrs`) for PRs waiting on you; a handed-back wave reads `you` with `PR #N · you merge` and its run `needs-you`, and waiting steps carry `merge`.
+- 2026-10-21 · merge-actions U1 · a step with a PR waiting on you gets a Merge button that opens the confirm in place, shows GitHub's result, and the action log lists the newest 20 actions under Other activity.
