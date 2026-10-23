@@ -8,17 +8,20 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 
 - **Repos:** paths in the config file plus every repo a claim file in the ports folder names, merged by normalized path (case-blind where that folder's file system is). `source` is `registered`, `claim`, or `both`.
 - **Each repo:** pod docs → the model; recent pod-agent transcripts → parsed runs through a cache; PRs from a `gh` cache. One bad repo sets its `error`; the others still build.
-- **`gh`:** asked only about live PRs: open current-sprint PRs, the hand-back PR (also for a claimed archived plan), a fix claim's PR by head branch `fix-<slug>`, and a plan's final PR by head branch `<plan-slug>` before the hand-back. A refresh runs every 30 s; `build` never waits on it.
+- **`gh`:** run by the absolute path of the first `gh.exe` or `gh.com` (`gh` on POSIX) in an absolute `PATH` entry, found once and kept; never a `gh` in the repo folder or a relative entry such as `.`. None found → `missing`. Asked only about live PRs: open current-sprint PRs, the hand-back PR (also for a claimed archived plan), a fix claim's PR by head branch `fix-<slug>`, and a plan's final PR by head branch `<plan-slug>` before the hand-back. A refresh runs every 30 s; `build` never waits on it.
 - **Watching and rebuilds:** one watcher per folder (config, ports, each `pod-docs/`, each Claude project folder). A rebuild runs after 300 ms of quiet, never later than 1.5 s after a burst's first event, one at a time. Clients get a Board over SSE only when its JSON changed.
 - **Transcript cache:** keeps each transcript's parsed run keyed by size and mtime, never its text.
 - **Request guard (every route):** a loopback `Host` on the API or web port, and an exact `Origin` on writes. No CORS headers. Both ports bind `127.0.0.1`.
 - **Session token:** each API start writes a fresh random token to `<config dir>/session-token`. The Vite dev server adds it to the page as `<meta name="pod-board-token">` on every load; the page sends it as `X-Pod-Board-Token`. It is never in the Board, SSE, a URL, a cookie, or `pnpm build` output.
-- **Action guard (`/api/actions/*`):** after the request guard, fails closed on the first broken rule: Host, then `Origin` (a missing one is refused), then POST only, then `application/json`, then the token (constant-time compare), then a JSON object body. `POST /api/repos` needs no token.
+- **Action guard (`/api/actions/*` and `/api/repos`):** after the request guard, fails closed on the first broken rule: Host, then `Origin` (a missing one is refused), then POST only, then `application/json`, then the token (constant-time compare), then a JSON object body.
+- **Add repo (`POST /api/repos`):** behind the action guard, so it needs the session token. Takes only a local absolute path: on Windows a drive path (`C:\…` or `C:/…`); a path that starts with two separators (`\\host\share`, `//host/share`, `\\?\…`, `\\.\…`) → `400 not a local path`, before any file system call. On POSIX any absolute path. Relative → `400 not absolute`; not a folder → `400 not a directory`.
 
 ## Why it's this way
 
 - **Loopback, Host check, and an `Origin` check for actions.** DNS rebinding is the risk even for a read-only server, and a 2026 advisory showed a `Host` check alone isn't enough for a server with write tools. Chrome's Local Network Access prompt was turned down as protection: it doesn't cover the board's own page. See [research](../research/board-actions.md).
 - **Token in a request header, never a cookie or query string, and JSON-only actions.** A plan default; the plan records no reason beyond failing closed.
+- **Add repo needs the token too.** A registered repo is a folder the board reads and runs `gh` in, so adding one is as risky as an action. A UNC path is refused unread: opening one on Windows can send your login to another machine.
+- **`gh` by absolute path from absolute `PATH` entries.** A bare name with the repo as the working folder could run a `gh.exe` planted in a cloned repo: older Windows lookups search the working folder first, and a relative `PATH` entry resolves against it. The 30 s refresh would run it with no click.
 - **A new token per launch, added to the page by the dev server.** `pnpm build` never runs that step, so `dist` holds no token. Trade-off: a page loaded before a restart must reload.
 - **Discovery by config plus claim files**, not a scan of `~/.claude/projects/`: claims show live runs at once; a scan was slow and touched unrelated projects.
 - **Quiet spell plus a cap**, not a plain debounce: a debounce alone starved under steady writes ([decision](../decisions.md#2026-10-19--fix-live-update-starvation-before-the-final-review)).
@@ -27,7 +30,9 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 
 ## Watch out
 
-- A page loaded before an API restart holds a dead token: actions get `403 bad token`, and the client says to reload.
+- A page loaded before an API restart holds a dead token: actions and Add repo get `403 bad token`, and the client says to reload.
+- Never spawn a child by a bare name with a repo as its working folder: resolve it with `resolveBin` (`bin-path.ts`) first. It skips empty and relative `PATH` entries and returns an absolute path.
+- A `gh` folder on `PATH` written as a relative path is skipped, so the board shows `gh` missing.
 - Keep Vite's dev `cors: false`: with it on, a page on another local port could read the Board through the web port.
 - Through the web proxy, a stopped API answers `502` with an empty body.
 - Tests and manual runs must point `POD_BOARD_CONFIG_DIR` and `POD_BOARD_PORTS_DIR` at temp folders: the real ones belong to live pod runs.
@@ -56,3 +61,4 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - 2026-10-21 · merge-actions M1: merge-preview and merge routes; `ExecResult.stderr`, a per-call exec timeout, and `GhCache.forget`; `Board.actions` from the action log.
 - 2026-10-21 · queue-and-replies A1: `POST /api/actions/answer`, the server's one write into a repo's queue.
 - 2026-10-22 · board-actions · plan complete: action token, `Origin` check, and the action guard on every action route; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)
+- 2026-10-22 · fix-security-hardening: `gh` runs by an absolute path from absolute `PATH` entries only (a `gh.exe` in a repo could run); `POST /api/repos` needs the session token and refuses UNC and device paths unread.

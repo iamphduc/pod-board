@@ -11,7 +11,7 @@ The board can send `continue` or `go` to a pod run's own Claude session, so you 
 - **Toggle store:** `<config dir>/auto-continue.json`, written to a temp file and renamed. An unreadable file means all off. `Board.autoContinue` lists the toggles that are on.
 - **Idle session:** the session's main transcript and every file under `<session>/subagents/` were last modified at least 60 s ago. A missing main file or a time ahead of the clock is busy. Only stats; no transcript is opened.
 - **Automatic check:** at start, on every new Board, and every 15 s. It asks the model for the sends due now, holds each session, saves the stop key, starts the runner with `continue`, logs one `auto: true` entry whatever the result, and rebuilds the Board. The route and the check share one hold, so the board never runs two resumes on one session.
-- **Runner:** `POD_BOARD_CLAUDE_BIN`, else `claude` on `PATH`; arguments exactly `-p --resume <session> <word>`; the child env drops `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN`; detached, with one stderr log per start in `<config dir>/resume-logs`. `started` means still running after 10 s, or exited 0.
+- **Runner:** `POD_BOARD_CLAUDE_BIN`, else `claude` on `PATH`, always started by its absolute path: only absolute `PATH` entries count, never the repo folder or `.`, and a shim that needs cmd.exe gets an absolute one (`COMSPEC`, else `%SystemRoot%\System32\cmd.exe`). Arguments exactly `-p --resume <session> <word>`. The child env drops every `ANTHROPIC_*` and every `CLAUDE*` variable (`CLAUDECODE`, `CLAUDE_CODE_*`, `CLAUDE_PID`, any case) except `CLAUDE_CONFIG_DIR`; `POD_BOARD_*`, `PATH`, `HOME`, `USERPROFILE`, `APPDATA`, and the rest pass on. Detached, with one stderr log per start in `<config dir>/resume-logs`. `started` means still running after 10 s, or exited 0.
 
 ## Why it's this way
 
@@ -22,6 +22,7 @@ The board can send `continue` or `go` to a pod run's own Claude session, so you 
 - **The 60 s idle rule:** two processes on one session split the conversation (spike check 3). A turn writes every few seconds, and a foreground subagent writes only under `subagents/`, so those files count too. A terminal left open on the session isn't covered: the board can't see it (spike gap 2).
 - **Fail closed:** an unreadable toggle file means off, never on.
 - **A manual `continue` saves the key too,** so the automatic check doesn't send the same stop after your press.
+- **No Claude or Anthropic env from the board:** a board started inside a Claude Code session would hand the run that session's state (`CLAUDECODE`, `CLAUDE_CODE_*`) or an API key, base URL, or Bedrock/Vertex switch, so the run wouldn't be your own login. `CLAUDE_CONFIG_DIR` stays: it names where your login and sessions live, the same folder the board reads transcripts from, and without it `--resume` would look in `~/.claude` and not find the session.
 
 ## Watch out
 
@@ -31,6 +32,7 @@ The board can send `continue` or `go` to a pod run's own Claude session, so you 
 - **Your hooks run:** a `Stop` or `Notification` hook fires once per send.
 - **A quiet turn:** one long tool call can leave every file quiet for over 60 s; a send then happens only if pod also shows a sendable stop.
 - **Unlisted runs:** the toggle route answers `404 not a run`, even to turn it off; such a toggle stays in the file but never sends.
+- **A `claude` on a relative `PATH` entry is skipped:** a `PATH` with `.` or `bin` in it would resolve against the repo folder the run starts in. Put `claude`'s folder on `PATH` as an absolute path, or set `POD_BOARD_CLAUDE_BIN`.
 - **Tests and smoke runs** use a fake runner or `packages/server/test/fake-claude.mjs` and a temp config, never the real `claude` or `auto-continue.json`. The resume logs are never trimmed.
 
 ## History
@@ -38,3 +40,4 @@ The board can send `continue` or `go` to a pod run's own Claude session, so you 
 - 2026-10-22 · resume-runs S1: the resume and auto-continue routes, the toggle store, the idle check, and the automatic check.
 - 2026-10-22 · board-actions plan fix: the auto-continue toggle and `final-merged` now work on an archived plan after its final merge (the route answered `404 not a run`).
 - 2026-10-22 · board-actions · plan complete; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)
+- 2026-10-22 · fix-security-hardening: the runner drops every `ANTHROPIC_*` and `CLAUDE*` variable but `CLAUDE_CONFIG_DIR` (it dropped only the two key variables), starts `claude` and cmd.exe by absolute paths from absolute `PATH` entries only, and the spike uses the same env.
