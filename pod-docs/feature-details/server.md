@@ -31,7 +31,7 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 ## Watch out
 
 - A page loaded before an API restart holds a dead token: actions and Add repo get `403 bad token`, and the client says to reload.
-- Never spawn a child by a bare name with a repo as its working folder: resolve it with `resolveBin` (`bin-path.ts`) first. It skips empty and relative `PATH` entries and returns an absolute path.
+- Never spawn a child by a bare name with a repo as its working folder: resolve it with `resolveBin` (`bin-path.ts`) first. It skips empty and relative `PATH` entries and returns an absolute path. Give the child `safeChildEnv(env)` too: its `PATH` keeps only absolute entries, and on Windows `NoDefaultCurrentDirectoryInExePath=1`, so the child's own bare-name lookups (cmd.exe's included) skip the repo folder. Claude Code sets that variable in its own shells, so a test must remove it to go red.
 - A `gh` folder on `PATH` written as a relative path is skipped, so the board shows `gh` missing.
 - Keep Vite's dev `cors: false`: with it on, a page on another local port could read the Board through the web port.
 - Through the web proxy, a stopped API answers `502` with an empty body.
