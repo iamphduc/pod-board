@@ -28,19 +28,23 @@ export type AppDeps = {
   actions?: Hono
 }
 
-const ADD_REPO_STATUS = { 'not absolute': 400, 'not a directory': 400, 'already registered': 409, 'config unreadable': 500 } as const
+const ADD_REPO_STATUS = { 'not absolute': 400, 'not a local path': 400, 'not a directory': 400, 'already registered': 409, 'config unreadable': 500 } as const
 
 /**
  * The HTTP app. Routes live under /api; the web dev server proxies to it. Every
  * route sits behind the request guard, and `actions` (mounted at /api/actions)
- * also behind the action guard. With no `actions`, a request past it gets 404.
+ * and `POST /api/repos` also behind the action guard (a POST of a JSON object
+ * with the session token). With no `actions`, a request past it gets 404.
  */
 export function createApp(deps: AppDeps): Hono {
   const pingMs = deps.pingMs ?? PING_MS
   const app = new Hono()
   app.use('*', requestGuard({ ports: deps.ports }))
   // `/api/actions/*` also matches the bare `/api/actions`.
-  app.use('/api/actions/*', actionGuard({ ports: deps.ports, token: deps.token }))
+  const guard = actionGuard({ ports: deps.ports, token: deps.token })
+  app.use('/api/actions/*', guard)
+  // Adding a repo makes the board read its files and run gh in it, so it's guarded like an action.
+  app.use('/api/repos', guard)
   if (deps.actions) app.route('/api/actions', deps.actions)
 
   app.get('/api/health', (c) => c.json({ ok: true }))
@@ -81,15 +85,8 @@ export function createApp(deps: AppDeps): Hono {
   })
 
   app.post('/api/repos', async (c) => {
-    const type = (c.req.header('content-type') ?? '').split(';')[0]!.trim().toLowerCase()
-    if (type !== 'application/json') return c.json({ error: 'unsupported media type' }, 415)
-    let body: unknown
-    try {
-      body = JSON.parse(await c.req.text())
-    } catch {
-      return c.json({ error: 'bad request' }, 400)
-    }
-    const repoPath = typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as { path?: unknown }).path : undefined
+    // The action guard has checked the type, the token, and that the body is a JSON object.
+    const repoPath = ((await c.req.json()) as { path?: unknown }).path
     if (typeof repoPath !== 'string') return c.json({ error: 'bad request' }, 400)
 
     let result: Awaited<ReturnType<AppDeps['addRepo']>>

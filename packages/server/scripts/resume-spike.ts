@@ -30,20 +30,6 @@ const option = (name: string) => {
   return i >= 0 ? argv[i + 1] : undefined
 }
 
-/**
- * The env the spawned claude sees: the board's (this process's) minus the API key variables,
- * and minus Claude Code's own session variables, since the board doesn't run inside Claude
- * Code. Those would point a nested claude at the session that launched this script.
- */
-function spikeEnv(): NodeJS.ProcessEnv {
-  const env = childEnv(process.env)
-  for (const k of Object.keys(env)) {
-    const u = k.toUpperCase()
-    if (u === 'CLAUDECODE' || u.startsWith('CLAUDE_CODE_') || u === 'CLAUDE_PID' || u === 'CLAUDE_EFFORT') delete env[k]
-  }
-  return env
-}
-
 type Run = { code: number | null; stdout: string; stderr: string; ms: number; error?: string }
 
 /** Runs claude directly (no shell) with fixed arguments and collects its output. */
@@ -110,7 +96,9 @@ const jsonlFiles = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((
 
 async function main() {
   const report: Record<string, unknown> = { at: new Date().toISOString(), platform: process.platform, node: process.version }
-  const env = spikeEnv()
+  // The runner's own env: no ANTHROPIC_* and no CLAUDE* variables (CLAUDE_CONFIG_DIR kept), so a
+  // claude started from inside a Claude Code session doesn't point at the session that ran this.
+  const env = childEnv(process.env)
   report.envNames = {
     passed: Object.keys(env).filter((k) => /^(CLAUDE|ANTHROPIC)/i.test(k)).sort(),
     removed: Object.keys(process.env).filter((k) => !(k in env)).sort(),

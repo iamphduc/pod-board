@@ -64,10 +64,35 @@ export const createExec =
   })
 
 /** The `gh` binary on the env's PATH. */
-export const ghBin = (env: NodeJS.ProcessEnv = process.env): string | undefined => resolveBin('gh', env)
+/**
+ * The absolute path of `gh` on the env's PATH, from absolute entries only, never the
+ * current or the repo's folder: a cloned repo could hold its own `gh.exe`. On Windows only
+ * `gh.com` and `gh.exe` count, as for the bare-name lookup this replaces (a `.cmd` or `.bat`
+ * can't run without a shell).
+ */
+export const ghBin = (env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): string | undefined =>
+  resolveBin('gh', env, platform, { exts: ['.com', '.exe'] })
 
-/** Runs `gh` with `env`. */
-export const createGhExec = (env: NodeJS.ProcessEnv = process.env): GhExec => createExec('gh', env)
+/**
+ * Runs `gh` with `env`, by the absolute path `ghBin` finds. The path is looked up once and
+ * kept; while none is found, each call looks again (so a `gh` installed later is used) and
+ * answers `not-found`.
+ */
+export const createGhExec = (env: NodeJS.ProcessEnv = process.env): GhExec => {
+  let exec: GhExec | undefined
+  return (args, cwd, opts) => {
+    if (!exec) {
+      const file = ghBin(env)
+      if (!file) return Promise.resolve({ status: 'not-found', stdout: '' })
+      exec = createExec(file, env)
+    }
+    return exec(args, cwd, opts).then((r) => {
+      // The kept gh is gone (uninstalled or moved): look it up again next time.
+      if (r.status === 'not-found') exec = undefined
+      return r
+    })
+  }
+}
 
 /** Runs `gh`. */
 export const defaultGhExec: GhExec = createGhExec()

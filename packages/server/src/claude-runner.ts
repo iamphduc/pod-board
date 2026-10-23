@@ -26,8 +26,8 @@ const TAIL_CHARS = 500
  */
 const SESSION = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/
 const WORDS: readonly string[] = ['continue', 'go']
-/** Env names never passed on, compared upper-cased: so the run uses the human's own login. */
-const DROPPED_ENV = new Set(['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'])
+/** Env names passed on although they match a dropped prefix, compared upper-cased. */
+const KEPT_ENV = new Set(['CLAUDE_CONFIG_DIR'])
 /** Characters cmd.exe would act on even inside quotes, or that end the quoting. */
 const CMD_UNSAFE = /["%!^&|<>\r\n]/
 // CSI sequences, OSC sequences, and other two-byte escapes.
@@ -39,11 +39,41 @@ export function claudeBin(env: Env): string {
   return envValue(env, 'POD_BOARD_CLAUDE_BIN') ?? 'claude'
 }
 
-/** The board's env minus the API key variables, matched in any case. */
+/**
+ * Whether the resumed run gets the board's env variable `name` (any case). Every
+ * `ANTHROPIC_*` variable (keys, tokens, base URL, model) and every `CLAUDE*` one (Claude
+ * Code's own session state: `CLAUDECODE`, `CLAUDE_CODE_*`, `CLAUDE_PID`, `CLAUDE_EFFORT`,
+ * the Bedrock and Vertex switches) is dropped, so the run uses the human's own login and
+ * settings, not those of a session that happened to launch the board. `CLAUDE_CONFIG_DIR`
+ * is kept: it names where the human's login and sessions live, the same folder the board
+ * reads transcripts from, and without it `--resume` couldn't find the session.
+ */
+const passesOn = (name: string): boolean => {
+  const u = name.toUpperCase()
+  if (KEPT_ENV.has(u)) return true
+  return !u.startsWith('ANTHROPIC_') && !u.startsWith('CLAUDE')
+}
+
+/** The board's env for a resumed run: see `passesOn`. The board's own env is left alone. */
 export function childEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {}
-  for (const [k, v] of Object.entries(env)) if (!DROPPED_ENV.has(k.toUpperCase())) out[k] = v
+  for (const [k, v] of Object.entries(env)) if (passesOn(k)) out[k] = v
   return out
+}
+
+/**
+ * The absolute path of cmd.exe: `COMSPEC` when it's an absolute path to a file, else
+ * `%SystemRoot%\System32\cmd.exe`, else `cmd.exe` on PATH (absolute entries only). Never a
+ * bare name, which the OS could look up in the repo folder the run starts in.
+ */
+export function cmdPath(env: NodeJS.ProcessEnv): string | undefined {
+  const drive = /^[A-Za-z]:[\\/]/
+  const comspec = envKey(env, 'COMSPEC')
+  if (comspec !== undefined && drive.test(comspec) && isFile(comspec)) return comspec
+  const root = envKey(env, 'SYSTEMROOT')
+  const system = root !== undefined && drive.test(root) ? path.win32.join(root, 'System32', 'cmd.exe') : undefined
+  if (system !== undefined && isFile(system)) return system
+  return resolveBin('cmd', env, 'win32', { exts: ['.exe'] })
 }
 
 /**
@@ -109,8 +139,11 @@ export function createClaudeRunner(o: {
     // npm's shim names what it runs, so that runs directly; only an unknown shim needs cmd.exe.
     const target = isShim ? shimTarget(file, env) : { file, pre: [] }
     const shim = target === undefined
-    const logPath = path.join(o.logDir, `${r.session}-${Date.now()}.log`)
+    // Absolute, so cmd.exe's redirect can't land in the repo folder the run starts in.
+    const logPath = path.resolve(o.logDir, `${r.session}-${Date.now()}.log`)
     if (shim && (CMD_UNSAFE.test(file) || CMD_UNSAFE.test(logPath))) return failed('unsafe claude path')
+    const cmd = shim ? cmdPath(env) : undefined
+    if (shim && cmd === undefined) return failed('cmd.exe not found')
 
     let fd: number
     try {
@@ -130,7 +163,7 @@ export function createClaudeRunner(o: {
         // the board must not hold the log open.
         closeSync(fd)
         const line = `""${file}" ${args.join(' ')} <NUL >NUL 2>>"${logPath}""`
-        child = spawn(envKey(env, 'COMSPEC') ?? 'cmd.exe', ['/d', '/s', '/c', line], {
+        child = spawn(cmd!, ['/d', '/s', '/c', line], {
           ...opts,
           stdio: 'ignore',
           windowsVerbatimArguments: true,

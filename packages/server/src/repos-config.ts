@@ -8,7 +8,7 @@ import { ignoresCase, normalizeRepoPath, sameRepoPath } from './guard.ts'
  */
 type ConfigFile = { version: 1; repos: { path: string }[] }
 
-export type AddRepoError = 'not absolute' | 'not a directory' | 'already registered' | 'config unreadable'
+export type AddRepoError = 'not absolute' | 'not a local path' | 'not a directory' | 'already registered' | 'config unreadable'
 
 type Loaded = { config: ConfigFile } | { error: 'config unreadable' }
 
@@ -22,8 +22,8 @@ export async function loadRepos(file: string): Promise<{ repos: string[] } | { e
 }
 
 /**
- * Registers a repo folder and returns its normalized path. Refuses a relative
- * path, a path that isn't a folder, a repo already listed (by Repo identity,
+ * Registers a repo folder and returns its normalized path. Refuses a network
+ * or device path (win32) and a relative path before touching the file system, a path that isn't a folder, a repo already listed (by Repo identity,
  * with case following the new folder's file system), and a config file it can't read, which it never overwrites. Writes through a
  * temp file and a rename, so a crash leaves the old file or the new one. Adds
  * to the same file run one at a time, so none is lost.
@@ -55,6 +55,8 @@ async function addRepoNow(
   platform: NodeJS.Platform,
   deps: AddRepoDeps,
 ): Promise<{ path: string } | { error: AddRepoError }> {
+  // Both checks read only the string: a network path never reaches the file system.
+  if (isNetworkPath(repoPath, platform)) return { error: 'not a local path' }
   if (!isAbsolute(repoPath, platform)) return { error: 'not absolute' }
   const normalized = normalizeRepoPath(repoPath, platform)
   if (!(await (deps.isDirectory ?? isDirectory)(normalized))) return { error: 'not a directory' }
@@ -71,9 +73,18 @@ async function addRepoNow(
   return { path: normalized }
 }
 
-/** On win32 only a drive path (`C:\x`) or a UNC share (`\\host\share`) counts; `\x` and `C:x` depend on the current drive. */
+/**
+ * On win32 a path that starts with two separators: a UNC share (`\\host\share`,
+ * `//host/share`) or a device path (`\\?\…`, `\\.\…`). Opening one can reach
+ * another machine (and hand it the user's Windows login), so it's refused unread.
+ */
+function isNetworkPath(p: string, platform: NodeJS.Platform): boolean {
+  return platform === 'win32' && /^[\\/]{2}/.test(p)
+}
+
+/** On win32 only a drive path (`C:\x`) counts; `\x` and `C:x` depend on the current drive. */
 function isAbsolute(p: string, platform: NodeJS.Platform): boolean {
-  if (platform === 'win32') return /^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/])/.test(p)
+  if (platform === 'win32') return /^[A-Za-z]:[\\/]/.test(p)
   return path.posix.isAbsolute(p)
 }
 

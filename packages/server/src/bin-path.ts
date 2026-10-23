@@ -24,24 +24,35 @@ const isExecutable = (file: string): boolean => {
   }
 }
 
+/** On Windows, a drive path (`C:\x`); `\x` and `C:x` hang off the current drive or folder. */
+const isAbsoluteFor = (p: string, win: boolean): boolean => (win ? /^[A-Za-z]:[\\/]/.test(p) || /^[\\/]{2}[^\\/]/.test(p) : path.posix.isAbsolute(p))
+
 /**
- * The file `bin` names, looked up on the env's PATH when it's a bare name. On Windows
- * only files with a PATHEXT extension count, so npm's extensionless sh shim is skipped
- * for its `.cmd` twin.
+ * The absolute path of the file `bin` names. A bare name is looked up on the env's PATH,
+ * in absolute entries only: an empty or relative entry (`.`, `bin`) would resolve against
+ * a child's working folder, which is a repo the board doesn't control. The current folder
+ * is never searched. A name with a folder in it resolves against the board's own folder.
+ * On Windows only files with a PATHEXT extension count (or `opts.exts`), so npm's
+ * extensionless sh shim is skipped for its `.cmd` twin.
  */
-export function resolveBin(bin: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform): string | undefined {
+export function resolveBin(
+  bin: string,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
+  opts: { exts?: readonly string[] } = {},
+): string | undefined {
   const win = platform === 'win32'
   const p = win ? path.win32 : path.posix
   const exts = win
-    ? (envKey(env, 'PATHEXT') ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean).map((e) => e.toLowerCase())
+    ? (opts.exts ?? (envKey(env, 'PATHEXT') ?? '.COM;.EXE;.BAT;.CMD').split(';')).filter(Boolean).map((e) => e.toLowerCase())
     : []
   const hasExt = exts.includes(p.extname(bin).toLowerCase())
   const named = (base: string): string[] => (win ? [...(hasExt ? [base] : []), ...exts.map((e) => base + e)] : [base])
   const ok = win ? isFile : isExecutable
 
   const hasDir = bin.includes('/') || (win && bin.includes('\\'))
-  if (hasDir) return named(bin).find(ok)
-  const dirs = (envKey(env, 'PATH') ?? '').split(win ? ';' : ':').filter(Boolean)
+  if (hasDir) return named(p.resolve(bin)).find(ok)
+  const dirs = (envKey(env, 'PATH') ?? '').split(win ? ';' : ':').filter((dir) => dir !== '' && isAbsoluteFor(dir, win))
   for (const dir of dirs) {
     const hit = named(p.join(dir, bin)).find(ok)
     if (hit) return hit
