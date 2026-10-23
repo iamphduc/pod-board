@@ -127,3 +127,8 @@ Consequences: reread the rules before offering pod-board to anyone else, and whe
 Context: the GitHub Actions runs (three-OS `verify` plus `secrets` on every PR and every push to `pod-staging`) went over the account's Actions limit.
 Decision: remove `.github/workflows/pod-ci.yml` and disable the `pod-ci` workflow on GitHub. `## CI` in `codebase-structure.md` is `none`.
 Consequences: nothing checks PRs on a clean machine or scans for secrets. Run `pnpm verify` locally before merging. Under `/pod:autopilot`, merges rest on the wave check alone. To bring CI back, restore the file from git history and run `gh workflow enable pod-ci`.
+
+## 2026-10-22 — public repo, Windows-only CI (replaces "no CI")
+Context: "no CI" (above) removed the workflow because of the Actions limit. The human then made the repo public, where standard GitHub runners are free, and is developing for Windows first.
+Decision: `pod-ci` runs only `verify` on `windows-latest`. No macOS or Linux run and no secret scan.
+Consequences: macOS and Linux breakage (such as temp-path differences) and committed secrets are no longer caught by CI, and the repo is public. Add `ubuntu-latest`/`macos-latest` back to the matrix before shipping to those systems; restoring the `secrets` job from git history is cheap.
