@@ -1,11 +1,14 @@
 import type { AgentTimeline, Board } from '@pod-board/model'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { streamSSE } from 'hono/streaming'
 import { AGENT_ID } from './agent-timeline.ts'
 import { actionGuard, requestGuard } from './guard.ts'
 import type { AddRepoError } from './repos-config.ts'
 
 export const PING_MS = 15_000
+/** The largest request body `/api/actions/*` and `POST /api/repos` take. Every real one is under 1 KB. */
+export const BODY_LIMIT = 64 * 1024
 
 /** Where the routes get the Board. The board watcher is one. */
 export type BoardSource = {
@@ -33,8 +36,9 @@ const ADD_REPO_STATUS = { 'not absolute': 400, 'not a local path': 400, 'not a d
 /**
  * The HTTP app. Routes live under /api; the web dev server proxies to it. Every
  * route sits behind the request guard, and `actions` (mounted at /api/actions)
- * and `POST /api/repos` also behind the action guard (a POST of a JSON object
- * with the session token). With no `actions`, a request past it gets 404.
+ * and `POST /api/repos` also behind a 64 KB body limit (413) and the action
+ * guard (a POST of a JSON object with the session token). With no `actions`,
+ * a request past it gets 404.
  */
 export function createApp(deps: AppDeps): Hono {
   const pingMs = deps.pingMs ?? PING_MS
@@ -42,9 +46,11 @@ export function createApp(deps: AppDeps): Hono {
   app.use('*', requestGuard({ ports: deps.ports }))
   // `/api/actions/*` also matches the bare `/api/actions`.
   const guard = actionGuard({ ports: deps.ports, token: deps.token })
-  app.use('/api/actions/*', guard)
+  // After the request guard's Host and Origin checks, before the action guard reads the body.
+  const limit = bodyLimit({ maxSize: BODY_LIMIT, onError: (c) => c.json({ error: 'payload too large' }, 413) })
+  app.use('/api/actions/*', limit, guard)
   // Adding a repo makes the board read its files and run gh in it, so it's guarded like an action.
-  app.use('/api/repos', guard)
+  app.use('/api/repos', limit, guard)
   if (deps.actions) app.route('/api/actions', deps.actions)
 
   app.get('/api/health', (c) => c.json({ ok: true }))
