@@ -37,9 +37,9 @@ const SPRINT = [
 
 const PATH = 'E:\\Projects\\some repo with a long folder name'
 
-function repo(agents: AgentRun[] = []): BoardRepo {
+function repo(agents: AgentRun[] = [], path = PATH): BoardRepo {
   const model = buildRepoModel({ 'pod-docs/README.md': README, 'pod-docs/plans/alpha.md': PLAN, 'pod-docs/sprints/one.md': SPRINT })
-  return { id: 'id-r', name: 'r', path: PATH, source: 'registered', model, agents, prs: [], claims: [] }
+  return { id: 'id-r', name: 'r', path, source: 'registered', model, agents, prs: [], claims: [] }
 }
 
 const agent = (over: Partial<AgentRun>): AgentRun => ({ id: 'a1', session: 's', type: 'pod:engineer', tokens: 0, ended: true, plan: 'alpha', ...over })
@@ -51,6 +51,24 @@ const clock = (ms: number) => {
 }
 
 describe('reply panel', () => {
+  describe('the copied cd command', () => {
+    const cdFor = (path: string) => replyPanel(run(), repo([agent({ session: 's1', lastAt: NOW - 40 * MIN })], path), NOW)?.session?.cd
+
+    it('a Windows path keeps its double quotes', () => {
+      expect(cdFor(PATH)).toBe('cd "E:\\Projects\\some repo with a long folder name"')
+      expect(cdFor('C:/work/repo')).toBe('cd "C:/work/repo"')
+    })
+
+    it('a POSIX path is single-quoted, so the shell runs nothing in it', () => {
+      expect(cdFor('/home/me/some repo')).toBe("cd '/home/me/some repo'")
+      // `$(x)`, a backtick, `"` and `!` are plain text inside single quotes; a `'` closes, escapes, and reopens.
+      expect(cdFor('/tmp/a$(touch x)`id`"b"!c')).toBe(`cd '/tmp/a$(touch x)\`id\`"b"!c'`)
+      const Q = "'\\''" // a `'` inside single quotes: close, escaped quote, reopen
+      expect(cdFor("/tmp/it's here")).toBe(`cd '/tmp/it${Q}s here'`)
+      expect(cdFor("/tmp/''")).toBe(`cd '/tmp/${Q}${Q}'`)
+    })
+  })
+
   it('rows keep word, why, and session lines', () => {
     const start = NOW - 50 * MIN
     const id = '0f6c1e2a-5b7d-4c11-9a3e-2d4f6b8c0e1a'
