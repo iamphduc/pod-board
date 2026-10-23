@@ -211,6 +211,24 @@ describe('createClaudeRunner', () => {
     expect((await readRecord()).argv).toEqual(['-p', '--resume', SESSION, 'go'])
   })
 
+  test.runIf(WIN)('a shim run through cmd.exe never runs a same-named .bat from the repo folder', async () => {
+    // A pnpm/yarn-style shim the runner can't read: it calls a bare `node`.
+    const shimDir = join(tmp, 'unreadable')
+    mkdirSync(shimDir)
+    copyFileSync(FAKE, join(shimDir, 'cli.mjs'))
+    writeFileSync(join(shimDir, 'claude.cmd'), '@node "%~dp0cli.mjs" %*\r\n')
+    const planted = join(repo, 'PLANTED.txt')
+    writeFileSync(join(repo, 'node.bat'), `@echo planted> "${planted}"\r\n`)
+    const env = envWith()
+    // Claude Code sets this in its own shells; the board's env may not have it.
+    for (const k of Object.keys(env)) if (k.toUpperCase() === 'NODEFAULTCURRENTDIRECTORYINEXEPATH') delete env[k]
+    env.PATH = [binDir, dirname(process.execPath)].join(';')
+    const runner = createClaudeRunner({ bin: join(shimDir, 'claude.cmd'), logDir, env, windowMs: 3000 })
+    expect(await runner.start({ session: SESSION, word: 'continue', cwd: repo })).toEqual({ outcome: 'started' })
+    expect(existsSync(planted)).toBe(false)
+    expect((await readRecord()).argv).toEqual(['-p', '--resume', SESSION, 'continue'])
+  }, 15_000)
+
   test('refuses an unsafe session id', async () => {
     const runner = createClaudeRunner({ bin: 'claude', logDir, env: envWith(), windowMs: 3000 })
     const bad = ['', 'a'.repeat(65), 'abc def', 'abc;calc', '../x', 'abc"&calc', '--bare', '-p', 'é']
@@ -403,5 +421,22 @@ describe('childEnv', () => {
     )
     expect(out.CLAUDE_CONFIG_DIR).toBe(board.CLAUDE_CONFIG_DIR)
     expect(board.CLAUDECODE).toBe('1') // the board's own env is left alone
+  })
+
+  test('drops empty and relative PATH entries, keeping order and the key as spelled', () => {
+    const win = childEnv({ Path: ';C:\\a;.;bin;C:\\b;;\\\\host\\tools;\\rel;D:x', HOME: 'h' }, 'win32')
+    expect(win.Path).toBe('C:\\a;C:\\b;\\\\host\\tools')
+    expect(Object.keys(win)).not.toContain('PATH')
+    const posix = childEnv({ PATH: ':/usr/bin:.:bin:/opt/x/bin:' }, 'linux')
+    expect(posix.PATH).toBe('/usr/bin:/opt/x/bin')
+  })
+
+  test('on Windows tells cmd.exe and the child never to search the current folder', () => {
+    expect(childEnv({ PATH: 'C:\\a' }, 'win32').NoDefaultCurrentDirectoryInExePath).toBe('1')
+    // An existing entry in another case is set, not doubled.
+    const out = childEnv({ nodefaultcurrentdirectoryinexepath: '', PATH: 'C:\\a' }, 'win32')
+    expect(Object.keys(out).filter((k) => k.toUpperCase() === 'NODEFAULTCURRENTDIRECTORYINEXEPATH')).toEqual(['nodefaultcurrentdirectoryinexepath'])
+    expect(out.nodefaultcurrentdirectoryinexepath).toBe('1')
+    expect(Object.keys(childEnv({ PATH: '/usr/bin' }, 'linux'))).toEqual(['PATH'])
   })
 })

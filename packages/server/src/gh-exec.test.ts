@@ -89,6 +89,24 @@ describe('gh exec', () => {
     expect(path.dirname(bin!)).toBe(pathDir)
   })
 
+  test("gh's own children get a PATH with no relative entries, and on Windows no current-folder search", async () => {
+    // A stand-in that prints its env: a copy of cmd.exe (`/d /c set`), or a script running `env`.
+    mkdirSync(pathDir)
+    if (WIN) copyFileSync(join(SYS32, 'cmd.exe'), join(pathDir, 'gh.exe'))
+    else {
+      writeFileSync(join(pathDir, 'gh'), '#!/bin/sh\nenv\n')
+      chmodSync(join(pathDir, 'gh'), 0o755)
+    }
+    const env = envWithPath('.', '', pathDir, 'rel-bin', SYS32)
+    for (const k of Object.keys(env)) if (k.toUpperCase() === 'NODEFAULTCURRENTDIRECTORYINEXEPATH') delete env[k]
+    const r = await createGhExec(env)(WIN ? ['/d', '/c', 'set'] : [], repo)
+    expect(r.status).toBe('ok')
+    const lines = r.stdout.split(/\r?\n/)
+    const pathLine = lines.find((l) => /^PATH=/i.test(l))
+    expect(pathLine?.slice(5)).toBe(WIN ? [pathDir, SYS32].join(SEP) : pathDir + SEP + SYS32)
+    if (WIN) expect(lines).toContain('NoDefaultCurrentDirectoryInExePath=1')
+  })
+
   test.runIf(WIN)('on Windows only gh.exe or gh.com count, as the old bare-name lookup did', () => {
     mkdirSync(pathDir)
     writeFileSync(join(pathDir, 'gh.bat'), '@echo off\r\n')
