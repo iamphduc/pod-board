@@ -122,3 +122,8 @@ Consequences: those older entries can be answered only in the chat or by editing
 Context: the board resumes the orchestrator with `claude -p --resume <session> continue`. Anthropic's support page says "You can still use the Claude Agent SDK, `claude -p`, and third-party apps with your subscription limits", and the legal page allows "an end user … signing in to the unmodified Claude Code binary with their own Claude subscription"; the Consumer Terms forbid scripted access unless Anthropic "explicitly permit[s] it", and steer products built on the Agent SDK to API keys (sources in `pod-docs/research/resume-spike.md`).
 Decision: allowed for one person's own tool on their own subscription. The board never uses an API key or `--bare`, and auto-continue is off by default.
 Consequences: reread the rules before offering pod-board to anyone else, and when `--bare` becomes the default for `-p` (the headless docs say it will).
+
+## 2026-10-22 — no CI
+Context: the GitHub Actions runs (three-OS `verify` plus `secrets` on every PR and every push to `pod-staging`) went over the account's Actions limit.
+Decision: remove `.github/workflows/pod-ci.yml` and disable the `pod-ci` workflow on GitHub. `## CI` in `codebase-structure.md` is `none`.
+Consequences: nothing checks PRs on a clean machine or scans for secrets. Run `pnpm verify` locally before merging. Under `/pod:autopilot`, merges rest on the wave check alone. To bring CI back, restore the file from git history and run `gh workflow enable pod-ci`.
