@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AgentTimeline, Board } from '@pod-board/model'
@@ -151,7 +151,7 @@ describe('add repo route', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  const post = (body: string, headers: Record<string, string> = POST_HEADERS) =>
+  const post = (body: string, headers: Record<string, string> = ACTION_HEADERS) =>
     app.request('/api/repos', { method: 'POST', headers, body })
 
   test('201 with the normalized path, and a board event follows', async () => {
@@ -171,15 +171,15 @@ describe('add repo route', () => {
   test('a charset on the JSON content type is fine', async () => {
     const repo = join(root, 'repo-two')
     await mkdir(repo)
-    const res = await post(JSON.stringify({ path: repo }), { ...POST_HEADERS, 'content-type': 'application/json; charset=utf-8' })
+    const res = await post(JSON.stringify({ path: repo }), { ...ACTION_HEADERS, 'content-type': 'application/json; charset=utf-8' })
     expect(res.status).toBe(201)
   })
 
   test('415 for another content type, or none', async () => {
     const body = JSON.stringify({ path: root })
-    const res = await post(body, { ...POST_HEADERS, 'content-type': 'text/plain' })
+    const res = await post(body, { ...ACTION_HEADERS, 'content-type': 'text/plain' })
     expect(res.status).toBe(415)
-    const { 'content-type': _, ...noType } = POST_HEADERS
+    const { 'content-type': _, ...noType } = ACTION_HEADERS
     expect((await app.request('/api/repos', { method: 'POST', headers: noType, body })).status).toBe(415)
   })
 
@@ -197,13 +197,37 @@ describe('add repo route', () => {
     expect(await missing.json()).toEqual({ error: 'not a directory' })
   })
 
-  test('add repo needs no token', async () => {
+  test('add repo needs the session token, and a refused add writes nothing', async () => {
     const repo = join(root, 'repo-five')
     await mkdir(repo)
-    // POST_HEADERS has Host, Origin, and the JSON type, and no token.
-    expect(POST_HEADERS).not.toHaveProperty('x-pod-board-token')
-    expect((await post(JSON.stringify({ path: repo }))).status).toBe(201)
-    expect((await post(JSON.stringify({ path: repo }))).status).toBe(409)
+    const body = JSON.stringify({ path: repo })
+    const wrong = createSessionToken()
+    for (const [why, headers] of [
+      ['no token', POST_HEADERS],
+      ['empty token', { ...POST_HEADERS, 'x-pod-board-token': '' }],
+      ['wrong token', { ...POST_HEADERS, 'x-pod-board-token': wrong }],
+      ['shorter token', { ...POST_HEADERS, 'x-pod-board-token': TOKEN.slice(1) }],
+    ] as const) {
+      const res = await post(body, headers)
+      expect(res.status, why).toBe(403)
+      expect(await res.json(), why).toEqual({ error: 'bad token' })
+    }
+    await expect(readFile(configFile, 'utf8')).rejects.toThrow()
+    // A wrong Origin is still refused first, and a GET is not an add.
+    const origin = await post(body, { ...ACTION_HEADERS, origin: 'http://evil.example' })
+    expect(origin.status).toBe(403)
+    expect(await origin.json()).toEqual({ error: 'forbidden origin' })
+    expect((await app.request('/api/repos', { headers: { ...HOST, 'x-pod-board-token': TOKEN } })).status).toBe(405)
+    expect((await post(body)).status).toBe(201)
+    expect((await post(body)).status).toBe(409)
+  })
+
+  test.runIf(platform === 'win32')('400 for a network path, before the file system is asked', async () => {
+    for (const p of ['\\\\host\\share\\repo', '//host/share/repo', '\\\\?\\C:\\x', '\\\\.\\C:\\x']) {
+      const res = await post(JSON.stringify({ path: p }))
+      expect(res.status, p).toBe(400)
+      expect(await res.json(), p).toEqual({ error: 'not a local path' })
+    }
   })
 
   test('409 for a repo already registered', async () => {
@@ -232,7 +256,7 @@ describe('add repo route', () => {
       source: watcher,
       addRepo: () => Promise.reject(new Error('EACCES')),
       timeline: noTimeline,
-    }).request('/api/repos', { method: 'POST', headers: POST_HEADERS, body: JSON.stringify({ path: root }) })
+    }).request('/api/repos', { method: 'POST', headers: ACTION_HEADERS, body: JSON.stringify({ path: root }) })
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ error: 'config unwritable' })
   })
