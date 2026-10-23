@@ -37,7 +37,7 @@ Which reply pod waits for on a run (`continue`, `go`, or `try`), why, and the ch
 - A queue body can quote `**Answer (human):**` (pod's own gate entries do). A marker before the `**Resolution:**` is body text, not an answer (review round 1 of #33).
 - The session is the one whose agent wrote last; a new chat for the same run with no agents yet still shows the old session.
 - A fresh plan reads `go` even if pod never asked for it.
-- `cd "<path>"` doesn't escape a `"` in the repo path.
+- The `cd` line is `cd '<path>'` for a POSIX path (each `'` written `'\''`) and `cd "<path>"` for a Windows path. PowerShell and Git Bash still expand a `$` inside the Windows form.
 
 ## History
 
@@ -45,3 +45,4 @@ Which reply pod waits for on a run (`continue`, `go`, or `try`), why, and the ch
 - 2026-10-22 · resume-runs M1 · added: the stop `key` on each reply, `sendableReply`, and `autoSends`.
 - 2026-10-22 · board-actions plan fix · fixed: `final-merged` on an archived, claimed plan after the final merge (it gave no reply); an entry quoting the answer marker in its body now stays answerable.
 - 2026-10-22 · board-actions · plan complete; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)
+- 2026-10-23 · fix-hardening-2 · fixed: the copied `cd` single-quotes a POSIX path, so `$(...)` and backticks in it don't run.

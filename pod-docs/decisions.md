@@ -132,3 +132,8 @@ Consequences: nothing checks PRs on a clean machine or scans for secrets. Run `p
 Context: "no CI" (above) removed the workflow because of the Actions limit. The human then made the repo public, where standard GitHub runners are free, and is developing for Windows first.
 Decision: `pod-ci` runs only `verify` on `windows-latest`. No macOS or Linux run and no secret scan.
 Consequences: macOS and Linux breakage (such as temp-path differences) and committed secrets are no longer caught by CI, and the repo is public. Add `ubuntu-latest`/`macos-latest` back to the matrix before shipping to those systems; restoring the `secrets` job from git history is cheap.
+
+## 2026-10-23 — no size cap on transcripts
+Context: the security review asked for a byte cap on transcript reads (`transcript-files.ts`), since a huge file can use a lot of memory. On this machine agent transcripts reach 25 MB and sessions 136 MB.
+Decision: no size cap on transcripts. A hard cap would hide real agents or show the wrong state for them.
+Consequences: a read takes about 2–3× the file's size in memory for a moment; the parsed run is cached after, keyed by size and mtime. Switch to a line-by-line reader only if the board gets slow or heavy.
