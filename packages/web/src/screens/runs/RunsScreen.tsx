@@ -2,14 +2,20 @@ import { activeRuns, buildFixPipeline, buildPipeline, otherActivity, type Board,
 import type { StreamState } from '../../board-stream.ts'
 import { hashFor, type View } from '../../selection.ts'
 import { BoardScreen } from '../board/BoardScreen.tsx'
+import { ActionLog } from './ActionLog.tsx'
+import { AutoContinueSwitch } from './AutoContinueSwitch.tsx'
 import { AddRepoForm } from './AddRepoForm.tsx'
 import { Chip } from './Chip.tsx'
 import { FixRun } from './FixRun.tsx'
 import { OtherActivity } from './OtherActivity.tsx'
 import { Pipeline } from './Pipeline.tsx'
+import { ReplyPanel } from './ReplyPanel.tsx'
+import { replyPanel } from './reply-view.ts'
+import { switchView } from './resume-flow.ts'
 import { RunsList } from './RunsList.tsx'
 import { SliceLog } from './SliceLog.tsx'
 import { ThemeControl } from './ThemeControl.tsx'
+import { WaitingOnYou } from './WaitingOnYou.tsx'
 import { banners, barTitle, emptyMessage, runChip, streamChip } from './view.ts'
 import './runs.css'
 
@@ -39,6 +45,8 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
   const tabs = selected?.plan !== undefined && pipeline !== undefined
   const others = repo ? otherActivity(repo, now) : []
   const notices = banners(board, stream)
+  const reply = replyPanel(selected, repo, now)
+  const autoSwitch = switchView(selected, board)
   return (
     <div className="screen">
       <aside className="side">
@@ -53,6 +61,9 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
         <div className="bar">
           <h1 className="title">{selected ? barTitle(selected) : 'Pod Board'}</h1>
           {selected && <Chip chip={runChip(selected.state)} />}
+          {selected?.plan !== undefined && autoSwitch && (
+            <AutoContinueSwitch key={`${selected.repoId}/${selected.plan}`} target={{ repoId: selected.repoId, run: selected.plan }} on={autoSwitch.on} />
+          )}
           {selected?.portBase !== undefined && <span className="mono note">ports {selected.portBase}</span>}
           <ThemeControl />
         </div>
@@ -75,6 +86,9 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
             ))}
           </div>
         )}
+        {repo && selected?.plan !== undefined && (
+          <ReplyPanel key={`${repo.id}/${selected.plan}`} view={reply} target={{ repoId: repo.id, run: selected.plan }} />
+        )}
         {!board ? (
           <p className="muted">{stream === 'lost' ? 'Waiting for the server…' : 'Connecting to the server…'}</p>
         ) : !selected ? (
@@ -83,18 +97,20 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
             <p className="muted">Add a repo's folder with the Add a repo form to see its pod runs.</p>
           </div>
         ) : fixPipeline && repo ? (
-          <FixRun repo={repo} run={selected} pipeline={fixPipeline} agent={view === 'agent' ? agent : undefined} now={now} />
+          <FixRun key={`${repo.id}/${selected.plan}`} repo={repo} run={selected} pipeline={fixPipeline} agent={view === 'agent' ? agent : undefined} now={now} />
         ) : pipeline && repo && view === 'board' && selected.plan !== undefined ? (
           <BoardScreen repo={repo} plan={selected.plan} {...(slice === undefined ? {} : { slice })} now={now} />
-        ) : pipeline ? (
+        ) : pipeline && repo ? (
           <>
-            <Pipeline pipeline={pipeline} />
+            <Pipeline key={`${repo.id}/${selected.plan}`} pipeline={pipeline} repoId={repo.id} />
             <SliceLog log={pipeline.log} />
           </>
         ) : (
           <p className="muted">{emptyMessage(selected, repo)}</p>
         )}
+        {board && selected && repo && <WaitingOnYou key={`${repo.id}/${selected.plan}`} repo={repo} run={selected} />}
         {board && selected && <OtherActivity list={others} />}
+        {board && <ActionLog entries={board.actions} now={now} />}
       </main>
     </div>
   )

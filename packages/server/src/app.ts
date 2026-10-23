@@ -2,7 +2,7 @@ import type { AgentTimeline, Board } from '@pod-board/model'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { AGENT_ID } from './agent-timeline.ts'
-import { requestGuard } from './guard.ts'
+import { actionGuard, requestGuard } from './guard.ts'
 import type { AddRepoError } from './repos-config.ts'
 
 export const PING_MS = 15_000
@@ -22,15 +22,26 @@ export type AppDeps = {
   /** One board agent's tool timeline; undefined when it isn't on the Board or its file is gone. */
   timeline: (repoId: string, agentId: string) => Promise<AgentTimeline | undefined>
   pingMs?: number
+  /** The per-launch session token every action request must carry. */
+  token: string
+  /** The action routes, mounted at /api/actions behind the action guard. */
+  actions?: Hono
 }
 
 const ADD_REPO_STATUS = { 'not absolute': 400, 'not a directory': 400, 'already registered': 409, 'config unreadable': 500 } as const
 
-/** The HTTP app. Routes live under /api; the web dev server proxies to it. Every route sits behind the request guard. */
+/**
+ * The HTTP app. Routes live under /api; the web dev server proxies to it. Every
+ * route sits behind the request guard, and `actions` (mounted at /api/actions)
+ * also behind the action guard. With no `actions`, a request past it gets 404.
+ */
 export function createApp(deps: AppDeps): Hono {
   const pingMs = deps.pingMs ?? PING_MS
   const app = new Hono()
   app.use('*', requestGuard({ ports: deps.ports }))
+  // `/api/actions/*` also matches the bare `/api/actions`.
+  app.use('/api/actions/*', actionGuard({ ports: deps.ports, token: deps.token }))
+  if (deps.actions) app.route('/api/actions', deps.actions)
 
   app.get('/api/health', (c) => c.json({ ok: true }))
 

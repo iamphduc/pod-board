@@ -125,6 +125,26 @@ describe('listRuns', () => {
     expect(stateOf(repo('r', oldBlock))).toEqual(['idle'])
   })
 
+  it('waiting wave PR needs you', () => {
+    const link = '[#7](https://github.com/o/r/pull/7)'
+    const handedBack = planFiles({ board: [[1, 'A1', '—', 'done'], [2, 'B1', link, 'pushed'], [2, 'B2', link, 'pushed']] })
+    // Every unfinished slice pushed with its PR, nothing running → needs you.
+    expect(stateOf(repo('r', handedBack))).toEqual(['needs-you'])
+    // It counts as active.
+    expect(activeRuns(runsOf(repo('r', handedBack)))).toBe(1)
+    // A running engineer of the wave: running, as today.
+    expect(stateOf(repo('r', handedBack, { agents: [running({ sprint: 'one', slice: 'B1' })] }))).toEqual(['running'])
+    // gh says the PR merged: no waiting PR, so running from the pushed slices, as today.
+    const merged = { number: 7, state: 'merged' as const, checks: 'pass' as const, checkedAt: NOW }
+    expect(stateOf(repo('r', handedBack, { prs: [merged] }))).toEqual(['running'])
+    // blocked still wins: a halt, or a blocked slice in the current sprint.
+    const halt = queueLine('BLOCKED', 'orchestrator → human', 'plan: alpha', 'Gate 2 stopped the run')
+    const halted = planFiles({ queue: [halt], board: [[1, 'A1', '—', 'done'], [2, 'B1', link, 'pushed'], [2, 'B2', link, 'pushed']] })
+    expect(stateOf(repo('r', halted))).toEqual(['blocked'])
+    const blocked = planFiles({ board: [[1, 'A1', '—', 'blocked'], [2, 'B1', link, 'pushed']] })
+    expect(stateOf(repo('r', blocked))).toEqual(['blocked'])
+  })
+
   it('where text', () => {
     const whereOf = (r: BoardRepo) => runsOf(r).map((run) => run.where)
     // Mid-wave: the current wave of the current sprint's waves.
@@ -238,8 +258,11 @@ describe('listRuns', () => {
     expect(runsOf(repo('r', planFiles({ ...closed, queue: [resolved] }), { claims: [claim] }))).toEqual(none)
     expect(runsOf(repo('r', planFiles(closed), { claims: [claim] }))).toEqual(none)
     expect(runsOf(repo('r', planFiles({ ...closed, queue: [resolved] }), { claims: [claim], agents: [ended(31)] }))).toEqual(none)
-    // A hand-back still pending in the queue but its PR known merged: no pending hand-back, so off the list.
-    expect(runsOf(repo('r', planFiles({ ...closed, queue: [pending] }), { claims: [claim], prs: [merged] }))).toEqual(none)
+    // A hand-back still pending in the queue but its PR known merged: pod waits for continue to clean up, so listed.
+    expect(view(repo('r', planFiles({ ...closed, queue: [pending] }), { claims: [claim], prs: [merged] }))).toEqual([['alpha', 'closing out', 'needs-you']])
+    expect(view(repo('r', planFiles({ ...closed, queue: [pending] }), { claims: [claim], prs: [merged], agents: [ended(120)] }))).toEqual([['alpha', 'closing out', 'needs-you']])
+    // Resolved after the merge: off the list.
+    expect(runsOf(repo('r', planFiles({ ...closed, queue: [resolved] }), { claims: [claim], prs: [merged] }))).toEqual(none)
     // An agent of the plan left running long ago (stale, never ended) doesn't keep it either.
     const stale = agent({ type: 'pod:reporter', plan: 'alpha', lastAt: NOW - 31 * MIN })
     expect(runsOf(repo('r', planFiles(closed), { claims: [claim], agents: [stale] }))).toEqual(none)

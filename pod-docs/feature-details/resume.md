@@ -1,0 +1,40 @@
+# Resume
+
+## What it is
+
+The board can send `continue` or `go` to a pod run's own Claude session, so you don't paste the reply into the chat. It runs `claude -p --resume <session> <word>` with your own login. A send starts from a Continue or Go button, or, for `continue` only, from the automatic check when the run's `auto-continue` toggle is on. Every send goes in the action log. Server side: `packages/server/src` (resume routes, auto-continue, toggle store, session activity, claude runner). Which reply may be sent is the model's rule in [queue-and-replies.md](queue-and-replies.md); the buttons and the switch are in [runs-and-pipeline.md](runs-and-pipeline.md).
+
+## How it works
+
+- **Resume route** (`POST /api/actions/resume`, behind the action guard). Checks in order, nothing runs before all pass: `reply` is `continue` or `go` (so `try` is never sent); the model's sendable rule allows it on this run (`404 not waiting on you`); a session with a safe id exists (`404 no session`); the session is idle (`409 session is busy`); no resume for it is in flight (`409 resume in progress`). Then the runner starts, one `auto: false` entry is logged, and the Board is rebuilt.
+- **Toggle route** (`POST /api/actions/auto-continue`): on, off, or on again (which clears the saved stop key, the way to retry a failed send). Only for a listed run. Not logged.
+- **Toggle store:** `<config dir>/auto-continue.json`, written to a temp file and renamed. An unreadable file means all off. `Board.autoContinue` lists the toggles that are on.
+- **Idle session:** the session's main transcript and every file under `<session>/subagents/` were last modified at least 60 s ago. A missing main file or a time ahead of the clock is busy. Only stats; no transcript is opened.
+- **Automatic check:** at start, on every new Board, and every 15 s. It asks the model for the sends due now, holds each session, saves the stop key, starts the runner with `continue`, logs one `auto: true` entry whatever the result, and rebuilds the Board. The route and the check share one hold, so the board never runs two resumes on one session.
+- **Runner:** `POD_BOARD_CLAUDE_BIN`, else `claude` on `PATH`; arguments exactly `-p --resume <session> <word>`; the child env drops `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN`; detached, with one stderr log per start in `<config dir>/resume-logs`. `started` means still running after 10 s, or exited 0.
+
+## Why it's this way
+
+- **The spike first** ([research](../research/resume-spike.md)): resume-runs began by checking that headless resume works with your own login and that Anthropic's rules allow it ([decision](../decisions.md#2026-10-22--headless-resume-is-allowed-for-your-own-use-agent-default--override-anytime)). It ran on Windows only and its verdict was `go`; a failed spike would have left copy-the-reply as the only way.
+- **One sendable rule:** route and buttons both use the model's rule, so the board can't send a reply pod isn't waiting for. `go` only from its button ([decision](../decisions.md#2026-10-21--go-only-from-a-button)).
+- **Off by default, per run** ([decision](../decisions.md#2026-10-21--a-continue-toggle-per-run)): it's your session and your usage.
+- **The key is saved before the start:** a crash or restart mid-send can't send one stop twice. Trade-off: a failed send isn't retried until you turn the toggle on again, so a broken setup doesn't retry every 15 s.
+- **The 60 s idle rule:** two processes on one session split the conversation (spike check 3). A turn writes every few seconds, and a foreground subagent writes only under `subagents/`, so those files count too. A terminal left open on the session isn't covered: the board can't see it (spike gap 2).
+- **Fail closed:** an unreadable toggle file means off, never on.
+- **A manual `continue` saves the key too,** so the automatic check doesn't send the same stop after your press.
+
+## Watch out
+
+- **Setup: a permission mode.** A resumed `claude -p` run can use tools only if your settings give it a permission mode (for example `"defaultMode"` in `~/.claude/settings.json`). Without one it denies tool calls and the orchestrator stalls. The runner never passes a permission flag.
+- **A terminal still open on the session** doesn't show the board's turn; typing in it after a send splits the conversation. Reopen with `claude --resume <id>`.
+- **`--bare`:** the headless docs say it will become the default for `-p`. Bare mode never reads your login, so a resume would fail; the runner must never pass an API key instead.
+- **Your hooks run:** a `Stop` or `Notification` hook fires once per send.
+- **A quiet turn:** one long tool call can leave every file quiet for over 60 s; a send then happens only if pod also shows a sendable stop.
+- **Unlisted runs:** the toggle route answers `404 not a run`, even to turn it off; such a toggle stays in the file but never sends.
+- **Tests and smoke runs** use a fake runner or `packages/server/test/fake-claude.mjs` and a temp config, never the real `claude` or `auto-continue.json`. The resume logs are never trimmed.
+
+## History
+
+- 2026-10-22 · resume-runs S1: the resume and auto-continue routes, the toggle store, the idle check, and the automatic check.
+- 2026-10-22 · board-actions plan fix: the auto-continue toggle and `final-merged` now work on an archived plan after its final merge (the route answered `404 not a run`).
+- 2026-10-22 · board-actions · plan complete; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)

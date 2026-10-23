@@ -7,3 +7,5 @@ _Found: 2026-10-18 · sprint bootstrap-model, slice B1_
 **Workaround:** run `agent-browser` from PowerShell (the PowerShell tool). The same commands finish at once there. Servers and `curl` work fine from Git Bash.
 
 **Also (2026-10-19):** `agent-browser batch < file` can hang from PowerShell too, inside `Start-Job` or through `cmd /c`. One command per call works; give each call a time limit (for example `Start-Process cmd /c agent-browser --session <s> <command>` with a wait limit).
+
+**Also (2026-10-21, sprint queue-and-replies, slice R1):** it is flaky, not constant. The orchestrator's `agent-browser --session pod-orch open …` from Git Bash worked every time this sprint, while two engineers' `open` calls hung in parallel. `timeout 60 agent-browser open …` from Git Bash does not end the hang: the call still runs to the tool's 90 s limit. One hang → close the session and stop retrying; report the browser criteria as not checked, and the orchestrator drives them in the wave check.
