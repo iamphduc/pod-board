@@ -25,6 +25,16 @@ const clock = (ms: number) => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+/**
+ * The `cd` line to copy. A POSIX path (starts with `/`) goes in single quotes, each `'` written
+ * `'\''`, so a shell runs no `$(...)` or backtick in it. A Windows path keeps `cd "<path>"`:
+ * it can't hold a `"`.
+ */
+function cdCommand(repoPath: string): string {
+  if (repoPath.startsWith('/')) return `cd '${repoPath.replaceAll("'", "'\\''")}'`
+  return `cd "${repoPath}"`
+}
+
 /** The panel for the selected plan or fix run, when pod waits for a reply; undefined for a repo row or no reply. */
 export function replyPanel(run: RunSummary | undefined, repo: BoardRepo | undefined, now: number): ReplyPanelView | undefined {
   if (!run || !repo || run.plan === undefined) return undefined
@@ -40,7 +50,7 @@ export function replyPanel(run: RunSummary | undefined, repo: BoardRepo | undefi
   })
   const target = { repoId: repo.id, run: plan }
   if (!s) return { target, rows, noSession: NO_SESSION }
-  const session: ReplySessionView = { line: `Session ${s.id}`, path: s.repoPath, cd: `cd "${s.repoPath}"` }
+  const session: ReplySessionView = { line: `Session ${s.id}`, path: s.repoPath, cd: cdCommand(s.repoPath) }
   if (s.startedAt !== undefined) session.time = `first agent ${clock(s.startedAt)}`
   if (s.resume !== undefined) session.resume = s.resume
   return { target, rows, session }

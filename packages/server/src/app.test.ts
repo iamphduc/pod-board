@@ -20,6 +20,8 @@ const platform = process.platform
 
 const TOKEN = createSessionToken()
 const ACTION_HEADERS = { ...POST_HEADERS, 'x-pod-board-token': TOKEN }
+/** The largest request body the guarded routes take. */
+const BODY_LIMIT = 64 * 1024
 
 const BOARD: Board = { generatedAt: 1, gh: 'unknown', repos: [] }
 
@@ -181,6 +183,16 @@ describe('add repo route', () => {
     expect(res.status).toBe(415)
     const { 'content-type': _, ...noType } = ACTION_HEADERS
     expect((await app.request('/api/repos', { method: 'POST', headers: noType, body })).status).toBe(415)
+  })
+
+  test('413 for a body over 64 KB, and nothing is added', async () => {
+    const big = JSON.stringify({ path: root, pad: 'a'.repeat(BODY_LIMIT) })
+    const res = await post(big)
+    expect(res.status).toBe(413)
+    expect(await res.json()).toEqual({ error: 'payload too large' })
+    const declared = await post(JSON.stringify({ path: root }), { ...ACTION_HEADERS, 'content-length': String(BODY_LIMIT + 1) })
+    expect(declared.status).toBe(413)
+    expect(await readFile(configFile, 'utf8').catch(() => 'none')).toBe('none')
   })
 
   test('400 for bad JSON, no string path, relative, and missing', async () => {
@@ -468,6 +480,22 @@ describe('action routes', () => {
     expect(charset.status).toBe(200)
     // An unknown action path past the guard is a 404.
     expect((await send(ACTION_HEADERS, { path: '/api/actions/nope' })).status).toBe(404)
+  })
+
+  test('an action body over 64 KB is refused with 413 before the route runs', async () => {
+    const { send, calls } = setup()
+    // A JSON object of exactly `size` bytes.
+    const sized = (size: number) => `{"p":"${'a'.repeat(size - 8)}"}`
+    expect(sized(BODY_LIMIT)).toHaveLength(64 * 1024)
+    await refused(await send(ACTION_HEADERS, { body: sized(BODY_LIMIT + 1) }), 413, 'payload too large', 'one byte over')
+    await refused(await send(ACTION_HEADERS, { body: sized(1024 * 1024) }), 413, 'payload too large', '1 MB')
+    // A Content-Length over the limit is refused before the body is read.
+    await refused(await send({ ...ACTION_HEADERS, 'content-length': String(BODY_LIMIT + 1) }, { body: '{}' }), 413, 'payload too large', 'declared length')
+    expect(calls).toEqual([])
+    // Exactly at the limit reaches the route.
+    const atLimit = await send(ACTION_HEADERS, { body: sized(BODY_LIMIT) })
+    expect(atLimit.status).toBe(200)
+    expect(calls).toHaveLength(1)
   })
 
   test('with no action routes, a request past the guard gets 404', async () => {
