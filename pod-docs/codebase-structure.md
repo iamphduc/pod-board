@@ -33,7 +33,11 @@ The browser loads the web app from the Vite dev server, which proxies `/api` to 
 
 ## CI
 
-none — removed on 2026-10-22 to stay within the GitHub Actions limit. Run `pnpm verify` locally before merging; under `/pod:autopilot`, merges rest on the wave check alone.
+`.github/workflows/pod-ci.yml` runs on every `pull_request` (any base branch) and on `push` to `pod-staging`:
+
+- **verify** — on `windows-latest` only (the board is built for Windows first) with Node 22 and pnpm (`pnpm/action-setup`): `pnpm install --frozen-lockfile`, then `pnpm verify`.
+
+No macOS or Linux run and no secret scan; see `pod-docs/decisions.md` (2026-10-22, Windows-only CI).
 
 ## Key docs
 
