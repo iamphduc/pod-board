@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
@@ -78,5 +78,105 @@ describe('reads only pod docs', () => {
     await readRepoFiles(repo)
     const after = await Promise.all(['pod-docs', 'pod-docs/README.md', 'pod-docs/plans/a.md'].map((r) => stat(join(repo, r))))
     expect(after.map((s) => [s.mtimeMs, s.size])).toEqual(before.map((s) => [s.mtimeMs, s.size]))
+  })
+})
+
+describe('links that point outside the repo', () => {
+  let outside: string
+
+  beforeEach(async () => {
+    outside = await mkdtemp(join(tmpdir(), 'pod-board-d1-outside-'))
+  })
+
+  afterEach(async () => {
+    // `rm` doesn't follow links, so a junction left in `repo` never empties `outside`.
+    await rm(outside, { recursive: true, force: true })
+  })
+
+  async function putOutside(rel: string, text: string): Promise<string> {
+    const full = join(outside, ...rel.split('/'))
+    await mkdir(join(full, '..'), { recursive: true })
+    await writeFile(full, text)
+    return full
+  }
+
+  /** A folder link: a junction on Windows (no admin rights needed), a symlink elsewhere. */
+  async function linkFolder(target: string, rel: string): Promise<void> {
+    const at = join(repo, ...rel.split('/'))
+    await mkdir(join(at, '..'), { recursive: true })
+    await symlink(target, at, process.platform === 'win32' ? 'junction' : 'dir')
+  }
+
+  /** A file symlink, or false when this machine won't make one (Windows without admin rights or developer mode). */
+  async function linkFile(target: string, rel: string): Promise<boolean> {
+    const at = join(repo, ...rel.split('/'))
+    await mkdir(join(at, '..'), { recursive: true })
+    try {
+      await symlink(target, at, 'file')
+      return true
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EPERM') return false
+      throw err
+    }
+  }
+
+  test('a linked pod-docs/ folder pointing outside: its docs are skipped', async () => {
+    await putOutside('docs/README.md', 'secret readme')
+    await putOutside('docs/handoff-queue.md', 'secret queue')
+    await putOutside('docs/plans/x.md', 'secret plan')
+    await linkFolder(join(outside, 'docs'), 'pod-docs')
+    expect(await readRepoFiles(repo)).toEqual({})
+  })
+
+  test('a linked plans/ or archive/ folder pointing outside: its docs are skipped, the rest read', async () => {
+    await put('pod-docs/README.md', '# readme\n')
+    await putOutside('plans/x.md', 'secret plan')
+    await putOutside('archive/y.md', 'secret sprint')
+    await linkFolder(join(outside, 'plans'), 'pod-docs/plans')
+    await linkFolder(join(outside, 'archive'), 'pod-docs/sprints/archive')
+    expect(await readRepoFiles(repo)).toEqual({ 'pod-docs/README.md': '# readme\n' })
+  })
+
+  test('a linked doc file pointing outside is skipped', async (ctx) => {
+    const target = await putOutside('secret.md', 'secret')
+    if (!(await linkFile(target, 'pod-docs/README.md'))) {
+      ctx.skip('this machine cannot make file symlinks (Windows without admin rights or developer mode)')
+    }
+    await linkFile(target, 'pod-docs/handoff-queue.md')
+    expect(await readRepoFiles(repo)).toEqual({})
+  })
+
+  test('a folder linked to another place inside the repo is still read', async () => {
+    await put('shared-plans/x.md', 'inside plan')
+    await linkFolder(join(repo, 'shared-plans'), 'pod-docs/plans')
+    expect(await readRepoFiles(repo)).toEqual({ 'pod-docs/plans/x.md': 'inside plan' })
+  })
+
+  test('a doc file linked to another place inside the repo is still read', async (ctx) => {
+    await put('docs/readme-source.md', 'inside readme')
+    if (!(await linkFile(join(repo, 'docs', 'readme-source.md'), 'pod-docs/README.md'))) {
+      ctx.skip('this machine cannot make file symlinks (Windows without admin rights or developer mode)')
+    }
+    expect(await readRepoFiles(repo)).toEqual({ 'pod-docs/README.md': 'inside readme' })
+  })
+
+  test('a repo reached through a link still reads its own docs', async () => {
+    await put('pod-docs/README.md', '# readme\n')
+    const via = join(outside, 'via')
+    await symlink(repo, via, process.platform === 'win32' ? 'junction' : 'dir')
+    expect(await readRepoFiles(via)).toEqual({ 'pod-docs/README.md': '# readme\n' })
+  })
+
+  test('a sibling folder whose name starts with the repo name counts as outside', async () => {
+    // `C:\x` vs `C:\x-other`: a plain prefix check would let this through.
+    const sibling = `${repo}-other`
+    await mkdir(join(sibling, 'plans'), { recursive: true })
+    await writeFile(join(sibling, 'plans', 'x.md'), 'sibling plan')
+    try {
+      await linkFolder(join(sibling, 'plans'), 'pod-docs/plans')
+      expect(await readRepoFiles(repo)).toEqual({})
+    } finally {
+      await rm(sibling, { recursive: true, force: true })
+    }
   })
 })
