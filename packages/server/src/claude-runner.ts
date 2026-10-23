@@ -1,8 +1,11 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { accessSync, closeSync, constants, mkdirSync, openSync, readFileSync, statSync } from 'node:fs'
+import { closeSync, mkdirSync, openSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import type { ReplyWord } from '@pod-board/model'
+import { envKey, isFile, resolveBin, safeChildEnv } from './bin-path.ts'
 import { envValue, type Env } from './config.ts'
+
+export { resolveBin }
 
 export type ResumeWord = Exclude<ReplyWord, 'try'>
 export type StartResult = { outcome: 'started' | 'failed'; message?: string }
@@ -23,8 +26,8 @@ const TAIL_CHARS = 500
  */
 const SESSION = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/
 const WORDS: readonly string[] = ['continue', 'go']
-/** Env names never passed on, compared upper-cased: so the run uses the human's own login. */
-const DROPPED_ENV = new Set(['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'])
+/** Env names passed on although they match a dropped prefix, compared upper-cased. */
+const KEPT_ENV = new Set(['CLAUDE_CONFIG_DIR'])
 /** Characters cmd.exe would act on even inside quotes, or that end the quoting. */
 const CMD_UNSAFE = /["%!^&|<>\r\n]/
 // CSI sequences, OSC sequences, and other two-byte escapes.
@@ -36,58 +39,45 @@ export function claudeBin(env: Env): string {
   return envValue(env, 'POD_BOARD_CLAUDE_BIN') ?? 'claude'
 }
 
-/** The board's env minus the API key variables, matched in any case. */
-export function childEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const out: NodeJS.ProcessEnv = {}
-  for (const [k, v] of Object.entries(env)) if (!DROPPED_ENV.has(k.toUpperCase())) out[k] = v
-  return out
-}
-
-const envKey = (env: NodeJS.ProcessEnv, name: string): string | undefined => {
-  const key = Object.keys(env).find((k) => k.toUpperCase() === name)
-  return key === undefined ? undefined : env[key]
-}
-
-const isFile = (file: string): boolean => {
-  try {
-    return statSync(file).isFile()
-  } catch {
-    return false
-  }
-}
-
-const isExecutable = (file: string): boolean => {
-  try {
-    accessSync(file, constants.X_OK)
-    return isFile(file)
-  } catch {
-    return false
-  }
+/**
+ * Whether the resumed run gets the board's env variable `name` (any case). Every
+ * `ANTHROPIC_*` variable (keys, tokens, base URL, model) and every `CLAUDE*` one (Claude
+ * Code's own session state: `CLAUDECODE`, `CLAUDE_CODE_*`, `CLAUDE_PID`, `CLAUDE_EFFORT`,
+ * the Bedrock and Vertex switches) is dropped, so the run uses the human's own login and
+ * settings, not those of a session that happened to launch the board. `CLAUDE_CONFIG_DIR`
+ * is kept: it names where the human's login and sessions live, the same folder the board
+ * reads transcripts from, and without it `--resume` couldn't find the session.
+ */
+const passesOn = (name: string): boolean => {
+  const u = name.toUpperCase()
+  if (KEPT_ENV.has(u)) return true
+  return !u.startsWith('ANTHROPIC_') && !u.startsWith('CLAUDE')
 }
 
 /**
- * The file `bin` names, looked up on the env's PATH when it's a bare name. On Windows
- * only files with a PATHEXT extension count, so npm's extensionless sh shim is skipped
- * for its `.cmd` twin.
+ * The board's env for a resumed run: see `passesOn`, then `safeChildEnv` (absolute PATH
+ * entries only; on Windows no current-folder search, which a shim run through cmd.exe
+ * needs). The board's own env is left alone.
  */
-export function resolveBin(bin: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform): string | undefined {
-  const win = platform === 'win32'
-  const p = win ? path.win32 : path.posix
-  const exts = win
-    ? (envKey(env, 'PATHEXT') ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean).map((e) => e.toLowerCase())
-    : []
-  const hasExt = exts.includes(p.extname(bin).toLowerCase())
-  const named = (base: string): string[] => (win ? [...(hasExt ? [base] : []), ...exts.map((e) => base + e)] : [base])
-  const ok = win ? isFile : isExecutable
+export function childEnv(env: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {}
+  for (const [k, v] of Object.entries(env)) if (passesOn(k)) out[k] = v
+  return safeChildEnv(out, platform)
+}
 
-  const hasDir = bin.includes('/') || (win && bin.includes('\\'))
-  if (hasDir) return named(bin).find(ok)
-  const dirs = (envKey(env, 'PATH') ?? '').split(win ? ';' : ':').filter(Boolean)
-  for (const dir of dirs) {
-    const hit = named(p.join(dir, bin)).find(ok)
-    if (hit) return hit
-  }
-  return undefined
+/**
+ * The absolute path of cmd.exe: `COMSPEC` when it's an absolute path to a file, else
+ * `%SystemRoot%\System32\cmd.exe`, else `cmd.exe` on PATH (absolute entries only). Never a
+ * bare name, which the OS could look up in the repo folder the run starts in.
+ */
+export function cmdPath(env: NodeJS.ProcessEnv): string | undefined {
+  const drive = /^[A-Za-z]:[\\/]/
+  const comspec = envKey(env, 'COMSPEC')
+  if (comspec !== undefined && drive.test(comspec) && isFile(comspec)) return comspec
+  const root = envKey(env, 'SYSTEMROOT')
+  const system = root !== undefined && drive.test(root) ? path.win32.join(root, 'System32', 'cmd.exe') : undefined
+  if (system !== undefined && isFile(system)) return system
+  return resolveBin('cmd', env, 'win32', { exts: ['.exe'] })
 }
 
 /**
@@ -153,8 +143,11 @@ export function createClaudeRunner(o: {
     // npm's shim names what it runs, so that runs directly; only an unknown shim needs cmd.exe.
     const target = isShim ? shimTarget(file, env) : { file, pre: [] }
     const shim = target === undefined
-    const logPath = path.join(o.logDir, `${r.session}-${Date.now()}.log`)
+    // Absolute, so cmd.exe's redirect can't land in the repo folder the run starts in.
+    const logPath = path.resolve(o.logDir, `${r.session}-${Date.now()}.log`)
     if (shim && (CMD_UNSAFE.test(file) || CMD_UNSAFE.test(logPath))) return failed('unsafe claude path')
+    const cmd = shim ? cmdPath(env) : undefined
+    if (shim && cmd === undefined) return failed('cmd.exe not found')
 
     let fd: number
     try {
@@ -174,7 +167,7 @@ export function createClaudeRunner(o: {
         // the board must not hold the log open.
         closeSync(fd)
         const line = `""${file}" ${args.join(' ')} <NUL >NUL 2>>"${logPath}""`
-        child = spawn(envKey(env, 'COMSPEC') ?? 'cmd.exe', ['/d', '/s', '/c', line], {
+        child = spawn(cmd!, ['/d', '/s', '/c', line], {
           ...opts,
           stdio: 'ignore',
           windowsVerbatimArguments: true,

@@ -2,10 +2,10 @@ import { spawnSync } from 'node:child_process'
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import path, { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { claudeBin, createClaudeRunner, RESUME_WINDOW_MS } from './claude-runner.ts'
+import { childEnv, claudeBin, createClaudeRunner, RESUME_WINDOW_MS } from './claude-runner.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const FAKE = join(here, '..', 'test', 'fake-claude.mjs')
@@ -171,10 +171,63 @@ describe('createClaudeRunner', () => {
     expect(names).not.toContain('ANTHROPIC_API_KEY')
     expect(names).not.toContain('ANTHROPIC_AUTH_TOKEN')
     const seen = (await readRecord()).env
+    expect(names).not.toContain('ANTHROPIC_BASE_URL')
     expect(seen.POD_BOARD_SMOKE).toBe('kept')
-    expect(seen.ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:1')
     expect(env.ANTHROPIC_API_KEY).toBe('sk-1') // the board's own env is left alone
   })
+
+  test('a claude in the repo folder never runs, even with a relative entry on PATH', async () => {
+    const empty = join(tmp, 'empty')
+    mkdirSync(empty)
+    installFake(repo) // a cloned repo with its own claude at its root
+    const sep = WIN ? ';' : ':'
+    // `rel` names the repo folder from the board's own folder; `.` names it from the child's.
+    const home = process.cwd()
+    process.chdir(tmp)
+    try {
+      const rel = path.relative(process.cwd(), repo)
+      expect(path.isAbsolute(rel)).toBe(false)
+      const env = { ...envWith(), PATH: ['.', '', rel, empty].join(sep) }
+      const runner = createClaudeRunner({ bin: 'claude', logDir, env, windowMs: 3000 })
+      expect(await runner.start({ session: SESSION, word: 'continue', cwd: repo })).toEqual({
+        outcome: 'failed',
+        message: 'claude not found',
+      })
+    } finally {
+      process.chdir(home)
+    }
+    expect(existsSync(recordFile)).toBe(false)
+  })
+
+  test.runIf(WIN)('a cmd shim runs through an absolute cmd.exe, even when COMSPEC is a bare name', async () => {
+    const plain = join(tmp, 'plain')
+    installFake(plain, 'plain')
+    // A cmd.exe planted in the repo folder: a harmless system tool that never starts the fake.
+    copyFileSync(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'hostname.exe'), join(repo, 'cmd.exe'))
+    const env = envWith({ COMSPEC: 'cmd.exe' })
+    for (const k of Object.keys(env)) if (k !== 'COMSPEC' && k.toUpperCase() === 'COMSPEC') delete env[k]
+    const runner = createClaudeRunner({ bin: join(plain, 'claude.cmd'), logDir, env, windowMs: 3000 })
+    expect(await runner.start({ session: SESSION, word: 'go', cwd: repo })).toEqual({ outcome: 'started' })
+    expect((await readRecord()).argv).toEqual(['-p', '--resume', SESSION, 'go'])
+  })
+
+  test.runIf(WIN)('a shim run through cmd.exe never runs a same-named .bat from the repo folder', async () => {
+    // A pnpm/yarn-style shim the runner can't read: it calls a bare `node`.
+    const shimDir = join(tmp, 'unreadable')
+    mkdirSync(shimDir)
+    copyFileSync(FAKE, join(shimDir, 'cli.mjs'))
+    writeFileSync(join(shimDir, 'claude.cmd'), '@node "%~dp0cli.mjs" %*\r\n')
+    const planted = join(repo, 'PLANTED.txt')
+    writeFileSync(join(repo, 'node.bat'), `@echo planted> "${planted}"\r\n`)
+    const env = envWith()
+    // Claude Code sets this in its own shells; the board's env may not have it.
+    for (const k of Object.keys(env)) if (k.toUpperCase() === 'NODEFAULTCURRENTDIRECTORYINEXEPATH') delete env[k]
+    env.PATH = [binDir, dirname(process.execPath)].join(';')
+    const runner = createClaudeRunner({ bin: join(shimDir, 'claude.cmd'), logDir, env, windowMs: 3000 })
+    expect(await runner.start({ session: SESSION, word: 'continue', cwd: repo })).toEqual({ outcome: 'started' })
+    expect(existsSync(planted)).toBe(false)
+    expect((await readRecord()).argv).toEqual(['-p', '--resume', SESSION, 'continue'])
+  }, 15_000)
 
   test('refuses an unsafe session id', async () => {
     const runner = createClaudeRunner({ bin: 'claude', logDir, env: envWith(), windowMs: 3000 })
@@ -323,5 +376,68 @@ describe('claudeBin', () => {
     expect(claudeBin({ POD_BOARD_CLAUDE_BIN: '' })).toBe('claude')
     expect(claudeBin({ POD_BOARD_CLAUDE_BIN: 'C:\\tools\\claude.exe' })).toBe('C:\\tools\\claude.exe')
     expect(RESUME_WINDOW_MS).toBe(10_000)
+  })
+})
+
+describe('childEnv', () => {
+  test('drops every ANTHROPIC_* and CLAUDE* variable in any case, and keeps the rest', () => {
+    const board = {
+      ANTHROPIC_API_KEY: 'sk',
+      anthropic_auth_token: 't',
+      ANTHROPIC_BASE_URL: 'http://x',
+      Anthropic_Model: 'm',
+      CLAUDECODE: '1',
+      CLAUDE_CODE_ENTRYPOINT: 'cli',
+      claude_code_use_bedrock: '1',
+      CLAUDE_CODE_USE_VERTEX: '1',
+      CLAUDE_PID: '42',
+      CLAUDE_EFFORT: 'high',
+      ClaudeSomething: 'x',
+      CLAUDE_CONFIG_DIR: 'C:\\Users\\me\\.claude-work',
+      POD_BOARD_CLAUDE_BIN: 'C:\\tools\\claude.exe',
+      POD_BOARD_CLAUDE_DIR: 'C:\\x',
+      PATH: 'C:\\bin',
+      Path: 'C:\\bin2',
+      HOME: '/home/me',
+      USERPROFILE: 'C:\\Users\\me',
+      APPDATA: 'C:\\Users\\me\\AppData\\Roaming',
+      ANTHROPICX: 'kept: not the ANTHROPIC_ prefix',
+      MY_CLAUDE_NOTE: 'kept: CLAUDE is not the start',
+    }
+    const out = childEnv(board, 'win32')
+    expect(Object.keys(out).sort()).toEqual(
+      [
+        'ANTHROPICX',
+        'APPDATA',
+        'CLAUDE_CONFIG_DIR',
+        'HOME',
+        'MY_CLAUDE_NOTE',
+        'NoDefaultCurrentDirectoryInExePath',
+        'PATH',
+        'Path',
+        'POD_BOARD_CLAUDE_BIN',
+        'POD_BOARD_CLAUDE_DIR',
+        'USERPROFILE',
+      ].sort(),
+    )
+    expect(out.CLAUDE_CONFIG_DIR).toBe(board.CLAUDE_CONFIG_DIR)
+    expect(board.CLAUDECODE).toBe('1') // the board's own env is left alone
+  })
+
+  test('drops empty and relative PATH entries, keeping order and the key as spelled', () => {
+    const win = childEnv({ Path: ';C:\\a;.;bin;C:\\b;;\\\\host\\tools;\\rel;D:x', HOME: 'h' }, 'win32')
+    expect(win.Path).toBe('C:\\a;C:\\b;\\\\host\\tools')
+    expect(Object.keys(win)).not.toContain('PATH')
+    const posix = childEnv({ PATH: ':/usr/bin:.:bin:/opt/x/bin:' }, 'linux')
+    expect(posix.PATH).toBe('/usr/bin:/opt/x/bin')
+  })
+
+  test('on Windows tells cmd.exe and the child never to search the current folder', () => {
+    expect(childEnv({ PATH: 'C:\\a' }, 'win32').NoDefaultCurrentDirectoryInExePath).toBe('1')
+    // An existing entry in another case is set, not doubled.
+    const out = childEnv({ nodefaultcurrentdirectoryinexepath: '', PATH: 'C:\\a' }, 'win32')
+    expect(Object.keys(out).filter((k) => k.toUpperCase() === 'NODEFAULTCURRENTDIRECTORYINEXEPATH')).toEqual(['nodefaultcurrentdirectoryinexepath'])
+    expect(out.nodefaultcurrentdirectoryinexepath).toBe('1')
+    expect(Object.keys(childEnv({ PATH: '/usr/bin' }, 'linux'))).toEqual(['PATH'])
   })
 })

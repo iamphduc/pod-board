@@ -15,7 +15,8 @@ export const NEED_RELOAD = 'Actions need a page reload.'
 export const RESTARTED = 'The board restarted. Reload the page.'
 export const UNREACHABLE = "Can't reach the board."
 
-const pageToken = () => document.querySelector('meta[name="pod-board-token"]')?.getAttribute('content')
+/** The page's session token, from the `pod-board-token` meta tag. */
+export const pageToken = () => document.querySelector('meta[name="pod-board-token"]')?.getAttribute('content')
 
 /**
  * POST `/api/actions/<path>` with `body` as JSON. `path` is the action's name

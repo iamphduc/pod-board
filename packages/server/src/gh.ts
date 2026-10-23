@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import type { GhStatus, PrStatus } from '@pod-board/model'
+import { resolveBin, safeChildEnv } from './bin-path.ts'
 
 // The contract types live in the model; re-exported for callers of this module.
 export type { GhStatus, PrStatus }
@@ -40,7 +41,7 @@ const BRANCH = /^[A-Za-z0-9][\w./-]{0,199}$/
 
 /** Runs `file` directly (no shell) with a 10 s timeout (or `opts.timeoutMs`) and prompts turned off. */
 export const createExec =
-  (file: string): GhExec =>
+  (file: string, env: NodeJS.ProcessEnv = process.env): GhExec =>
   (args, cwd, opts) =>
   new Promise((resolve) => {
     execFile(
@@ -51,7 +52,7 @@ export const createExec =
         timeout: opts?.timeoutMs ?? GH_TIMEOUT_MS,
         windowsHide: true,
         shell: false,
-        env: { ...process.env, GH_PROMPT_DISABLED: '1', NO_COLOR: '1' },
+        env: { ...safeChildEnv(env), GH_PROMPT_DISABLED: '1', NO_COLOR: '1' },
       },
       (err, stdout, stderr) => {
         const out = { stdout: String(stdout ?? ''), stderr: String(stderr ?? '') }
@@ -62,8 +63,39 @@ export const createExec =
     )
   })
 
+/** The `gh` binary on the env's PATH. */
+/**
+ * The absolute path of `gh` on the env's PATH, from absolute entries only, never the
+ * current or the repo's folder: a cloned repo could hold its own `gh.exe`. On Windows only
+ * `gh.com` and `gh.exe` count, as for the bare-name lookup this replaces (a `.cmd` or `.bat`
+ * can't run without a shell).
+ */
+export const ghBin = (env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): string | undefined =>
+  resolveBin('gh', env, platform, { exts: ['.com', '.exe'] })
+
+/**
+ * Runs `gh` with `env`, by the absolute path `ghBin` finds. The path is looked up once and
+ * kept; while none is found, each call looks again (so a `gh` installed later is used) and
+ * answers `not-found`.
+ */
+export const createGhExec = (env: NodeJS.ProcessEnv = process.env): GhExec => {
+  let exec: GhExec | undefined
+  return (args, cwd, opts) => {
+    if (!exec) {
+      const file = ghBin(env)
+      if (!file) return Promise.resolve({ status: 'not-found', stdout: '' })
+      exec = createExec(file, env)
+    }
+    return exec(args, cwd, opts).then((r) => {
+      // The kept gh is gone (uninstalled or moved): look it up again next time.
+      if (r.status === 'not-found') exec = undefined
+      return r
+    })
+  }
+}
+
 /** Runs `gh`. */
-export const defaultGhExec: GhExec = createExec('gh')
+export const defaultGhExec: GhExec = createGhExec()
 
 type Entry = { value?: PrStatus; fetchedAt?: number; inflight?: Promise<boolean> }
 
