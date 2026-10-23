@@ -8,8 +8,10 @@ export type AddResult = { status: number; error?: string }
 export type AddRepoState = { input: string; sending: boolean; error?: string }
 
 /** POST /api/repos. The browser adds the `Origin` header the server's guard checks. */
-export async function postRepo(path: string, fetchFn: typeof fetch = fetch): Promise<AddResult> {
-  const res = await fetchFn('/api/repos', {
+export type PostRepoDeps = { fetch?: typeof fetch }
+
+export async function postRepo(path: string, deps: PostRepoDeps = {}): Promise<AddResult> {
+  const res = await (deps.fetch ?? fetch)('/api/repos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),

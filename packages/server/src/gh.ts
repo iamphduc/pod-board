@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import type { GhStatus, PrStatus } from '@pod-board/model'
+import { resolveBin } from './bin-path.ts'
 
 // The contract types live in the model; re-exported for callers of this module.
 export type { GhStatus, PrStatus }
@@ -40,7 +41,7 @@ const BRANCH = /^[A-Za-z0-9][\w./-]{0,199}$/
 
 /** Runs `file` directly (no shell) with a 10 s timeout (or `opts.timeoutMs`) and prompts turned off. */
 export const createExec =
-  (file: string): GhExec =>
+  (file: string, env: NodeJS.ProcessEnv = process.env): GhExec =>
   (args, cwd, opts) =>
   new Promise((resolve) => {
     execFile(
@@ -51,7 +52,7 @@ export const createExec =
         timeout: opts?.timeoutMs ?? GH_TIMEOUT_MS,
         windowsHide: true,
         shell: false,
-        env: { ...process.env, GH_PROMPT_DISABLED: '1', NO_COLOR: '1' },
+        env: { ...env, GH_PROMPT_DISABLED: '1', NO_COLOR: '1' },
       },
       (err, stdout, stderr) => {
         const out = { stdout: String(stdout ?? ''), stderr: String(stderr ?? '') }
@@ -62,8 +63,14 @@ export const createExec =
     )
   })
 
+/** The `gh` binary on the env's PATH. */
+export const ghBin = (env: NodeJS.ProcessEnv = process.env): string | undefined => resolveBin('gh', env)
+
+/** Runs `gh` with `env`. */
+export const createGhExec = (env: NodeJS.ProcessEnv = process.env): GhExec => createExec('gh', env)
+
 /** Runs `gh`. */
-export const defaultGhExec: GhExec = createExec('gh')
+export const defaultGhExec: GhExec = createGhExec()
 
 type Entry = { value?: PrStatus; fetchedAt?: number; inflight?: Promise<boolean> }
 

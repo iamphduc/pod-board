@@ -132,7 +132,7 @@ describe('error sentences', () => {
 describe('postRepo', () => {
   it('posts JSON and reads the status and error word', async () => {
     const fetchFn = vi.fn(async () => new Response(JSON.stringify({ error: 'already registered' }), { status: 409 }))
-    expect(await postRepo('/repo', fetchFn)).toEqual({ status: 409, error: 'already registered' })
+    expect(await postRepo('/repo', { fetch: fetchFn })).toEqual({ status: 409, error: 'already registered' })
     expect(fetchFn).toHaveBeenCalledWith('/api/repos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -142,8 +142,8 @@ describe('postRepo', () => {
 
   it('a body that is not JSON gives just the status', async () => {
     const fetchFn = vi.fn(async () => new Response('oops', { status: 502 }))
-    expect(await postRepo('/repo', fetchFn)).toEqual({ status: 502 })
+    expect(await postRepo('/repo', { fetch: fetchFn })).toEqual({ status: 502 })
     const ok = vi.fn(async () => new Response(JSON.stringify({ path: '/repo' }), { status: 201 }))
-    expect(await postRepo('/repo', ok)).toEqual({ status: 201 })
+    expect(await postRepo('/repo', { fetch: ok })).toEqual({ status: 201 })
   })
 })

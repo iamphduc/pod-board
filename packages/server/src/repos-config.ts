@@ -13,7 +13,7 @@ export type AddRepoError = 'not absolute' | 'not a directory' | 'already registe
 type Loaded = { config: ConfigFile } | { error: 'config unreadable' }
 
 /** What `addRepo` asks the file system; tests swap it. */
-export type AddRepoDeps = { ignoresCase: (dir: string) => Promise<boolean> }
+export type AddRepoDeps = { ignoresCase: (dir: string) => Promise<boolean>; isDirectory?: (dir: string) => Promise<boolean> }
 
 /** The registered repo paths. A missing file is an empty list; anything else unreadable is an error. */
 export async function loadRepos(file: string): Promise<{ repos: string[] } | { error: 'config unreadable' }> {
@@ -57,7 +57,7 @@ async function addRepoNow(
 ): Promise<{ path: string } | { error: AddRepoError }> {
   if (!isAbsolute(repoPath, platform)) return { error: 'not absolute' }
   const normalized = normalizeRepoPath(repoPath, platform)
-  if (!(await isDirectory(normalized))) return { error: 'not a directory' }
+  if (!(await (deps.isDirectory ?? isDirectory)(normalized))) return { error: 'not a directory' }
 
   const loaded = await readConfig(file)
   if ('error' in loaded) return loaded
