@@ -9,6 +9,7 @@ import {
   isRunning,
   isSliceDone,
   roleOf,
+  waitingPrs,
   type AgentRun,
   type BoardRepo,
   type LogRow,
@@ -65,19 +66,21 @@ export function buildWaveBoard(repo: BoardRepo, planSlug: string, now: number): 
   const caption = `Sprint ${i + 1} of ${plan.sprints.length} · ${sprint.slug}`
   const log = (buildPipeline(repo, planSlug, now)?.log ?? []).filter((g) => g.sprint === sprint.slug)
   const live = repo.agents.filter((a) => isRunning(a, now)).map((a) => roleOf(a, plan))
+  const waiting = waitingPrs(repo, now).filter((w) => w.kind === 'wave' && w.run === plan.slug && w.sprint === sprint.slug)
 
   const columns: Column[] = sprint.waves
     .filter((w) => w.slices.length > 0)
     .map((w) => {
       const group = log.find((g) => g.wave === w.wave)
+      const mergePr = waiting.find((x) => x.wave === w.wave)?.number
       return {
         wave: w.wave,
         status: group?.status ?? '',
         cards: w.slices.map((slice): Card => {
           const row = group?.rows.find((r) => r.code === slice.code) ?? { code: slice.code, title: slice.title, live: false }
           const running = live.some((r) => r.kind === 'slice' && r.sprint === sprint.slug && r.code === slice.code)
-          const state = cardState(plan, sprint.slug, slice, running)
-          return { code: slice.code, title: slice.title, state, meta: cardMeta(plan, sprint.slug, slice, row, state), critical: false, slice, row }
+          const state = cardState(plan, sprint.slug, slice, running, mergePr !== undefined)
+          return { code: slice.code, title: slice.title, state, meta: cardMeta(plan, sprint.slug, slice, row, state, mergePr), critical: false, slice, row }
         }),
       }
     })
@@ -99,11 +102,14 @@ export function boardSlices(repo: BoardRepo | undefined, planSlug: string, now: 
 /** Queue entries naming this slice, with this sprint or none. */
 const naming = (e: QueueItem, sprint: string, code: string) => e.slice === code && (e.sprint === undefined || e.sprint === sprint)
 
-/** First match wins: blocked → merged → needs-you → running → waiting. A done card reads merged even with a pending ask. */
-function cardState(plan: PlanModel, sprint: string, slice: SliceModel, running: boolean): CardState {
+/**
+ * First match wins: blocked → merged → needs-you (an ask naming it, or its wave's PR waiting on you)
+ * → running → waiting. A done card reads merged even with a pending ask.
+ */
+function cardState(plan: PlanModel, sprint: string, slice: SliceModel, running: boolean, waveWaits: boolean): CardState {
   if (isBlockedSlice(slice)) return 'blocked'
   if (isSliceDone(slice)) return 'merged'
-  if (plan.queue.some((e) => e.needsYou && naming(e, sprint, slice.code))) return 'needs-you'
+  if (waveWaits || plan.queue.some((e) => e.needsYou && naming(e, sprint, slice.code))) return 'needs-you'
   if (slice.status === 'pushed' || running) return 'running'
   return 'waiting'
 }
@@ -112,7 +118,7 @@ const join = (parts: (string | undefined)[]) => parts.filter((p): p is string =>
 const mins = (row: LogRow) => (row.minutes === undefined ? undefined : `${row.minutes} min`)
 const entryLine = (e: QueueItem) => cut(`${e.type}: ${e.body}`)
 
-function cardMeta(plan: PlanModel, sprint: string, slice: SliceModel, row: LogRow, state: CardState): string {
+function cardMeta(plan: PlanModel, sprint: string, slice: SliceModel, row: LogRow, state: CardState, mergePr: number | undefined): string {
   switch (state) {
     case 'merged':
       return join([slice.model, row.confidence, mins(row)])
@@ -120,7 +126,7 @@ function cardMeta(plan: PlanModel, sprint: string, slice: SliceModel, row: LogRo
       return join([slice.model, mins(row)])
     case 'needs-you': {
       const e = plan.queue.findLast((x) => x.needsYou && naming(x, sprint, slice.code))
-      return e ? entryLine(e) : ''
+      return e ? entryLine(e) : mergePr !== undefined ? `PR #${mergePr} · you merge` : ''
     }
     case 'blocked': {
       const e = plan.queue.findLast((x) => x.isPending && x.type === 'BLOCKED' && naming(x, sprint, slice.code))

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./config": "./src/config.ts"
+    "./config": "./src/config.ts",
+    "./session-token": "./src/session-token.ts"
   },
   "scripts": {
     "dev": "tsx watch src/main.ts",

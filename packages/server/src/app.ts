@@ -1,11 +1,14 @@
 import type { AgentTimeline, Board } from '@pod-board/model'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { streamSSE } from 'hono/streaming'
 import { AGENT_ID } from './agent-timeline.ts'
-import { requestGuard } from './guard.ts'
+import { actionGuard, requestGuard } from './guard.ts'
 import type { AddRepoError } from './repos-config.ts'
 
 export const PING_MS = 15_000
+/** The largest request body `/api/actions/*` and `POST /api/repos` take. Every real one is under 1 KB. */
+export const BODY_LIMIT = 64 * 1024
 
 /** Where the routes get the Board. The board watcher is one. */
 export type BoardSource = {
@@ -22,15 +25,33 @@ export type AppDeps = {
   /** One board agent's tool timeline; undefined when it isn't on the Board or its file is gone. */
   timeline: (repoId: string, agentId: string) => Promise<AgentTimeline | undefined>
   pingMs?: number
+  /** The per-launch session token every action request must carry. */
+  token: string
+  /** The action routes, mounted at /api/actions behind the action guard. */
+  actions?: Hono
 }
 
-const ADD_REPO_STATUS = { 'not absolute': 400, 'not a directory': 400, 'already registered': 409, 'config unreadable': 500 } as const
+const ADD_REPO_STATUS = { 'not absolute': 400, 'not a local path': 400, 'not a directory': 400, 'already registered': 409, 'config unreadable': 500 } as const
 
-/** The HTTP app. Routes live under /api; the web dev server proxies to it. Every route sits behind the request guard. */
+/**
+ * The HTTP app. Routes live under /api; the web dev server proxies to it. Every
+ * route sits behind the request guard, and `actions` (mounted at /api/actions)
+ * and `POST /api/repos` also behind a 64 KB body limit (413) and the action
+ * guard (a POST of a JSON object with the session token). With no `actions`,
+ * a request past it gets 404.
+ */
 export function createApp(deps: AppDeps): Hono {
   const pingMs = deps.pingMs ?? PING_MS
   const app = new Hono()
   app.use('*', requestGuard({ ports: deps.ports }))
+  // `/api/actions/*` also matches the bare `/api/actions`.
+  const guard = actionGuard({ ports: deps.ports, token: deps.token })
+  // After the request guard's Host and Origin checks, before the action guard reads the body.
+  const limit = bodyLimit({ maxSize: BODY_LIMIT, onError: (c) => c.json({ error: 'payload too large' }, 413) })
+  app.use('/api/actions/*', limit, guard)
+  // Adding a repo makes the board read its files and run gh in it, so it's guarded like an action.
+  app.use('/api/repos', limit, guard)
+  if (deps.actions) app.route('/api/actions', deps.actions)
 
   app.get('/api/health', (c) => c.json({ ok: true }))
 
@@ -70,15 +91,8 @@ export function createApp(deps: AppDeps): Hono {
   })
 
   app.post('/api/repos', async (c) => {
-    const type = (c.req.header('content-type') ?? '').split(';')[0]!.trim().toLowerCase()
-    if (type !== 'application/json') return c.json({ error: 'unsupported media type' }, 415)
-    let body: unknown
-    try {
-      body = JSON.parse(await c.req.text())
-    } catch {
-      return c.json({ error: 'bad request' }, 400)
-    }
-    const repoPath = typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as { path?: unknown }).path : undefined
+    // The action guard has checked the type, the token, and that the body is a JSON object.
+    const repoPath = ((await c.req.json()) as { path?: unknown }).path
     if (typeof repoPath !== 'string') return c.json({ error: 'bad request' }, 400)
 
     let result: Awaited<ReturnType<AppDeps['addRepo']>>

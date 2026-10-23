@@ -45,11 +45,16 @@ that names the variable.
 ## Add repos
 
 The board shows every repo you register, plus every repo with a live pod run
-(pod writes a claim file per run). To register one, send its absolute path:
+(pod writes a claim file per run). To register one, use the Add a repo form on
+the runs screen, or send its absolute path with the session token the API
+writes at each start to `session-token` next to its config file:
 
 ```sh
-curl -s -X POST http://127.0.0.1:3000/api/repos   -H "Origin: http://127.0.0.1:3000" -H "Content-Type: application/json"   -d '{"path":"/home/you/code/my-repo"}'
+curl -s -X POST http://127.0.0.1:3000/api/repos   -H "Origin: http://127.0.0.1:3000" -H "Content-Type: application/json"   -H "X-Pod-Board-Token: $(cat ~/.config/pod-board/session-token)"   -d '{"path":"/home/you/code/my-repo"}'
 ```
+
+The path must be a local folder: on Windows a drive path such as
+`C:\code\my-repo`. A network share (`\\host\share`) is refused.
 
 The list lives in the board's own config file, the only file it writes:
 `%APPDATA%\pod-board\config.json` on Windows,

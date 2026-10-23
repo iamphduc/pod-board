@@ -1,4 +1,4 @@
-import { open, readdir, stat } from 'node:fs/promises'
+import { open, readdir, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { RepoFiles } from '@pod-board/model'
 
@@ -13,15 +13,19 @@ const MD_FOLDERS = ['pod-docs/plans', 'pod-docs/plans/archive', 'pod-docs/sprint
  * the docs README, the handoff queue, and the `.md` files directly in the plan
  * and sprint folders and their `archive/`. Nothing else is read, and every
  * file is opened read-only. A missing repo folder throws; a missing doc or
- * folder is left out.
+ * folder is left out, and so is a doc whose real path, after every link on
+ * the way (a symlink or junction on the file or a folder above it), is
+ * outside the repo's real path. Links that stay inside the repo still work.
  */
 export async function readRepoFiles(repoPath: string): Promise<RepoFiles> {
   if (!(await stat(repoPath)).isDirectory()) throw new Error(`not a directory: ${repoPath}`)
+  // Resolved once, so a repo registered through a link still reads its own docs.
+  const repoReal = await realpath(repoPath)
   const keys = [...SINGLE_FILES]
   for (const folder of MD_FOLDERS) keys.push(...(await mdFilesIn(repoPath, folder)))
   const files: RepoFiles = {}
   for (const key of keys) {
-    const text = await readDoc(path.join(repoPath, ...key.split('/')))
+    const text = await readDoc(repoReal, path.join(repoPath, ...key.split('/')))
     if (text !== undefined) files[key] = text
   }
   return files
@@ -40,11 +44,20 @@ async function mdFilesIn(repoPath: string, folder: string): Promise<string[]> {
   }
 }
 
-/** The file's text, or `undefined` when it is missing, not a plain file, or over the size limit. */
-async function readDoc(file: string): Promise<string | undefined> {
+/** Whether `real` is inside `root`, both real paths. `relative` keeps `C:\x-other` out of `C:\x` and ignores case on win32. */
+function isInside(root: string, real: string): boolean {
+  const rel = path.relative(root, real)
+  return rel !== '' && rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel)
+}
+
+/** The file's text, or `undefined` when it is missing, outside the repo, not a plain file, or over the size limit. */
+async function readDoc(repoReal: string, file: string): Promise<string | undefined> {
   let handle
   try {
-    handle = await open(file, 'r')
+    const real = await realpath(file)
+    if (!isInside(repoReal, real)) return undefined
+    // The real path is opened, so the checked path is the one read.
+    handle = await open(real, 'r')
   } catch {
     return undefined
   }

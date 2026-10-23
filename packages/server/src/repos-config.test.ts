@@ -102,11 +102,43 @@ describe('addRepo rules', () => {
     expect(await readFile(file)).toEqual(before)
   })
 
+  test('on win32 a network or device path is refused before the file system is asked', async () => {
+    const asked: string[] = []
+    const deps = {
+      ignoresCase: async (dir: string) => (asked.push(`case ${dir}`), true),
+      isDirectory: async (dir: string) => (asked.push(`stat ${dir}`), true),
+    }
+    const network = [
+      '\\\\host\\share\\repo',
+      '//host/share/repo',
+      '\\/host/share',
+      '/\\host\\share',
+      '\\\\?\\C:\\repo',
+      '\\\\.\\C:\\repo',
+      '\\\\?\\UNC\\host\\share\\repo',
+      '//?/C:/repo',
+    ]
+    for (const p of network) expect(await addRepo(file, p, 'win32', deps), p).toEqual({ error: 'not a local path' })
+    expect(asked).toEqual([])
+    expect(await readdir(root)).toEqual(expect.not.arrayContaining(['cfg']))
+    // A drive path still goes on to the file system.
+    const missing = { ...deps, isDirectory: async (d: string) => (asked.push(`stat ${d}`), false) }
+    expect(await addRepo(file, 'C:\\repo', 'win32', missing)).toEqual({ error: 'not a directory' })
+    expect(asked).toEqual(['stat C:\\repo'])
+  })
+
+  test('on POSIX any absolute path is local', async () => {
+    const asked: string[] = []
+    const deps = { ignoresCase: async () => false, isDirectory: async (d: string) => (asked.push(d), false) }
+    expect(await addRepo(file, '/home/me/repo', 'linux', deps)).toEqual({ error: 'not a directory' })
+    expect(asked).toEqual(['/home/me/repo'])
+  })
+
   test('relative and missing paths are refused and nothing is written', async () => {
     expect(await addRepo(file, 'some/relative', platform)).toEqual({ error: 'not absolute' })
     expect(await addRepo(file, '.', platform)).toEqual({ error: 'not absolute' })
     expect(await addRepo(file, '', platform)).toEqual({ error: 'not absolute' })
-    // On win32 a path needs a drive or a UNC share: `\x` and `C:x` hang off the current drive or folder.
+    // On win32 a path needs a drive:`\x` and `C:x` hang off the current drive or folder.
     expect(await addRepo(file, '\\x', 'win32')).toEqual({ error: 'not absolute' })
     expect(await addRepo(file, '/x', 'win32')).toEqual({ error: 'not absolute' })
     expect(await addRepo(file, 'C:x', 'win32')).toEqual({ error: 'not absolute' })

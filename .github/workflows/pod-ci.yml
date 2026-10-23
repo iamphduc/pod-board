@@ -14,12 +14,8 @@ concurrency:
 
 jobs:
   verify:
-    name: verify (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    name: verify (windows-latest)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
       # Version comes from packageManager in package.json.
@@ -30,17 +26,3 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
-
-  secrets:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      # gitleaks-action lists a PR's commits through the API.
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

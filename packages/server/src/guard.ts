@@ -1,6 +1,7 @@
+import { timingSafeEqual } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 
 /**
  * Refuses requests that don't come from the board's own pages. The server
@@ -11,15 +12,55 @@ import type { MiddlewareHandler } from 'hono'
  * so no other origin can read a response.
  */
 export function requestGuard({ ports }: { ports: readonly number[] }): MiddlewareHandler {
+  const check = hostAndOrigin(ports)
+  return async (c, next) => {
+    const refused = check(c)
+    if (refused) return refused
+    await next()
+  }
+}
+
+/** The Host and Origin checks: a 403 response, or undefined when both pass. */
+function hostAndOrigin(ports: readonly number[]): (c: Context) => Response | undefined {
   const hosts = new Set(ports.flatMap((p) => [`127.0.0.1:${p}`, `localhost:${p}`]))
   const origins = new Set([...hosts].map((h) => `http://${h}`))
-  return async (c, next) => {
+  return (c) => {
     const host = c.req.header('host')
     if (host === undefined || !hosts.has(host)) return c.json({ error: 'forbidden host' }, 403)
     if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
       const origin = c.req.header('origin')
       if (origin === undefined || !origins.has(origin)) return c.json({ error: 'forbidden origin' }, 403)
     }
+    return undefined
+  }
+}
+
+/**
+ * Guards every route under /api/actions/. On top of the request guard's Host
+ * and Origin checks, an action must be a POST of a JSON object carrying the
+ * per-launch session token. Checks run in this order, and the first failure
+ * answers, so a refused request never reaches an action:
+ * Host 403, Origin 403, method 405, content type 415, token 403, body 400.
+ * The handler can still read the body (`c.req.json()`): Hono caches it.
+ */
+export function actionGuard({ ports, token }: { ports: readonly number[]; token: string }): MiddlewareHandler {
+  const check = hostAndOrigin(ports)
+  const expected = Buffer.from(token, 'utf8')
+  return async (c, next) => {
+    const refused = check(c)
+    if (refused) return refused
+    if (c.req.method !== 'POST') return c.json({ error: 'method not allowed' }, 405)
+    const type = (c.req.header('content-type') ?? '').split(';')[0]!.trim().toLowerCase()
+    if (type !== 'application/json') return c.json({ error: 'unsupported media type' }, 415)
+    const given = Buffer.from(c.req.header('x-pod-board-token') ?? '', 'utf8')
+    if (given.length !== expected.length || !timingSafeEqual(given, expected)) return c.json({ error: 'bad token' }, 403)
+    let body: unknown
+    try {
+      body = JSON.parse(await c.req.text())
+    } catch {
+      return c.json({ error: 'bad request' }, 400)
+    }
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) return c.json({ error: 'bad request' }, 400)
     await next()
   }
 }

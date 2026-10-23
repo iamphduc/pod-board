@@ -1,11 +1,12 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AgentTimeline, Board } from '@pod-board/model'
-import type { Hono } from 'hono'
+import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { createApp, type AppDeps, type BoardSource } from './app.ts'
 import { createBoardService } from './board-service.ts'
+import { createSessionToken } from './session-token.ts'
 import type { GhReader } from './gh.ts'
 import { normalizeRepoPath } from './guard.ts'
 import { addRepo } from './repos-config.ts'
@@ -16,6 +17,11 @@ const WEB = 3061
 const HOST = { host: `127.0.0.1:${API}` }
 const POST_HEADERS = { ...HOST, origin: `http://127.0.0.1:${WEB}`, 'content-type': 'application/json' }
 const platform = process.platform
+
+const TOKEN = createSessionToken()
+const ACTION_HEADERS = { ...POST_HEADERS, 'x-pod-board-token': TOKEN }
+/** The largest request body the guarded routes take. */
+const BODY_LIMIT = 64 * 1024
 
 const BOARD: Board = { generatedAt: 1, gh: 'unknown', repos: [] }
 
@@ -48,9 +54,11 @@ const TIMELINE: AgentTimeline = {
 type TimelineFn = AppDeps['timeline']
 const noTimeline: TimelineFn = async () => undefined
 
-function fakeApp(opts: { pingMs?: number; source?: BoardSource; timeline?: TimelineFn } = {}): Hono {
+function fakeApp(opts: { pingMs?: number; source?: BoardSource; timeline?: TimelineFn; actions?: Hono } = {}): Hono {
   return createApp({
     ports: [API, WEB],
+    token: TOKEN,
+    ...(opts.actions === undefined ? {} : { actions: opts.actions }),
     source: opts.source ?? fakeSource().source,
     addRepo: async () => ({ error: 'not a directory' }),
     timeline: opts.timeline ?? noTimeline,
@@ -137,7 +145,7 @@ describe('add repo route', () => {
     const service = createBoardService({ configFile, portsDir, claudeDir, transcriptDays: 30, platform, gh })
     watcher = createBoardWatcher({ service, configFile, portsDir, claudeDir })
     await watcher.start()
-    app = createApp({ ports: [API, WEB], source: watcher, addRepo: (p) => addRepo(configFile, p, platform), timeline: noTimeline })
+    app = createApp({ ports: [API, WEB], token: TOKEN, source: watcher, addRepo: (p) => addRepo(configFile, p, platform), timeline: noTimeline })
   })
 
   afterEach(async () => {
@@ -145,7 +153,7 @@ describe('add repo route', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  const post = (body: string, headers: Record<string, string> = POST_HEADERS) =>
+  const post = (body: string, headers: Record<string, string> = ACTION_HEADERS) =>
     app.request('/api/repos', { method: 'POST', headers, body })
 
   test('201 with the normalized path, and a board event follows', async () => {
@@ -165,16 +173,26 @@ describe('add repo route', () => {
   test('a charset on the JSON content type is fine', async () => {
     const repo = join(root, 'repo-two')
     await mkdir(repo)
-    const res = await post(JSON.stringify({ path: repo }), { ...POST_HEADERS, 'content-type': 'application/json; charset=utf-8' })
+    const res = await post(JSON.stringify({ path: repo }), { ...ACTION_HEADERS, 'content-type': 'application/json; charset=utf-8' })
     expect(res.status).toBe(201)
   })
 
   test('415 for another content type, or none', async () => {
     const body = JSON.stringify({ path: root })
-    const res = await post(body, { ...POST_HEADERS, 'content-type': 'text/plain' })
+    const res = await post(body, { ...ACTION_HEADERS, 'content-type': 'text/plain' })
     expect(res.status).toBe(415)
-    const { 'content-type': _, ...noType } = POST_HEADERS
+    const { 'content-type': _, ...noType } = ACTION_HEADERS
     expect((await app.request('/api/repos', { method: 'POST', headers: noType, body })).status).toBe(415)
+  })
+
+  test('413 for a body over 64 KB, and nothing is added', async () => {
+    const big = JSON.stringify({ path: root, pad: 'a'.repeat(BODY_LIMIT) })
+    const res = await post(big)
+    expect(res.status).toBe(413)
+    expect(await res.json()).toEqual({ error: 'payload too large' })
+    const declared = await post(JSON.stringify({ path: root }), { ...ACTION_HEADERS, 'content-length': String(BODY_LIMIT + 1) })
+    expect(declared.status).toBe(413)
+    expect(await readFile(configFile, 'utf8').catch(() => 'none')).toBe('none')
   })
 
   test('400 for bad JSON, no string path, relative, and missing', async () => {
@@ -189,6 +207,39 @@ describe('add repo route', () => {
     const missing = await post(JSON.stringify({ path: join(root, 'nope') }))
     expect(missing.status).toBe(400)
     expect(await missing.json()).toEqual({ error: 'not a directory' })
+  })
+
+  test('add repo needs the session token, and a refused add writes nothing', async () => {
+    const repo = join(root, 'repo-five')
+    await mkdir(repo)
+    const body = JSON.stringify({ path: repo })
+    const wrong = createSessionToken()
+    for (const [why, headers] of [
+      ['no token', POST_HEADERS],
+      ['empty token', { ...POST_HEADERS, 'x-pod-board-token': '' }],
+      ['wrong token', { ...POST_HEADERS, 'x-pod-board-token': wrong }],
+      ['shorter token', { ...POST_HEADERS, 'x-pod-board-token': TOKEN.slice(1) }],
+    ] as const) {
+      const res = await post(body, headers)
+      expect(res.status, why).toBe(403)
+      expect(await res.json(), why).toEqual({ error: 'bad token' })
+    }
+    await expect(readFile(configFile, 'utf8')).rejects.toThrow()
+    // A wrong Origin is still refused first, and a GET is not an add.
+    const origin = await post(body, { ...ACTION_HEADERS, origin: 'http://evil.example' })
+    expect(origin.status).toBe(403)
+    expect(await origin.json()).toEqual({ error: 'forbidden origin' })
+    expect((await app.request('/api/repos', { headers: { ...HOST, 'x-pod-board-token': TOKEN } })).status).toBe(405)
+    expect((await post(body)).status).toBe(201)
+    expect((await post(body)).status).toBe(409)
+  })
+
+  test.runIf(platform === 'win32')('400 for a network path, before the file system is asked', async () => {
+    for (const p of ['\\\\host\\share\\repo', '//host/share/repo', '\\\\?\\C:\\x', '\\\\.\\C:\\x']) {
+      const res = await post(JSON.stringify({ path: p }))
+      expect(res.status, p).toBe(400)
+      expect(await res.json(), p).toEqual({ error: 'not a local path' })
+    }
   })
 
   test('409 for a repo already registered', async () => {
@@ -213,10 +264,11 @@ describe('add repo route', () => {
   test('500 when the config file cannot be written', async () => {
     const res = await createApp({
       ports: [API, WEB],
+      token: TOKEN,
       source: watcher,
       addRepo: () => Promise.reject(new Error('EACCES')),
       timeline: noTimeline,
-    }).request('/api/repos', { method: 'POST', headers: POST_HEADERS, body: JSON.stringify({ path: root }) })
+    }).request('/api/repos', { method: 'POST', headers: ACTION_HEADERS, body: JSON.stringify({ path: root }) })
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ error: 'config unwritable' })
   })
@@ -309,5 +361,150 @@ describe('guard on every route', () => {
     expect((await app.request('/', { headers: HOST })).status).toBe(404)
     // Only GET answers on the health route.
     expect((await app.request('/api/health', { method: 'POST', headers: POST_HEADERS })).status).toBe(404)
+  })
+})
+
+/** Action routes that echo what they got, counting each call. */
+function echoActions() {
+  const calls: unknown[] = []
+  const actions = new Hono()
+  actions.post('/echo', async (c) => {
+    const body: unknown = await c.req.json()
+    calls.push(body)
+    return c.json({ got: body })
+  })
+  return { actions, calls }
+}
+
+const noCorsHeaders = (res: Response) => expect([...res.headers.keys()].filter((k) => k.toLowerCase().startsWith('access-control-'))).toEqual([])
+
+describe('action routes', () => {
+  const setup = () => {
+    const { actions, calls } = echoActions()
+    const app = fakeApp({ actions })
+    const send = (headers: Record<string, string>, opts: { method?: string; body?: string; path?: string } = {}) => {
+      const method = opts.method ?? 'POST'
+      return app.request(opts.path ?? '/api/actions/echo', {
+        method,
+        headers,
+        ...(method === 'GET' || method === 'HEAD' ? {} : { body: opts.body ?? '{"n":1}' }),
+      })
+    }
+    return { app, calls, send }
+  }
+  const { 'x-pod-board-token': _token, ...noToken } = ACTION_HEADERS
+
+  const refused = async (res: Response, status: number, error: string, label: string) => {
+    expect(res.status, label).toBe(status)
+    expect(await res.json(), label).toEqual({ error })
+    noCorsHeaders(res)
+  }
+
+  test('action without token is refused', async () => {
+    const { send, calls } = setup()
+    await refused(await send(noToken), 403, 'bad token', 'no token')
+    await refused(await send({ ...noToken, 'x-pod-board-token': '' }), 403, 'bad token', 'empty token')
+    expect(calls).toEqual([])
+  })
+
+  test('action with wrong token is refused', async () => {
+    const { send, calls } = setup()
+    const wrong = createSessionToken()
+    expect(wrong).toHaveLength(TOKEN.length)
+    await refused(await send({ ...ACTION_HEADERS, 'x-pod-board-token': wrong }), 403, 'bad token', 'same length')
+    await refused(await send({ ...ACTION_HEADERS, 'x-pod-board-token': TOKEN.slice(1) }), 403, 'bad token', 'shorter')
+    await refused(await send({ ...ACTION_HEADERS, 'x-pod-board-token': TOKEN + 'x' }), 403, 'bad token', 'longer')
+    expect(calls).toEqual([])
+  })
+
+  test('action with wrong host is refused', async () => {
+    const { send, calls } = setup()
+    await refused(await send({ ...ACTION_HEADERS, host: `evil.example:${API}` }), 403, 'forbidden host', 'foreign host')
+    await refused(await send({ ...ACTION_HEADERS, host: '127.0.0.1:9' }), 403, 'forbidden host', 'other port')
+    expect(calls).toEqual([])
+  })
+
+  test('action with missing or wrong origin is refused', async () => {
+    const { send, calls } = setup()
+    const { origin: _, ...noOrigin } = ACTION_HEADERS
+    await refused(await send(noOrigin), 403, 'forbidden origin', 'missing')
+    await refused(await send({ ...ACTION_HEADERS, origin: 'http://evil.example' }), 403, 'forbidden origin', 'foreign')
+    await refused(await send({ ...ACTION_HEADERS, origin: 'null' }), 403, 'forbidden origin', 'null')
+    expect(calls).toEqual([])
+  })
+
+  test('action with non-JSON body is refused', async () => {
+    const { send, calls } = setup()
+    for (const type of ['text/plain', 'application/x-www-form-urlencoded', 'multipart/form-data; boundary=x']) {
+      await refused(await send({ ...ACTION_HEADERS, 'content-type': type }), 415, 'unsupported media type', type)
+    }
+    const { 'content-type': _, ...noType } = ACTION_HEADERS
+    await refused(await send(noType), 415, 'unsupported media type', 'no type')
+    expect(calls).toEqual([])
+  })
+
+  test('action method and body are checked', async () => {
+    const { send, calls } = setup()
+    await refused(await send({ host: HOST.host, 'x-pod-board-token': TOKEN }, { method: 'GET' }), 405, 'method not allowed', 'GET')
+    await refused(await send(ACTION_HEADERS, { method: 'PUT' }), 405, 'method not allowed', 'PUT')
+    for (const body of ['{ nope', '[]', 'null', '']) {
+      await refused(await send(ACTION_HEADERS, { body }), 400, 'bad request', JSON.stringify(body))
+    }
+    expect(calls).toEqual([])
+  })
+
+  test('action checks run in order and fail closed', async () => {
+    const { send, calls } = setup()
+    // A wrong Origin and no token: the Origin check answers.
+    await refused(await send({ ...noToken, origin: 'http://evil.example' }), 403, 'forbidden origin', 'origin before token')
+    // GET with no token: the method check answers.
+    await refused(await send({ host: HOST.host }, { method: 'GET' }), 405, 'method not allowed', 'method before token')
+    // A form post with no token: the type check answers.
+    await refused(await send({ ...noToken, 'content-type': 'text/plain' }, { body: 'a=1' }), 415, 'unsupported media type', 'type before token')
+    // No token and a bad body: the token check answers.
+    await refused(await send(noToken, { body: '[]' }), 403, 'bad token', 'token before body')
+    // The bare /api/actions path is guarded too.
+    await refused(await send(noToken, { path: '/api/actions' }), 403, 'bad token', 'bare path')
+    expect(calls).toEqual([])
+  })
+
+  test('valid action reaches its route', async () => {
+    const { send, calls } = setup()
+    const res = await send(ACTION_HEADERS, { body: '{"n":1}' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ got: { n: 1 } })
+    expect(calls).toEqual([{ n: 1 }])
+    noCorsHeaders(res)
+    // The web port's origin and a charset are fine too.
+    const charset = await send({ ...ACTION_HEADERS, origin: `http://localhost:${WEB}`, host: `localhost:${WEB}`, 'content-type': 'application/json; charset=utf-8' })
+    expect(charset.status).toBe(200)
+    // An unknown action path past the guard is a 404.
+    expect((await send(ACTION_HEADERS, { path: '/api/actions/nope' })).status).toBe(404)
+  })
+
+  test('an action body over 64 KB is refused with 413 before the route runs', async () => {
+    const { send, calls } = setup()
+    // A JSON object of exactly `size` bytes.
+    const sized = (size: number) => `{"p":"${'a'.repeat(size - 8)}"}`
+    expect(sized(BODY_LIMIT)).toHaveLength(64 * 1024)
+    await refused(await send(ACTION_HEADERS, { body: sized(BODY_LIMIT + 1) }), 413, 'payload too large', 'one byte over')
+    await refused(await send(ACTION_HEADERS, { body: sized(1024 * 1024) }), 413, 'payload too large', '1 MB')
+    // A Content-Length over the limit is refused before the body is read.
+    await refused(await send({ ...ACTION_HEADERS, 'content-length': String(BODY_LIMIT + 1) }, { body: '{}' }), 413, 'payload too large', 'declared length')
+    expect(calls).toEqual([])
+    // Exactly at the limit reaches the route.
+    const atLimit = await send(ACTION_HEADERS, { body: sized(BODY_LIMIT) })
+    expect(atLimit.status).toBe(200)
+    expect(calls).toHaveLength(1)
+  })
+
+  test('with no action routes, a request past the guard gets 404', async () => {
+    const app = fakeApp()
+    const ok = await app.request('/api/actions/echo', { method: 'POST', headers: ACTION_HEADERS, body: '{}' })
+    expect(ok.status).toBe(404)
+    // The guard still runs first.
+    const res = await app.request('/api/actions/echo', { method: 'POST', headers: noToken, body: '{}' })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'bad token' })
   })
 })

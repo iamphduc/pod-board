@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRun, Board, BoardRepo, Claim, PrStatus } from './board.ts'
-import { buildFixPipeline, fixRunNames, otherActivity, OTHER_CAP, OTHER_WINDOW_MS } from './fix-runs.ts'
+import { buildFixPipeline, fixRunAgents, fixRunNames, otherActivity, OTHER_CAP, OTHER_WINDOW_MS } from './fix-runs.ts'
 import { roleOf } from './pipeline.ts'
 import { buildRepoModel, type RepoFiles } from './run-model.ts'
 import { activeRuns, listRuns } from './runs.ts'
@@ -273,6 +273,25 @@ describe('buildFixPipeline', () => {
     expect(stages(repo({ claims: [claim('fix-scroll')], agents: reviewed, prs: [pr(36, 'open')] }))?.[2]).toEqual(['Ship', [['PR', 'you', 'PR #36 · you merge']]])
   })
 
+  it('fix Ship step carries merge', () => {
+    const ship = (agents: AgentRun[], prs: PrStatus[]) => buildFixPipeline(repo({ claims: [claim('fix-scroll')], agents, prs }), 'fix-scroll', NOW)?.stages.at(-1)?.steps[0]
+    const others = (agents: AgentRun[], prs: PrStatus[]) =>
+      buildFixPipeline(repo({ claims: [claim('fix-scroll')], agents, prs }), 'fix-scroll', NOW)
+        ?.stages.slice(0, -1)
+        .flatMap((s) => s.steps)
+        .filter((s) => 'merge' in s)
+    const built = [engineer('fix-scroll', 60, 40, { ended: true })]
+    const reviewed = [...built, reviewer(39, 30, { ended: true })]
+    // Open and reviewed: you merge, with merge set.
+    expect(ship(reviewed, [pr(36, 'open')])).toEqual({ key: 'pr', label: 'PR', state: 'you', detail: 'PR #36 · you merge', merge: { number: 36 } })
+    expect(others(reviewed, [pr(36, 'open')])).toEqual([])
+    // Before the review, merged, closed, or no PR: no merge.
+    expect(ship(built, [pr(36, 'open')])).not.toHaveProperty('merge')
+    expect(ship(reviewed, [pr(36, 'merged')])).not.toHaveProperty('merge')
+    expect(ship(reviewed, [pr(36, 'closed')])).not.toHaveProperty('merge')
+    expect(ship(reviewed, [])).not.toHaveProperty('merge')
+  })
+
   it('two build engineers show their count', () => {
     const agents = [engineer('fix-scroll', 60, 50, { ended: true }), engineer('fix-scroll', 49, 40, { ended: true })]
     expect(stages(repo({ claims: [claim('fix-scroll')], agents }))?.[0]?.[1]).toEqual([
@@ -373,5 +392,38 @@ describe('otherActivity', () => {
     const runs = listRuns(board(r), NOW)
     expect(runs.map((x) => [x.where, x.state])).toEqual([['no active plan', 'idle']])
     expect(activeRuns(runs)).toBe(0)
+  })
+})
+
+describe('fixRunAgents', () => {
+  it('fix run agents', () => {
+    const eng = engineer('fix-scroll', 90, 60)
+    const rev1 = reviewer(55, 50, { ended: true })
+    // An engineer continued for the fix pass: two turns, one agent.
+    const cont = engineer('fix-scroll', 120, 20, {
+      turns: [
+        { startedAt: NOW - 120 * MIN, endedAt: NOW - 100 * MIN, lastAt: NOW - 100 * MIN, tokens: 1 },
+        { startedAt: NOW - 30 * MIN, lastAt: NOW - 20 * MIN, tokens: 1 },
+      ],
+      resumedAt: NOW - 30 * MIN,
+    })
+    // A reviewer joined by the PR number, not the branch.
+    const byPr = reviewer(15, 10, { branch: 'other', pr: 36 })
+    const strays = [
+      engineer('fix-other', 10, 1),
+      reviewer(10, 1, { kind: 'plan' }),
+      agent({ type: 'pod:researcher', branch: 'fix-scroll', ...span(10, 1) }),
+    ]
+    const r = repo({ claims: [claim('fix-scroll')], agents: [byPr, rev1, ...strays, eng, cont], prs: [pr(36, 'open')] })
+    const ids = fixRunAgents(r, 'fix-scroll', NOW).map((a) => a.id)
+    // The run's engineers and reviewers, once each, oldest first.
+    expect(ids).toEqual([cont.id, eng.id, rev1.id, byPr.id])
+    // The same agents the pipeline's agent log is built from.
+    const log = buildFixPipeline(r, 'fix-scroll', NOW)!.log.map((x) => x.agentId)
+    expect(new Set(ids)).toEqual(new Set(log))
+    // Each is the agent itself, not one of its turns.
+    expect(fixRunAgents(r, 'fix-scroll', NOW)[0]).toBe(cont)
+    // No such run → none.
+    expect(fixRunAgents(r, 'fix-nope', NOW)).toEqual([])
   })
 })

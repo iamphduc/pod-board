@@ -4,14 +4,29 @@
 // the input. An error keeps the input and shows the API's error word as a
 // sentence; editing the input or Escape clears it, and Escape clears the input.
 
+import { NEED_RELOAD, pageToken, RESTARTED } from './actions-client.ts'
+
 export type AddResult = { status: number; error?: string }
 export type AddRepoState = { input: string; sending: boolean; error?: string }
 
-/** POST /api/repos. The browser adds the `Origin` header the server's guard checks. */
-export async function postRepo(path: string, fetchFn: typeof fetch = fetch): Promise<AddResult> {
-  const res = await fetchFn('/api/repos', {
+export type PostRepoDeps = {
+  fetch?: typeof fetch
+  /** The session token; by default the page's token meta, read on each call. */
+  token?: () => string | null | undefined
+}
+
+/**
+ * POST /api/repos with the page's session token, as the action client sends it. The
+ * browser adds the `Origin` header the server's guard checks. No token on the page →
+ * nothing is sent and the error asks for a reload; a token from before an API restart →
+ * the same words the actions use.
+ */
+export async function postRepo(path: string, deps: PostRepoDeps = {}): Promise<AddResult> {
+  const token = (deps.token ?? pageToken)()
+  if (!token) return { status: 0, error: NEED_RELOAD }
+  const res = await (deps.fetch ?? fetch)('/api/repos', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Pod-Board-Token': token },
     body: JSON.stringify({ path }),
   })
   let error: unknown
@@ -20,6 +35,7 @@ export async function postRepo(path: string, fetchFn: typeof fetch = fetch): Pro
   } catch {
     error = undefined
   }
+  if (res.status === 403 && error === 'bad token') return { status: 403, error: RESTARTED }
   return typeof error === 'string' && error.length > 0 ? { status: res.status, error } : { status: res.status }
 }
 

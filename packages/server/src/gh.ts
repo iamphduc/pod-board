@@ -1,12 +1,15 @@
 import { execFile } from 'node:child_process'
 import type { GhStatus, PrStatus } from '@pod-board/model'
+import { resolveBin, safeChildEnv } from './bin-path.ts'
 
 // The contract types live in the model; re-exported for callers of this module.
 export type { GhStatus, PrStatus }
 
 /** `not-found`: the `gh` binary isn't on PATH. `failed`: it ran and exited non-zero, timed out, or was killed. */
-export type ExecResult = { status: 'ok' | 'failed' | 'not-found'; stdout: string }
-export type GhExec = (args: string[], cwd: string) => Promise<ExecResult>
+export type ExecResult = { status: 'ok' | 'failed' | 'not-found'; stdout: string; stderr?: string }
+/** `timeoutMs` replaces the 10 s default (the merge call waits 60 s). */
+export type ExecOptions = { timeoutMs?: number }
+export type GhExec = (args: string[], cwd: string, opts?: ExecOptions) => Promise<ExecResult>
 
 export type GhReader = {
   status(): GhStatus
@@ -22,6 +25,12 @@ export type GhReader = {
   refresh(repoPath: string, numbers: number[], branches?: string[]): Promise<boolean>
 }
 
+/** The reader the merge routes use: it can also drop a PR, so the next refresh fetches it again. */
+export type GhCache = GhReader & {
+  /** Drops the PR's entry by number and any branch entry holding that number, final or not. */
+  forget(repoPath: string, n: number): void
+}
+
 export const AUTH_RECHECK_MS = 60_000
 export const PR_CACHE_MS = 30_000
 export const GH_TIMEOUT_MS = 10_000
@@ -30,30 +39,67 @@ const LIST_FIELDS = `${PR_FIELDS},headRefName`
 /** A branch gh can't read as a flag, with no spaces or shell characters. */
 const BRANCH = /^[A-Za-z0-9][\w./-]{0,199}$/
 
-/** Runs `gh` directly (no shell) with a 10 s timeout and prompts turned off. */
-export const defaultGhExec: GhExec = (args, cwd) =>
+/** Runs `file` directly (no shell) with a 10 s timeout (or `opts.timeoutMs`) and prompts turned off. */
+export const createExec =
+  (file: string, env: NodeJS.ProcessEnv = process.env): GhExec =>
+  (args, cwd, opts) =>
   new Promise((resolve) => {
     execFile(
-      'gh',
+      file,
       args,
       {
         cwd,
-        timeout: GH_TIMEOUT_MS,
+        timeout: opts?.timeoutMs ?? GH_TIMEOUT_MS,
         windowsHide: true,
         shell: false,
-        env: { ...process.env, GH_PROMPT_DISABLED: '1', NO_COLOR: '1' },
+        env: { ...safeChildEnv(env), GH_PROMPT_DISABLED: '1', NO_COLOR: '1' },
       },
-      (err, stdout) => {
-        if (!err) return resolve({ status: 'ok', stdout: String(stdout) })
+      (err, stdout, stderr) => {
+        const out = { stdout: String(stdout ?? ''), stderr: String(stderr ?? '') }
+        if (!err) return resolve({ status: 'ok', ...out })
         const code = (err as NodeJS.ErrnoException).code
-        resolve({ status: code === 'ENOENT' ? 'not-found' : 'failed', stdout: String(stdout ?? '') })
+        resolve({ status: code === 'ENOENT' ? 'not-found' : 'failed', ...out })
       },
     )
   })
 
+/** The `gh` binary on the env's PATH. */
+/**
+ * The absolute path of `gh` on the env's PATH, from absolute entries only, never the
+ * current or the repo's folder: a cloned repo could hold its own `gh.exe`. On Windows only
+ * `gh.com` and `gh.exe` count, as for the bare-name lookup this replaces (a `.cmd` or `.bat`
+ * can't run without a shell).
+ */
+export const ghBin = (env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): string | undefined =>
+  resolveBin('gh', env, platform, { exts: ['.com', '.exe'] })
+
+/**
+ * Runs `gh` with `env`, by the absolute path `ghBin` finds. The path is looked up once and
+ * kept; while none is found, each call looks again (so a `gh` installed later is used) and
+ * answers `not-found`.
+ */
+export const createGhExec = (env: NodeJS.ProcessEnv = process.env): GhExec => {
+  let exec: GhExec | undefined
+  return (args, cwd, opts) => {
+    if (!exec) {
+      const file = ghBin(env)
+      if (!file) return Promise.resolve({ status: 'not-found', stdout: '' })
+      exec = createExec(file, env)
+    }
+    return exec(args, cwd, opts).then((r) => {
+      // The kept gh is gone (uninstalled or moved): look it up again next time.
+      if (r.status === 'not-found') exec = undefined
+      return r
+    })
+  }
+}
+
+/** Runs `gh`. */
+export const defaultGhExec: GhExec = createGhExec()
+
 type Entry = { value?: PrStatus; fetchedAt?: number; inflight?: Promise<boolean> }
 
-export function createGhReader(opts: { exec?: GhExec; now?: () => number } = {}): GhReader {
+export function createGhReader(opts: { exec?: GhExec; now?: () => number } = {}): GhCache {
   const exec = opts.exec ?? defaultGhExec
   const now = opts.now ?? Date.now
   let status: GhStatus = 'unknown'
@@ -151,6 +197,13 @@ export function createGhReader(opts: { exec?: GhExec; now?: () => number } = {})
     checkedAt: () => authAt,
     get: (repoPath, n) => cache.get(keyOf(repoPath, n))?.value,
     getBranch: (repoPath, branch) => cache.get(branchKey(repoPath, branch))?.value,
+    forget(repoPath, n) {
+      cache.delete(keyOf(repoPath, n))
+      for (const [key, entry] of cache) {
+        const pr = entry.value
+        if (pr?.number === n && pr.branch !== undefined && key === branchKey(repoPath, pr.branch)) cache.delete(key)
+      }
+    },
     async refresh(repoPath, numbers, branches = []) {
       let changed = await checkAuth(repoPath)
       if (status !== 'ok') return changed
@@ -212,7 +265,8 @@ export function parsePrList(stdout: string, branch: string, checkedAt: number): 
   return pick && { ...pick, branch }
 }
 
-function rollupChecks(rollup: unknown): PrStatus['checks'] {
+/** The checks of a `statusCheckRollup`: any failed → fail, any not done → pending, none → none, else pass. */
+export function rollupChecks(rollup: unknown): PrStatus['checks'] {
   if (!Array.isArray(rollup) || rollup.length === 0) return 'none'
   let pending = false
   for (const item of rollup) {
