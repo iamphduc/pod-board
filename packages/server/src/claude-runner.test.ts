@@ -404,7 +404,7 @@ describe('childEnv', () => {
       ANTHROPICX: 'kept: not the ANTHROPIC_ prefix',
       MY_CLAUDE_NOTE: 'kept: CLAUDE is not the start',
     }
-    const out = childEnv(board)
+    const out = childEnv(board, 'win32')
     expect(Object.keys(out).sort()).toEqual(
       [
         'ANTHROPICX',
@@ -412,6 +412,7 @@ describe('childEnv', () => {
         'CLAUDE_CONFIG_DIR',
         'HOME',
         'MY_CLAUDE_NOTE',
+        'NoDefaultCurrentDirectoryInExePath',
         'PATH',
         'Path',
         'POD_BOARD_CLAUDE_BIN',

@@ -28,6 +28,31 @@ const isExecutable = (file: string): boolean => {
 const isAbsoluteFor = (p: string, win: boolean): boolean => (win ? /^[A-Za-z]:[\\/]/.test(p) || /^[\\/]{2}[^\\/]/.test(p) : path.posix.isAbsolute(p))
 
 /**
+ * `env` made safe for a child started in a repo folder: PATH keeps only its absolute
+ * entries, in order and under the key as spelled (Windows uses `Path`), so nothing the
+ * child starts by a bare name resolves against the repo. On Windows it also sets
+ * `NoDefaultCurrentDirectoryInExePath=1`, so cmd.exe and the child's own lookups skip the
+ * current folder. Returns a new object; `env` is left alone.
+ */
+export function safeChildEnv(env: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform): NodeJS.ProcessEnv {
+  const win = platform === 'win32'
+  const sep = win ? ';' : ':'
+  const out: NodeJS.ProcessEnv = { ...env }
+  for (const key of Object.keys(out)) {
+    if (key.toUpperCase() !== 'PATH') continue
+    out[key] = (out[key] ?? '')
+      .split(sep)
+      .filter((dir) => dir !== '' && isAbsoluteFor(dir, win))
+      .join(sep)
+  }
+  if (win) {
+    const noCwd = Object.keys(out).find((k) => k.toUpperCase() === 'NODEFAULTCURRENTDIRECTORYINEXEPATH') ?? 'NoDefaultCurrentDirectoryInExePath'
+    out[noCwd] = '1'
+  }
+  return out
+}
+
+/**
  * The absolute path of the file `bin` names. A bare name is looked up on the env's PATH,
  * in absolute entries only: an empty or relative entry (`.`, `bin`) would resolve against
  * a child's working folder, which is a repo the board doesn't control. The current folder

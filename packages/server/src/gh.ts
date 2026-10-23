@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import type { GhStatus, PrStatus } from '@pod-board/model'
-import { resolveBin } from './bin-path.ts'
+import { resolveBin, safeChildEnv } from './bin-path.ts'
 
 // The contract types live in the model; re-exported for callers of this module.
 export type { GhStatus, PrStatus }
@@ -52,7 +52,7 @@ export const createExec =
         timeout: opts?.timeoutMs ?? GH_TIMEOUT_MS,
         windowsHide: true,
         shell: false,
-        env: { ...env, GH_PROMPT_DISABLED: '1', NO_COLOR: '1' },
+        env: { ...safeChildEnv(env), GH_PROMPT_DISABLED: '1', NO_COLOR: '1' },
       },
       (err, stdout, stderr) => {
         const out = { stdout: String(stdout ?? ''), stderr: String(stderr ?? '') }

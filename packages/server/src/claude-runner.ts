@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { closeSync, mkdirSync, openSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import type { ReplyWord } from '@pod-board/model'
-import { envKey, isFile, resolveBin } from './bin-path.ts'
+import { envKey, isFile, resolveBin, safeChildEnv } from './bin-path.ts'
 import { envValue, type Env } from './config.ts'
 
 export { resolveBin }
@@ -54,11 +54,15 @@ const passesOn = (name: string): boolean => {
   return !u.startsWith('ANTHROPIC_') && !u.startsWith('CLAUDE')
 }
 
-/** The board's env for a resumed run: see `passesOn`. The board's own env is left alone. */
-export function childEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+/**
+ * The board's env for a resumed run: see `passesOn`, then `safeChildEnv` (absolute PATH
+ * entries only; on Windows no current-folder search, which a shim run through cmd.exe
+ * needs). The board's own env is left alone.
+ */
+export function childEnv(env: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {}
   for (const [k, v] of Object.entries(env)) if (passesOn(k)) out[k] = v
-  return out
+  return safeChildEnv(out, platform)
 }
 
 /**
