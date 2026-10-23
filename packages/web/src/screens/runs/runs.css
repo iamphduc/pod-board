@@ -739,6 +739,12 @@
     align-items: stretch;
   }
 
+  /* In a column the 14rem basis would be a height; size to the text instead. */
+  .reply-why,
+  .reply-cmd code {
+    flex: 0 0 auto;
+  }
+
   .reply-copy,
   .reply-copy .btn,
   .reply-actions > .btn,
