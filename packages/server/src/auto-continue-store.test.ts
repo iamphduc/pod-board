@@ -90,6 +90,32 @@ describe('auto-continue store', () => {
     if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600)
   })
 
+  test('remembers the answered keys it sent, bounded', async () => {
+    const store = createAutoContinueStore({ file })
+    await store.set('r1', 'alpha', true)
+    // An answered key is the lastKey and joins answeredKeys; another key moves lastKey only.
+    expect(await store.saveKey('r1', 'alpha', 'answered:alpha:1:aaaaaaaa')).toBe(true)
+    expect(await store.saveKey('r1', 'alpha', 'sprint-done:one')).toBe(true)
+    expect(store.list()).toEqual([{ repoId: 'r1', run: 'alpha', lastKey: 'sprint-done:one', answeredKeys: ['answered:alpha:1:aaaaaaaa'] }])
+    // The same answered key again isn't listed twice.
+    await store.saveKey('r1', 'alpha', 'answered:alpha:1:aaaaaaaa')
+    expect(store.list()[0]?.answeredKeys).toEqual(['answered:alpha:1:aaaaaaaa'])
+    // A restart reads them back.
+    expect(createAutoContinueStore({ file }).list()).toEqual(store.list())
+    // At most 20, the newest kept.
+    for (let i = 0; i < 25; i++) await store.saveKey('r1', 'alpha', `answered:alpha:1:${String(i).padStart(8, '0')}`)
+    const keys = store.list()[0]?.answeredKeys ?? []
+    expect(keys).toHaveLength(20)
+    expect(keys.at(-1)).toBe('answered:alpha:1:00000024')
+    expect(keys).not.toContain('answered:alpha:1:aaaaaaaa')
+    // A bad answeredKeys in the file is dropped, the toggle kept.
+    put(JSON.stringify({ runs: [{ repoId: 'r1', run: 'alpha', answeredKeys: 'x' }, { repoId: 'r2', run: 'beta', answeredKeys: ['ok', 7] }] }))
+    expect(createAutoContinueStore({ file }).list()).toEqual([
+      { repoId: 'r1', run: 'alpha' },
+      { repoId: 'r2', run: 'beta', answeredKeys: ['ok'] },
+    ])
+  })
+
   test('a failed write keeps the file and the toggles', async () => {
     const store = createAutoContinueStore({ file })
     await store.set('r1', 'alpha', true)

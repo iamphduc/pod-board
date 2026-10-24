@@ -283,6 +283,22 @@ describe('autoSends', () => {
     expect(autoSends(board(at([answered(HALT)])), [toggle('alpha')], NOW, () => false)).toEqual([])
   })
 
+  it('never auto-sends the same answered key twice', () => {
+    // A pod that never rewrites the Resolution shows the same answered key at every later stop.
+    const repo = planRepo({ docs: { one: WORK }, queue: [answered(HALT)] })
+    const key = keyOf('answered')
+    // It sent the answered key, then another stop (lastKey moved on): still not sent again.
+    const sent: AutoToggle = { repoId: 'id-r', run: 'alpha', lastKey: 'sprint-done:one', answeredKeys: [key] }
+    expect(autoSends(board(repo), [sent], NOW, always)).toEqual([])
+    // Another answered key on record doesn't stop this one.
+    expect(autoSends(board(repo), [{ ...sent, answeredKeys: ['answered:alpha:1:00000000'] }], NOW, always)).toEqual([
+      { repoId: 'id-r', run: 'alpha', session: 'sess-1', key },
+    ])
+    // Other signals don't read the record.
+    const merged = BY_SIGNAL['wave-merged']
+    expect(autoSends(board(merged.repo), [{ repoId: 'id-r', run: 'alpha', answeredKeys: ['wave-merged:7'] }], NOW, always)).toHaveLength(1)
+  })
+
   it('skips busy or unknown sessions', () => {
     const { repo } = BY_SIGNAL['wave-merged']
     const t = [toggle('alpha')]

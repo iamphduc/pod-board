@@ -308,9 +308,17 @@ describe('answered stop', () => {
     expect(one(at([answer(halt), decision, someday])).why).toBe('You answered 1 entry: reply continue so pod reads it.')
     // An unanswered BLOCKED halts pod: nothing, even with an answered PENDING beside it.
     expect(replies(at([halt, answer(decision)]))).toEqual([])
-    // Any BLOCKED waits on you, whatever its route.
-    expect(replies(at([answer(halt), engineerBlock]))).toEqual([])
-    expect(one(at([answer(halt), answer(engineerBlock)])).signal).toBe('answered')
+    // Only entries routed → human count. Gate 1: the engineer's BLOCKED to the orchestrator plus the
+    // orchestrator's halt to you. You answer the halt; the engineer's entry doesn't hold it back.
+    expect(one(at([engineerBlock, answer(halt)])).why).toBe('You answered 1 entry: reply continue so pod reads it.')
+    // An answered engineer → orchestrator BLOCKED doesn't add to N, nor make a reply alone.
+    expect(one(at([answer(halt), answer(engineerBlock)])).why).toBe('You answered 1 entry: reply continue so pod reads it.')
+    expect(replies(at([answer(engineerBlock)]))).toEqual([])
+    // A BLOCKED routed to you from anyone holds it back.
+    const toYou = queueLine('BLOCKED', 'engineer → human', 'plan: alpha · sprint: one · slice: A1', 'Need a key.')
+    expect(replies(at([answer(halt), toYou]))).toEqual([])
+    expect(replies(at([answer(halt), toYou.replace('engineer → human', 'engineer -> human')]))).toEqual([])
+    expect(one(at([answer(halt), answer(toYou)])).why).toBe('You answered 2 entries: reply continue so pod reads them.')
     // Only unanswered PENDINGs: nothing to read yet.
     expect(replies(at([decision, someday]))).toEqual([])
   })
@@ -381,6 +389,8 @@ describe('answered stop', () => {
     expect(key([answer(halt), note])).toBe(key([answer(halt)]))
     // Nor does an unanswered PENDING: the key names the answered entries.
     expect(key([answer(halt), decision])).toBe(key([answer(halt)]))
+    // Nor an answered entry not routed to you.
+    expect(key([answer(halt), answer(engineerBlock)])).toBe(key([answer(halt)]))
     // A new set of answers is a new stop.
     const keys = new Set([
       key([answer(halt)]),
