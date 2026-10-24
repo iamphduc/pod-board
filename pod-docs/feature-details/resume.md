@@ -7,6 +7,7 @@ The board can send `continue` or `go` to a pod run's own Claude session, so you 
 ## How it works
 
 - **Resume route** (`POST /api/actions/resume`, behind the action guard). Checks in order, nothing runs before all pass: `reply` is `continue` or `go` (so `try` is never sent); the model's sendable rule allows it on this run (`404 not waiting on you`); a session with a safe id exists (`404 no session`); the session is idle (`409 session is busy`); no resume for it is in flight (`409 resume in progress`). Then the runner starts, one `auto: false` entry is logged, and the Board is rebuilt.
+- **Sendable signals:** `continue` on `wave-merged`, `sprint-done`, `final-merged`, `fix-merged`, and `answered` (every entry a stopped run waits on you for is answered); `go` on `not-started` ([queue-and-replies.md](queue-and-replies.md)). The idle check below applies to each.
 - **Toggle route** (`POST /api/actions/auto-continue`): on, off, or on again (which clears the saved stop key, the way to retry a failed send). Only for a listed run. Not logged.
 - **Toggle store:** `<config dir>/auto-continue.json`, written to a temp file and renamed. An unreadable file means all off. `Board.autoContinue` lists the toggles that are on.
 - **Idle session:** the session's main transcript and every file under `<session>/subagents/` were last modified at least 60 s ago. A missing main file or a time ahead of the clock is busy. Only stats; no transcript is opened.
@@ -39,5 +40,6 @@ The board can send `continue` or `go` to a pod run's own Claude session, so you 
 
 - 2026-10-22 · resume-runs S1: the resume and auto-continue routes, the toggle store, the idle check, and the automatic check.
 - 2026-10-22 · board-actions plan fix: the auto-continue toggle and `final-merged` now work on an archived plan after its final merge (the route answered `404 not a run`).
+- 2026-10-23 · fix-answered-continue: `answered` is a sendable signal, so the Continue button and auto-continue resume a run once you answered what it stopped on.
 - 2026-10-22 · board-actions · plan complete; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)
 - 2026-10-22 · fix-security-hardening: the runner drops every `ANTHROPIC_*` and `CLAUDE*` variable but `CLAUDE_CONFIG_DIR` (it dropped only the two key variables), starts `claude` and cmd.exe by absolute paths from absolute `PATH` entries only, and the spike uses the same env. Review fix: the child's `PATH` keeps only absolute entries, and on Windows `NoDefaultCurrentDirectoryInExePath=1` (a `node.bat` in the repo ran through an unreadable shim).

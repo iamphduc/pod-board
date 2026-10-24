@@ -137,3 +137,8 @@ Consequences: macOS and Linux breakage (such as temp-path differences) and commi
 Context: the security review asked for a byte cap on transcript reads (`transcript-files.ts`), since a huge file can use a lot of memory. On this machine agent transcripts reach 25 MB and sessions 136 MB.
 Decision: no size cap on transcripts. A hard cap would hide real agents or show the wrong state for them.
 Consequences: a read takes about 2–3× the file's size in memory for a moment; the parsed run is cached after, keyed by size and mtime. Switch to a line-by-line reader only if the board gets slow or heavy.
+
+## 2026-10-23 — continue on answered queue entries
+Context: claude-pod #96 makes pod read ` **Answer (human):**` lines at each wave start and on resume. A run stopped at a halt or a decision gate doesn't resume by itself, so answering on the board left it waiting with no reply offered.
+Decision: once every pending `PENDING` or `BLOCKED` entry of a plan waiting on you has an answer (at least one) and no agent runs, the board offers `continue` with signal `answered`, and it is sendable: the Continue button and auto-continue may send it. Your answer is the same consent as a merge. Any other reply wins over it, and its key is a hash of the answered lines, so auto-continue sends once per set of answers.
+Consequences: a toggled run resumes on its own once you answer; pod may stop again if a `BLOCKED` cause is still there, and that new entry is a new stop. Fix runs get none (no entry joins them).
