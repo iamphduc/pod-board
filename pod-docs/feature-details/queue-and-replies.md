@@ -39,6 +39,7 @@ Which reply pod waits for on a run (`continue`, `go`, or `try`), why, and the ch
 - A queue body can quote `**Answer (human):**` (pod's own gate entries do). A marker before the `**Resolution:**` is body text, not an answer (review round 1 of #33).
 - The session is the one whose agent wrote last; a new chat for the same run with no agents yet still shows the old session.
 - A fresh plan reads `go` even if pod never asked for it.
+- Every pending `PENDING → human` entry of the plan counts, "Someday" ones included, so an old one you never answered holds `answered` back.
 - `answered` reads only the plan's own entries. The Waiting on you list also shows the repo's entries that join no plan; an unanswered one there doesn't hold the reply back.
 - Fix runs get no `answered`: no queue field joins an entry to `fix-<slug>`.
 - A plan whose sprints are all `done`, with no halt, hand-back, or agent, isn't a run, so an answered `PENDING` there shows no reply.
