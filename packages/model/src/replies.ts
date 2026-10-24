@@ -4,19 +4,33 @@
 import type { AgentRun, BoardRepo } from './board.ts'
 import { fixPr, fixRunAgents, fixRunNames, fixWaitingPr, listedFixRuns } from './fix-runs.ts'
 import { handBackPr, isBlockedSlice, isHalted, isPlanAgent, isRun, isRunning, isSliceDone, pendingHandBack, planAgentRunning, waveWaitingPr } from './pipeline.ts'
+import { asksYou } from './queue-answer.ts'
 import type { PlanModel } from './run-model.ts'
 
 export type ReplyWord = 'continue' | 'go' | 'try'
-export type ReplySignal = 'wave-waiting' | 'wave-merged' | 'sprint-done' | 'final-waiting' | 'final-merged' | 'fix-waiting' | 'fix-merged' | 'not-started'
+export type ReplySignal =
+  | 'wave-waiting'
+  | 'wave-merged'
+  | 'sprint-done'
+  | 'final-waiting'
+  | 'final-merged'
+  | 'fix-waiting'
+  | 'fix-merged'
+  | 'not-started'
+  | 'answered'
 /**
  * `key` names one pod stop, so a stop gets one automatic send: `<signal>:<pr>` when `pr` is set,
- * `sprint-done:<done sprint slug>`, `not-started:<plan slug>`, or `try:<plan slug>`. Never built from `why`.
+ * `sprint-done:<done sprint slug>`, `not-started:<plan slug>`, `try:<plan slug>`, or
+ * `answered:<plan slug>:<count>:<hash of the answered lines>`. Never built from `why`.
  */
 export type RunReply = { reply: ReplyWord; signal: ReplySignal; why: string; pr?: number; key: string }
 export type ReplySession = { id: string; startedAt?: number; repoPath: string; resume?: string }
 
-/** The signals where pod already waits for `continue`. The `*-waiting` ones need your merge first; `not-started` is never a send signal. */
-export const SEND_SIGNALS: ReadonlySet<ReplySignal> = new Set<ReplySignal>(['wave-merged', 'sprint-done', 'final-merged', 'fix-merged'])
+/**
+ * The signals where pod already waits for `continue`, or where you answered what it stopped on. The
+ * `*-waiting` ones need your merge first; `not-started` is never a send signal.
+ */
+export const SEND_SIGNALS: ReadonlySet<ReplySignal> = new Set<ReplySignal>(['wave-merged', 'sprint-done', 'final-merged', 'fix-merged', 'answered'])
 
 /** A session id safe to put in a shell command. */
 const SESSION_ID = /^[A-Za-z0-9-]{1,64}$/
@@ -33,8 +47,37 @@ export function runReplies(repo: BoardRepo, run: string, now: number): RunReply[
 }
 
 function planReplies(repo: BoardRepo, plan: PlanModel, now: number): RunReply[] {
-  if (!isRun(repo, plan, now) || isHalted(plan) || planAgentRunning(repo, plan, now)) return []
+  if (!isRun(repo, plan, now) || planAgentRunning(repo, plan, now)) return []
+  // A halt hides the stop replies: only answering it moves pod on. Any stop reply wins over answered.
+  const stop = isHalted(plan) ? [] : stopReplies(repo, plan, now)
+  if (stop.length > 0) return stop
+  const done = answeredReply(plan)
+  return done ? [done] : []
+}
 
+/**
+ * `continue` once you answered every pending PENDING or BLOCKED of the plan waiting on you (the ones the
+ * Waiting on you list lets you answer), at least one: pod reads the answers only when it resumes.
+ */
+function answeredReply(plan: PlanModel): RunReply | undefined {
+  const asks = plan.queue.filter(asksYou)
+  if (asks.length === 0 || asks.some((e) => e.answer === undefined)) return undefined
+  const n = asks.length
+  const why = n === 1 ? 'You answered 1 entry: reply continue so pod reads it.' : `You answered ${n} entries: reply continue so pod reads them.`
+  return { reply: 'continue', signal: 'answered', why, key: `answered:${plan.slug}:${n}:${fnv1a(asks.map((e) => e.line).join('\n'))}` }
+}
+
+/** FNV-1a, 32-bit, as 8 hex digits. A stable name for a set of lines, not a secret. */
+function fnv1a(text: string): string {
+  let h = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i)
+    h = Math.imul(h, 0x01000193) >>> 0
+  }
+  return h.toString(16).padStart(8, '0')
+}
+
+function stopReplies(repo: BoardRepo, plan: PlanModel, now: number): RunReply[] {
   const waiting = pendingHandBack(repo, plan)
   if (waiting !== undefined) return [mergeFirst('final-waiting', waiting), { reply: 'try', signal: 'final-waiting', why: 'Starts the app so you can try it.', key: `try:${plan.slug}` }]
   // handBackPr reads only pending entries, so a merged PR here is a hand-back pod hasn't resolved yet.
