@@ -14,7 +14,7 @@ Which reply pod waits for on a run (`continue`, `go`, or `try`), why, and the ch
   4. `wave-merged`: a wave whose unfinished slices are all `pushed` and whose PR `gh` reports merged → `continue`.
   5. `sprint-done`: the current sprint has no doc and an earlier one is `done` → `continue`.
   6. `not-started`: a live plan whose sprints are all `planned` with no doc → `go`, "Only if pod asked for go."
-  7. `answered`: none of the above (or the plan is halted, which hides 1–6), and every pending `PENDING` or `BLOCKED` entry of the plan waiting on you (the ones you answer in Waiting on you) has an answer, at least one → `continue`, "You answered N entries: reply continue so pod reads them." It goes away once pod rewrites their Resolution from `pending`.
+  7. `answered`: none of the above (or the plan is halted, which hides 1–6), at least one pending `PENDING` or `BLOCKED` entry of the plan waiting on you (the ones you answer in Waiting on you) has an answer, and no pending `BLOCKED` of it is unanswered → `continue`, "You answered N entries: reply continue so pod reads them." N counts the answered pending entries. An unanswered `PENDING` doesn't hold it back. It goes away once pod rewrites their Resolution from `pending`.
 - **Fix run:** a reviewed open PR → `fix-waiting` `continue` (merge first); its PR merged → `fix-merged` `continue`.
 - **Sendable:** `continue` only on `wave-merged`, `sprint-done`, `final-merged`, `fix-merged` (pod already waits for it), or `answered` (you answered what it stopped on); `go` only on `not-started`. `try` and the `*-waiting` signals are never sendable, and the board never sends an answer's text.
 - **Stop key:** each reply carries a key naming one pod stop (`<signal>:<pr>`, `sprint-done:<sprint>`, `not-started:<plan>`, `answered:<plan>:<count>:<hash>`, the hash an FNV-1a of the answered entries' lines), never built from the text. Auto-send sends a key once.
@@ -27,7 +27,7 @@ Which reply pod waits for on a run (`continue`, `go`, or `try`), why, and the ch
 - **`go` only from a button** ([decision](../decisions.md#2026-10-21--go-only-from-a-button)): a wrong `go` starts work the human didn't mean to start. Turned down: inferring "waiting for go" from transcripts. The Go row shows on any fresh plan, and its `why` says to send it only if pod asked.
 - **A toggle per run, off by default** ([decision](../decisions.md#2026-10-21--a-continue-toggle-per-run)): `continue` only on clear disk signals; any stop without one gets no automatic send. Trade-off: a stop that pod waits on but the board can't see still needs a press or the chat.
 - **No reply while pod works:** a reply sent mid-turn queues behind pod's work.
-- **A halt waits for your answers, then `continue`** ([decision](../decisions.md#2026-10-23--continue-on-answered-queue-entries)): pod reads ` **Answer (human):**` lines only at a wave start or on resume (claude-pod #96), so answering on the board isn't enough; until every entry is answered the halt shows no reply. An answered `BLOCKED` resolves only if pod re-checks and finds the cause gone, so pod may stop again with a new entry, which is a new key.
+- **A halt waits for your answers, then `continue`** ([decision](../decisions.md#2026-10-23--continue-on-answered-queue-entries)): pod reads ` **Answer (human):**` lines only at a wave start or on resume (claude-pod #96), so answering on the board isn't enough. A `BLOCKED` halts pod, so while one is unanswered there is no reply; a `PENDING` only defers (pod goes on with the value in use), so open ones, such as "Someday" entries, don't hold it back. An answered `BLOCKED` resolves only if pod re-checks and finds the cause gone, so pod may stop again with a new entry, which is a new key.
 - **The key names the stop, not the text:** a new wave or sprint makes a new key, so one stop is sent once, even after a restart.
 - **The session from subagent transcripts only** ([plan](../plans/board-actions.md#key-decisions)): pod doesn't record its session id yet, and the board never reads the main chat or prompt text.
 - **`resume` only for a plain id:** the command is meant for a shell; an id with shell characters gets none.
@@ -39,7 +39,6 @@ Which reply pod waits for on a run (`continue`, `go`, or `try`), why, and the ch
 - A queue body can quote `**Answer (human):**` (pod's own gate entries do). A marker before the `**Resolution:**` is body text, not an answer (review round 1 of #33).
 - The session is the one whose agent wrote last; a new chat for the same run with no agents yet still shows the old session.
 - A fresh plan reads `go` even if pod never asked for it.
-- Every pending `PENDING → human` entry of the plan counts, "Someday" ones included, so an old one you never answered holds `answered` back.
 - `answered` reads only the plan's own entries. The Waiting on you list also shows the repo's entries that join no plan; an unanswered one there doesn't hold the reply back.
 - Fix runs get no `answered`: no queue field joins an entry to `fix-<slug>`.
 - A plan whose sprints are all `done`, with no halt, hand-back, or agent, isn't a run, so an answered `PENDING` there shows no reply.
@@ -52,4 +51,4 @@ Which reply pod waits for on a run (`continue`, `go`, or `try`), why, and the ch
 - 2026-10-22 · board-actions plan fix · fixed: `final-merged` on an archived, claimed plan after the final merge (it gave no reply); an entry quoting the answer marker in its body now stays answerable.
 - 2026-10-22 · board-actions · plan complete; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)
 - 2026-10-23 · fix-hardening-2 · fixed: the copied `cd` single-quotes a POSIX path, so `$(...)` and backticks in it don't run.
-- 2026-10-23 · fix-answered-continue · added: the `answered` signal, a sendable `continue` once you answered every entry a stopped run waits on you for, halted runs included.
+- 2026-10-23 · fix-answered-continue · added: the `answered` signal, a sendable `continue` once you answered a stopped run's entries and no `BLOCKED` of it is unanswered, halted runs included.
