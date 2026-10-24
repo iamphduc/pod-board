@@ -68,6 +68,13 @@ const claim = (plan: string): Claim => ({ portBase: 3100, repoPath: '/r', plan }
 const handBack = (n: number) =>
   `- \`[2026-10-22 · PENDING · orchestrator → human · plan: alpha]\` Plan complete: merge https://github.com/o/r/pull/${n} **Resolution:** pending`
 
+/** A pod halt, as the orchestrator writes it, and the same line with your answer at its end. */
+const HALT = '- `[2026-10-22 · BLOCKED · orchestrator → human · plan: alpha]` Halted at gate 1. **Resolution:** pending'
+const answered = (line: string, text = 'retry') => `${line} **Answer (human):** ${text}`
+const DECISION = '- `[2026-10-22 · PENDING · orchestrator → human · plan: alpha · sprint: one]` Pick a format. **Resolution:** pending'
+/** Sprint one in progress: no other reply. */
+const WORK: BoardRow[] = [[1, 'A1', '—', 'in progress']]
+
 const PUSHED: BoardRow[] = [
   [1, 'A1', `${link(5)} merged`, 'done'],
   [2, 'B1', link(7), 'pushed'],
@@ -117,6 +124,7 @@ const BY_SIGNAL: Record<ReplySignal, { repo: BoardRepo; run: string }> = {
   'not-started': { repo: planRepo(FRESH), run: 'alpha' },
   'fix-waiting': { repo: fixRepo('open'), run: FIX },
   'fix-merged': { repo: fixRepo('merged'), run: FIX },
+  answered: { repo: planRepo({ docs: { one: WORK }, queue: [answered(HALT)] }), run: 'alpha' },
 }
 const SIGNALS = Object.keys(BY_SIGNAL) as ReplySignal[]
 const WORDS: ReplyWord[] = ['continue', 'go', 'try']
@@ -253,6 +261,42 @@ describe('autoSends', () => {
       { repoId: 'id-r', run: 'alpha', session: 'sess-1', key: 'sprint-done:one' },
     ])
     expect(autoSends(board(done), [toggle('alpha', 'sprint-done:one')], NOW, always)).toEqual([])
+  })
+
+  it('sends an answered stop once per set of answers', () => {
+    const at = (queue: string[]) => planRepo({ docs: { one: WORK }, queue })
+    const first = autoSends(board(at([answered(HALT)])), [toggle('alpha')], NOW, always)
+    expect(first).toHaveLength(1)
+    expect(first[0]!.key).toMatch(/^answered:alpha:1:/)
+    // The same answers after a send: nothing again.
+    expect(autoSends(board(at([answered(HALT)])), [toggle('alpha', first[0]!.key)], NOW, always)).toEqual([])
+    // pod resumed, applied them, and stopped on a new gate you answered: a new key, sent.
+    const applied = answered(HALT).replace('**Resolution:** pending', '**Resolution:** 2026-10-22 — retried')
+    const next = autoSends(board(at([applied, answered(DECISION, 'json')])), [toggle('alpha', first[0]!.key)], NOW, always)
+    expect(next).toHaveLength(1)
+    expect(next[0]!.key).not.toBe(first[0]!.key)
+    // The halt not answered yet: nothing, even with an answered PENDING.
+    expect(autoSends(board(at([HALT, answered(DECISION)])), [toggle('alpha')], NOW, always)).toEqual([])
+    // An open PENDING beside the answered halt doesn't hold it back, nor change its key.
+    expect(autoSends(board(at([answered(HALT), DECISION])), [toggle('alpha')], NOW, always)).toEqual(first)
+    // Busy session: nothing.
+    expect(autoSends(board(at([answered(HALT)])), [toggle('alpha')], NOW, () => false)).toEqual([])
+  })
+
+  it('never auto-sends the same answered key twice', () => {
+    // A pod that never rewrites the Resolution shows the same answered key at every later stop.
+    const repo = planRepo({ docs: { one: WORK }, queue: [answered(HALT)] })
+    const key = keyOf('answered')
+    // It sent the answered key, then another stop (lastKey moved on): still not sent again.
+    const sent: AutoToggle = { repoId: 'id-r', run: 'alpha', lastKey: 'sprint-done:one', answeredKeys: [key] }
+    expect(autoSends(board(repo), [sent], NOW, always)).toEqual([])
+    // Another answered key on record doesn't stop this one.
+    expect(autoSends(board(repo), [{ ...sent, answeredKeys: ['answered:alpha:1:00000000'] }], NOW, always)).toEqual([
+      { repoId: 'id-r', run: 'alpha', session: 'sess-1', key },
+    ])
+    // Other signals don't read the record.
+    const merged = BY_SIGNAL['wave-merged']
+    expect(autoSends(board(merged.repo), [{ repoId: 'id-r', run: 'alpha', answeredKeys: ['wave-merged:7'] }], NOW, always)).toHaveLength(1)
   })
 
   it('skips busy or unknown sessions', () => {

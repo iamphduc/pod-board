@@ -50,6 +50,7 @@ The run's `needsYou` entries under the main view: type chip, date, route, and bo
 
 ## Watch out
 
+- Screen 1's per-run siblings (`ReplyPanel`, `FixRun`, `Pipeline`, `WaitingOnYou`) each need their own key prefix (`reply:`, `fix:`, `pipeline:`, `waiting:`). With one shared `<repoId>/<plan>` key, React left an old Reply panel on the page after its reply went away (PR #41).
 - Ship's final PR before the hand-back comes from `gh` on head branch `<plan-slug>`: a fixture copy shows it only as a git repo whose `origin` is the real GitHub repo.
 - A pause between close-out steps over 30 minutes drops the plan until the next agent starts, unless its hand-back entry is pending.
 - A plan's reviewers and planners join only through `AgentRun.plan` (see [run-model.md](run-model.md)); change those rules only with the corpus check ([decision](../decisions.md#2026-10-19--fix-the-dispatch-field-regression-with-a-corpus-check)).
@@ -86,3 +87,4 @@ The run's `needsYou` entries under the main view: type chip, date, route, and bo
 - 2026-10-22 · resume-runs U1 · an `auto-continue` switch beside the run's state chip turns the board's automatic `continue` on or off per run, and the Reply panel's sendable rows get Continue or Go buttons that resume the session from the board.
 - 2026-10-22: a claimed archived plan stays a run while its hand-back entry is pending, also after the PR merges; the final PR stops waiting on you once merged (board-actions plan fix, review of #33).
 - 2026-10-22 · board-actions · plan complete: Merge, action log, Reply panel with Continue and Go, the auto-continue switch, and Waiting on you; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)
+- 2026-10-24 · fix-answered-continue · fixed: the Reply panel stayed on the page after its reply went away, because screen 1's siblings shared one key.

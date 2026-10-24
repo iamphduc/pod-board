@@ -183,6 +183,8 @@ function fixRepo(state: PrStatus['state']): BoardRepo {
   }
 }
 
+const HALT = '- `[2026-10-22 · BLOCKED · orchestrator → human · plan: alpha]` Halted at gate 1. **Resolution:** pending'
+
 const PUSHED: BoardRow[] = [
   [1, 'A1', `${link(5)} merged`, 'done'],
   [2, 'B1', link(7), 'pushed'],
@@ -202,6 +204,7 @@ const BY_SIGNAL: Record<ReplySignal, { repo: BoardRepo; run: string; sends: Send
   'not-started': { repo: planRepo(FRESH), run: 'alpha', sends: { go: 'go' } },
   'fix-waiting': { repo: fixRepo('open'), run: FIX, sends: {} },
   'fix-merged': { repo: fixRepo('merged'), run: FIX, sends: { continue: 'continue' } },
+  answered: { repo: planRepo({ docs: { one: [[1, 'A1', '—', 'in progress']] }, queue: [`${HALT} **Answer (human):** retry`] }), run: 'alpha', sends: { continue: 'continue' } },
 }
 
 const merged = (session: string): BoardRepo => {
@@ -267,5 +270,15 @@ describe('send buttons', () => {
     expect(replyPanel(run(), BY_SIGNAL['not-started'].repo, NOW)!.rows).toEqual([{ key: 'go', word: 'go', why: 'Only if pod asked for go.', send: 'go' }])
     // Each sending row's word sends: continue on the merged wave.
     expect(replyPanel(run(), BY_SIGNAL['wave-merged'].repo, NOW)!.rows).toEqual([{ key: 'continue', word: 'continue', why: 'PR #7 merged.', send: 'continue' }])
+  })
+})
+
+describe('answered stop', () => {
+  it('offers continue with its why once you answered the halt', () => {
+    const view = replyPanel(run(), BY_SIGNAL.answered.repo, NOW)
+    expect(view!.rows).toEqual([{ key: 'continue', word: 'continue', why: 'You answered 1 entry: reply continue so pod reads it.', send: 'continue' }])
+    // The halt not answered yet: no panel.
+    const open = planRepo({ docs: { one: [[1, 'A1', '—', 'in progress']] }, queue: [HALT] })
+    expect(replyPanel(run(), open, NOW)).toBeUndefined()
   })
 })
