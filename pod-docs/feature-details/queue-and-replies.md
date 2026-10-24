@@ -14,11 +14,11 @@ Which reply pod waits for on a run (`continue`, `go`, or `try`), why, and the ch
   4. `wave-merged`: a wave whose unfinished slices are all `pushed` and whose PR `gh` reports merged → `continue`.
   5. `sprint-done`: the current sprint has no doc and an earlier one is `done` → `continue`.
   6. `not-started`: a live plan whose sprints are all `planned` with no doc → `go`, "Only if pod asked for go."
-  7. `answered`: none of the above (or the plan is halted, which hides 1–6), at least one pending `PENDING` or `BLOCKED` entry of the plan waiting on you (the ones you answer in Waiting on you) has an answer, and no pending `BLOCKED` of it is unanswered → `continue`, "You answered N entries: reply continue so pod reads them." N counts the answered pending entries. An unanswered `PENDING` doesn't hold it back. It goes away once pod rewrites their Resolution from `pending`.
+  7. `answered`: none of the above (or the plan is halted, which hides 1–6), at least one pending `PENDING` or `BLOCKED` entry of the plan routed `→ human` has an answer, and no pending `BLOCKED` of it routed `→ human` is unanswered → `continue`, "You answered N entries: reply continue so pod reads them." N counts the answered pending `→ human` entries. An unanswered `PENDING` doesn't hold it back, nor does a `BLOCKED` routed elsewhere (gate 1: the engineer's `BLOCKED · engineer → orchestrator` beside the orchestrator's halt to you), though Waiting on you lists every `BLOCKED`. It goes away once pod rewrites their Resolution from `pending`.
 - **Fix run:** a reviewed open PR → `fix-waiting` `continue` (merge first); its PR merged → `fix-merged` `continue`.
 - **Sendable:** `continue` only on `wave-merged`, `sprint-done`, `final-merged`, `fix-merged` (pod already waits for it), or `answered` (you answered what it stopped on); `go` only on `not-started`. `try` and the `*-waiting` signals are never sendable, and the board never sends an answer's text.
 - **Stop key:** each reply carries a key naming one pod stop (`<signal>:<pr>`, `sprint-done:<sprint>`, `not-started:<plan>`, `answered:<plan>:<count>:<hash>`, the hash an FNV-1a of the answered entries' lines), never built from the text. Auto-send sends a key once.
-- **Auto-send:** for each toggle on, in order: repo on the Board, a sendable `continue` whose key isn't the toggle's last key, a session with a safe id, and that session idle. At most one send per session. It only ever sends `continue`.
+- **Auto-send:** for each toggle on, in order: repo on the Board, a sendable `continue` whose key isn't the toggle's last key (nor, for `answered`, one of the toggle's sent `answeredKeys`, the newest 20), a session with a safe id, and that session idle. At most one send per session. It only ever sends `continue`.
 - **Session:** of the run's agents, the one that wrote last; its `session` is the id, its start is the earliest agent start in that session. `claude --resume <id>` only when the id matches `^[A-Za-z0-9-]{1,64}$`.
 - **Queue answers:** an entry is answerable when it is `PENDING` or `BLOCKED`, addressed to `human`, still pending, and has no answer. Only a `**Answer (human):**` marker after the entry's `**Resolution:**` counts as its answer.
 
@@ -40,6 +40,7 @@ Which reply pod waits for on a run (`continue`, `go`, or `try`), why, and the ch
 - The session is the one whose agent wrote last; a new chat for the same run with no agents yet still shows the old session.
 - A fresh plan reads `go` even if pod never asked for it.
 - `answered` reads only the plan's own entries. The Waiting on you list also shows the repo's entries that join no plan; an unanswered one there doesn't hold the reply back.
+- A pod without claude-pod #96 never rewrites an answered entry's Resolution, so the same `answered` comes back at each later stop with no other reply. Auto-send remembers the `answered` keys it sent and never sends one twice; Continue still can. Turning the toggle off clears the list.
 - Fix runs get no `answered`: no queue field joins an entry to `fix-<slug>`.
 - A plan whose sprints are all `done`, with no halt, hand-back, or agent, isn't a run, so an answered `PENDING` there shows no reply.
 - The `cd` line is `cd '<path>'` for a POSIX path (each `'` written `'\''`) and `cd "<path>"` for a Windows path. PowerShell and Git Bash still expand a `$` inside the Windows form.
@@ -51,4 +52,4 @@ Which reply pod waits for on a run (`continue`, `go`, or `try`), why, and the ch
 - 2026-10-22 · board-actions plan fix · fixed: `final-merged` on an archived, claimed plan after the final merge (it gave no reply); an entry quoting the answer marker in its body now stays answerable.
 - 2026-10-22 · board-actions · plan complete; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)
 - 2026-10-23 · fix-hardening-2 · fixed: the copied `cd` single-quotes a POSIX path, so `$(...)` and backticks in it don't run.
-- 2026-10-23 · fix-answered-continue · added: the `answered` signal, a sendable `continue` once you answered a stopped run's entries and no `BLOCKED` of it is unanswered, halted runs included.
+- 2026-10-23 · fix-answered-continue · added: the `answered` signal, a sendable `continue` once you answered a stopped run's entries and no `BLOCKED` of it is unanswered, halted runs included. Then: only `→ human` entries count, and auto-send sends each `answered` key once.
