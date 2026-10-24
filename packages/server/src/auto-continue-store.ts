@@ -6,14 +6,17 @@
 import { readFileSync } from 'node:fs'
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import type { AutoToggle } from '@pod-board/model'
+import { withAnsweredKey, type AutoToggle } from '@pod-board/model'
 
 export type AutoContinueStore = {
   /** The toggles that are on, in the order they were turned on. */
   list(): AutoToggle[]
   /** On adds the toggle with no `lastKey` (again: clears it); off removes it. Throws when the save fails, and nothing changes. */
   set(repoId: string, run: string, on: boolean): Promise<void>
-  /** Saves the stop a toggle last sent for. `false` when the toggle is gone; throws when the save fails, and nothing changes. */
+  /**
+   * Saves the stop a toggle last sent for, and an `answered` key in its `answeredKeys` too. `false` when the
+   * toggle is gone; throws when the save fails, and nothing changes.
+   */
   saveKey(repoId: string, run: string, key: string): Promise<boolean>
 }
 
@@ -53,8 +56,14 @@ export function createAutoContinueStore(o: { file: string; write?: (file: string
       })
     },
     saveKey: (repoId, run, key) =>
-      update((current) => (current.some((t) => same(t, repoId, run)) ? current.map((t) => (same(t, repoId, run) ? { ...t, lastKey: key } : t)) : undefined)),
+      update((current) => (current.some((t) => same(t, repoId, run)) ? current.map((t) => (same(t, repoId, run) ? saved(t, key) : t)) : undefined)),
   }
+}
+
+/** The toggle after a send of `key`. */
+function saved(t: AutoToggle, key: string): AutoToggle {
+  const answeredKeys = withAnsweredKey(t.answeredKeys, key)
+  return answeredKeys === undefined ? { ...t, lastKey: key } : { ...t, lastKey: key, answeredKeys }
 }
 
 /** The good toggles in the file, first of each run only. Missing, unreadable, or bad JSON → none. */
@@ -70,10 +79,13 @@ function readToggles(file: string): AutoToggle[] {
   const out: AutoToggle[] = []
   for (const r of runs) {
     if (!r || typeof r !== 'object' || Array.isArray(r)) continue
-    const { repoId, run, lastKey } = r as Record<string, unknown>
+    const { repoId, run, lastKey, answeredKeys } = r as Record<string, unknown>
     if (typeof repoId !== 'string' || typeof run !== 'string' || (lastKey !== undefined && typeof lastKey !== 'string')) continue
     if (out.some((t) => t.repoId === repoId && t.run === run)) continue
-    out.push(lastKey === undefined ? { repoId, run } : { repoId, run, lastKey })
+    const t: AutoToggle = lastKey === undefined ? { repoId, run } : { repoId, run, lastKey }
+    // A bad list is dropped and the toggle kept; only its strings count.
+    if (Array.isArray(answeredKeys)) t.answeredKeys = answeredKeys.filter((k): k is string => typeof k === 'string')
+    out.push(t)
   }
   return out
 }

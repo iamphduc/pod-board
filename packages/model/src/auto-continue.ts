@@ -4,8 +4,21 @@
 import type { Board, BoardRepo } from './board.ts'
 import { SEND_SIGNALS, replySession, runReplies, type RunReply } from './replies.ts'
 
-/** A run whose auto-continue toggle is on. `lastKey` is the stop it last sent for. */
-export type AutoToggle = { repoId: string; run: string; lastKey?: string }
+/**
+ * A run whose auto-continue toggle is on. `lastKey` is the stop it last sent for; `answeredKeys` the
+ * `answered` keys it sent (newest last, at most `ANSWERED_KEYS_MAX`), so a pod that never rewrites an
+ * answered entry's Resolution doesn't get the same answers sent again after another stop.
+ */
+export type AutoToggle = { repoId: string; run: string; lastKey?: string; answeredKeys?: string[] }
+
+/** How many sent `answered` keys a toggle remembers. */
+export const ANSWERED_KEYS_MAX = 20
+
+/** The toggle's `answeredKeys` after a send of `key`: an `answered` key joins once, newest last, bounded. */
+export function withAnsweredKey(keys: string[] | undefined, key: string): string[] | undefined {
+  if (!key.startsWith('answered:')) return keys
+  return [...(keys ?? []).filter((k) => k !== key), key].slice(-ANSWERED_KEYS_MAX)
+}
 
 /** One automatic `continue` to send now. */
 export type AutoSend = { repoId: string; run: string; session: string; key: string }
@@ -40,6 +53,7 @@ export function autoSends(board: Board, toggles: AutoToggle[], now: number, idle
     if (!repo) continue
     const reply = sendableFrom(runReplies(repo, t.run, now), 'continue')
     if (!reply || reply.reply !== 'continue' || reply.key === t.lastKey) continue
+    if (reply.signal === 'answered' && t.answeredKeys?.includes(reply.key)) continue
     const session = replySession(repo, t.run, now)
     if (!session?.resume || taken.has(session.id)) continue
     if (!idle(repo, session.id)) continue

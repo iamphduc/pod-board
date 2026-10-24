@@ -32,6 +32,9 @@ export type ReplySession = { id: string; startedAt?: number; repoPath: string; r
  */
 export const SEND_SIGNALS: ReadonlySet<ReplySignal> = new Set<ReplySignal>(['wave-merged', 'sprint-done', 'final-merged', 'fix-merged', 'answered'])
 
+/** A queue route addressed to you: `… → human` or `… -> human`. */
+const TO_HUMAN = /(?:→|->)\s*human\s*$/i
+
 /** A session id safe to put in a shell command. */
 const SESSION_ID = /^[A-Za-z0-9-]{1,64}$/
 
@@ -56,13 +59,15 @@ function planReplies(repo: BoardRepo, plan: PlanModel, now: number): RunReply[] 
 }
 
 /**
- * `continue` once you answered at least one pending PENDING or BLOCKED of the plan waiting on you (the ones
- * the Waiting on you list lets you answer) and no pending BLOCKED of it is unanswered: pod reads the answers
+ * `continue` once you answered at least one pending PENDING or BLOCKED of the plan routed `→ human` and no
+ * pending BLOCKED of it routed to you is unanswered: pod reads the answers
  * only when it resumes. A BLOCKED halts pod; an open PENDING only defers (pod uses the value in use), so it
  * doesn't hold the reply back. N and the key are the answered entries.
  */
 function answeredReply(plan: PlanModel): RunReply | undefined {
-  const asks = plan.queue.filter(asksYou)
+  // Routed to you only: `needsYou` counts every BLOCKED, but an engineer's BLOCKED to the orchestrator
+  // (gate 1, beside the halt you answer) is pod's to resolve, not yours.
+  const asks = plan.queue.filter((e) => asksYou(e) && TO_HUMAN.test(e.route))
   if (asks.some((e) => e.type === 'BLOCKED' && e.answer === undefined)) return undefined
   const answered = asks.filter((e) => e.answer !== undefined)
   const n = answered.length
