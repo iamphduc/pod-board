@@ -87,7 +87,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
           </div>
         )}
         {repo && selected?.plan !== undefined && (
-          <ReplyPanel key={`${repo.id}/${selected.plan}`} view={reply} target={{ repoId: repo.id, run: selected.plan }} />
+          <ReplyPanel key={`reply:${repo.id}/${selected.plan}`} view={reply} target={{ repoId: repo.id, run: selected.plan }} />
         )}
         {!board ? (
           <p className="muted">{stream === 'lost' ? 'Waiting for the server…' : 'Connecting to the server…'}</p>
@@ -97,18 +97,18 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
             <p className="muted">Add a repo's folder with the Add a repo form to see its pod runs.</p>
           </div>
         ) : fixPipeline && repo ? (
-          <FixRun key={`${repo.id}/${selected.plan}`} repo={repo} run={selected} pipeline={fixPipeline} agent={view === 'agent' ? agent : undefined} now={now} />
+          <FixRun key={`fix:${repo.id}/${selected.plan}`} repo={repo} run={selected} pipeline={fixPipeline} agent={view === 'agent' ? agent : undefined} now={now} />
         ) : pipeline && repo && view === 'board' && selected.plan !== undefined ? (
           <BoardScreen repo={repo} plan={selected.plan} {...(slice === undefined ? {} : { slice })} now={now} />
         ) : pipeline && repo ? (
           <>
-            <Pipeline key={`${repo.id}/${selected.plan}`} pipeline={pipeline} repoId={repo.id} />
+            <Pipeline key={`pipeline:${repo.id}/${selected.plan}`} pipeline={pipeline} repoId={repo.id} />
             <SliceLog log={pipeline.log} />
           </>
         ) : (
           <p className="muted">{emptyMessage(selected, repo)}</p>
         )}
-        {board && selected && repo && <WaitingOnYou key={`${repo.id}/${selected.plan}`} repo={repo} run={selected} />}
+        {board && selected && repo && <WaitingOnYou key={`waiting:${repo.id}/${selected.plan}`} repo={repo} run={selected} />}
         {board && selected && <OtherActivity list={others} />}
         {board && <ActionLog entries={board.actions} now={now} />}
       </main>
