@@ -275,8 +275,10 @@ describe('autoSends', () => {
     const next = autoSends(board(at([applied, answered(DECISION, 'json')])), [toggle('alpha', first[0]!.key)], NOW, always)
     expect(next).toHaveLength(1)
     expect(next[0]!.key).not.toBe(first[0]!.key)
-    // Not all answered yet: nothing.
-    expect(autoSends(board(at([answered(HALT), DECISION])), [toggle('alpha')], NOW, always)).toEqual([])
+    // The halt not answered yet: nothing, even with an answered PENDING.
+    expect(autoSends(board(at([HALT, answered(DECISION)])), [toggle('alpha')], NOW, always)).toEqual([])
+    // An open PENDING beside the answered halt doesn't hold it back, nor change its key.
+    expect(autoSends(board(at([answered(HALT), DECISION])), [toggle('alpha')], NOW, always)).toEqual(first)
     // Busy session: nothing.
     expect(autoSends(board(at([answered(HALT)])), [toggle('alpha')], NOW, () => false)).toEqual([])
   })

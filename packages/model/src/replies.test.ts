@@ -301,13 +301,18 @@ describe('answered stop', () => {
     expect(one(at([answer(halt), answer(decision, 'json')])).key).toMatch(/^answered:alpha:2:[0-9a-f]{8}$/)
   })
 
-  it('waits until you answered every entry waiting on you', () => {
-    // One answered, one PENDING → human still open: you aren't done.
-    expect(replies(at([answer(halt), decision]))).toEqual([])
+  it('an unanswered BLOCKED holds it back, an unanswered PENDING does not', () => {
+    // A PENDING only defers (pod uses the value in use), so an open one doesn't hold the reply back or count.
+    expect(one(at([answer(halt), decision])).why).toBe('You answered 1 entry: reply continue so pod reads it.')
+    const someday = queueLine('PENDING', 'orchestrator → human', 'plan: alpha · sprint: one', '**Someday (Look):** tighten the margins.')
+    expect(one(at([answer(halt), decision, someday])).why).toBe('You answered 1 entry: reply continue so pod reads it.')
+    // An unanswered BLOCKED halts pod: nothing, even with an answered PENDING beside it.
     expect(replies(at([halt, answer(decision)]))).toEqual([])
     // Any BLOCKED waits on you, whatever its route.
     expect(replies(at([answer(halt), engineerBlock]))).toEqual([])
     expect(one(at([answer(halt), answer(engineerBlock)])).signal).toBe('answered')
+    // Only unanswered PENDINGs: nothing to read yet.
+    expect(replies(at([decision, someday]))).toEqual([])
   })
 
   it('counts only pending PENDING and BLOCKED entries waiting on you for this plan', () => {
@@ -374,6 +379,8 @@ describe('answered stop', () => {
     // A line that isn't an answered entry doesn't change it.
     const note = queueLine('NOTE', 'engineer → human', 'plan: alpha', 'FYI.')
     expect(key([answer(halt), note])).toBe(key([answer(halt)]))
+    // Nor does an unanswered PENDING: the key names the answered entries.
+    expect(key([answer(halt), decision])).toBe(key([answer(halt)]))
     // A new set of answers is a new stop.
     const keys = new Set([
       key([answer(halt)]),
