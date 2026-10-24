@@ -56,15 +56,19 @@ function planReplies(repo: BoardRepo, plan: PlanModel, now: number): RunReply[] 
 }
 
 /**
- * `continue` once you answered every pending PENDING or BLOCKED of the plan waiting on you (the ones the
- * Waiting on you list lets you answer), at least one: pod reads the answers only when it resumes.
+ * `continue` once you answered at least one pending PENDING or BLOCKED of the plan waiting on you (the ones
+ * the Waiting on you list lets you answer) and no pending BLOCKED of it is unanswered: pod reads the answers
+ * only when it resumes. A BLOCKED halts pod; an open PENDING only defers (pod uses the value in use), so it
+ * doesn't hold the reply back. N and the key are the answered entries.
  */
 function answeredReply(plan: PlanModel): RunReply | undefined {
   const asks = plan.queue.filter(asksYou)
-  if (asks.length === 0 || asks.some((e) => e.answer === undefined)) return undefined
-  const n = asks.length
+  if (asks.some((e) => e.type === 'BLOCKED' && e.answer === undefined)) return undefined
+  const answered = asks.filter((e) => e.answer !== undefined)
+  const n = answered.length
+  if (n === 0) return undefined
   const why = n === 1 ? 'You answered 1 entry: reply continue so pod reads it.' : `You answered ${n} entries: reply continue so pod reads them.`
-  return { reply: 'continue', signal: 'answered', why, key: `answered:${plan.slug}:${n}:${fnv1a(asks.map((e) => e.line).join('\n'))}` }
+  return { reply: 'continue', signal: 'answered', why, key: `answered:${plan.slug}:${n}:${fnv1a(answered.map((e) => e.line).join('\n'))}` }
 }
 
 /** FNV-1a, 32-bit, as 8 hex digits. A stable name for a set of lines, not a secret. */
