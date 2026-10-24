@@ -39,9 +39,14 @@ export function splitAnswer(rest: string): { body: string; answer?: string } {
 
 const cutResolution = (text: string) => text.replace(/\*\*Resolution:\*\*.*$/i, '').trim()
 
+/** Pending, waiting on you, and a PENDING or BLOCKED: an entry you answer, answered yet or not. */
+export function asksYou(item: { type: string; isPending: boolean; needsYou: boolean }): boolean {
+  return item.isPending && item.needsYou && (item.type === 'PENDING' || item.type === 'BLOCKED')
+}
+
 /** Pending, waiting on you, a PENDING or BLOCKED, and not answered yet. */
 export function isAnswerable(item: { type: string; isPending: boolean; needsYou: boolean; answer?: string }): boolean {
-  return item.isPending && item.needsYou && (item.type === 'PENDING' || item.type === 'BLOCKED') && item.answer === undefined
+  return asksYou(item) && item.answer === undefined
 }
 
 export type CleanAnswer = { ok: true; text: string } | { ok: false; error: string }

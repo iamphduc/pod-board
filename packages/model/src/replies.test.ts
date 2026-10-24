@@ -270,10 +270,148 @@ describe('runReplies', () => {
     expect(model.runReplies).toBe(runReplies)
     expect(model.replySession).toBe(replySession)
     // Only these signals mean pod already waits for continue.
-    expect([...model.SEND_SIGNALS].sort()).toEqual(['final-merged', 'fix-merged', 'sprint-done', 'wave-merged'])
+    expect([...model.SEND_SIGNALS].sort()).toEqual(['answered', 'final-merged', 'fix-merged', 'sprint-done', 'wave-merged'])
   })
 })
 
+
+describe('answered stop', () => {
+  /** The line with the board's answer appended, as the Answer route writes it. */
+  const answer = (line: string, text = 'go on') => `${line} **Answer (human):** ${text}`
+  const decision = queueLine('PENDING', 'orchestrator → human', 'plan: alpha · sprint: one', 'Pick a storage format.')
+  const engineerBlock = queueLine('BLOCKED', 'engineer → orchestrator', 'plan: alpha · sprint: one · slice: A1', 'Port taken.')
+  /** Sprint one in progress, no wave handed back: no other reply. */
+  const WORK: BoardRow[] = [[1, 'A1', '—', 'in progress']]
+  const at = (queue: string[], extra: Partial<BoardRepo> = {}, rows: BoardRow[] = WORK) => repo(files({ docs: { one: rows }, queue }), extra)
+  const one = (r: BoardRepo) => {
+    const got = replies(r)
+    expect(got).toHaveLength(1)
+    return got[0]!
+  }
+
+  it('offers continue on a halted run once every entry waiting on you is answered', () => {
+    const got = one(at([answer(halt)]))
+    expect(got).toMatchObject({ reply: 'continue', signal: 'answered', why: 'You answered 1 entry: reply continue so pod reads it.' })
+    expect(got).not.toHaveProperty('pr')
+    expect(got.key).toMatch(/^answered:alpha:1:[0-9a-f]{8}$/)
+    // Unanswered halt: nothing, as before.
+    expect(replies(at([halt]))).toEqual([])
+    // Two answered: the count and the plural.
+    expect(one(at([answer(halt), answer(decision, 'json')])).why).toBe('You answered 2 entries: reply continue so pod reads them.')
+    expect(one(at([answer(halt), answer(decision, 'json')])).key).toMatch(/^answered:alpha:2:[0-9a-f]{8}$/)
+  })
+
+  it('an unanswered BLOCKED holds it back, an unanswered PENDING does not', () => {
+    // A PENDING only defers (pod uses the value in use), so an open one doesn't hold the reply back or count.
+    expect(one(at([answer(halt), decision])).why).toBe('You answered 1 entry: reply continue so pod reads it.')
+    const someday = queueLine('PENDING', 'orchestrator → human', 'plan: alpha · sprint: one', '**Someday (Look):** tighten the margins.')
+    expect(one(at([answer(halt), decision, someday])).why).toBe('You answered 1 entry: reply continue so pod reads it.')
+    // An unanswered BLOCKED halts pod: nothing, even with an answered PENDING beside it.
+    expect(replies(at([halt, answer(decision)]))).toEqual([])
+    // Only entries routed → human count. Gate 1: the engineer's BLOCKED to the orchestrator plus the
+    // orchestrator's halt to you. You answer the halt; the engineer's entry doesn't hold it back.
+    expect(one(at([engineerBlock, answer(halt)])).why).toBe('You answered 1 entry: reply continue so pod reads it.')
+    // An answered engineer → orchestrator BLOCKED doesn't add to N, nor make a reply alone.
+    expect(one(at([answer(halt), answer(engineerBlock)])).why).toBe('You answered 1 entry: reply continue so pod reads it.')
+    expect(replies(at([answer(engineerBlock)]))).toEqual([])
+    // A BLOCKED routed to you from anyone holds it back.
+    const toYou = queueLine('BLOCKED', 'engineer → human', 'plan: alpha · sprint: one · slice: A1', 'Need a key.')
+    expect(replies(at([answer(halt), toYou]))).toEqual([])
+    expect(replies(at([answer(halt), toYou.replace('engineer → human', 'engineer -> human')]))).toEqual([])
+    expect(one(at([answer(halt), answer(toYou)])).why).toBe('You answered 2 entries: reply continue so pod reads them.')
+    // Only unanswered PENDINGs: nothing to read yet.
+    expect(replies(at([decision, someday]))).toEqual([])
+  })
+
+  it('counts only pending PENDING and BLOCKED entries waiting on you for this plan', () => {
+    // A NOTE → human waits on you but can't be answered: it doesn't hold the reply back or count.
+    const note = queueLine('NOTE', 'engineer → human', 'plan: alpha', 'FYI.')
+    expect(one(at([answer(halt), note])).why).toBe('You answered 1 entry: reply continue so pod reads it.')
+    // An entry not addressed to you, answered or not, doesn't count.
+    const toOrch = queueLine('PENDING', 'engineer → orchestrator', 'plan: alpha', 'Which port?')
+    expect(one(at([answer(halt), toOrch])).why).toBe('You answered 1 entry: reply continue so pod reads it.')
+    expect(replies(at([answer(toOrch)]))).toEqual([])
+    // Another plan's entries: neither count nor hold it back.
+    const beta = queueLine('PENDING', 'orchestrator → human', 'plan: beta', 'Beta question.')
+    expect(one(at([answer(halt), beta])).why).toBe('You answered 1 entry: reply continue so pod reads it.')
+    expect(replies(at([answer(beta)]))).toEqual([])
+    // No entry waiting on you at all: nothing.
+    expect(replies(at([]))).toEqual([])
+  })
+
+  it('works on a PENDING decision gate that is not a halt', () => {
+    expect(one(at([answer(decision)]))).toMatchObject({ reply: 'continue', signal: 'answered' })
+  })
+
+  it('goes away once pod applies the answers', () => {
+    // pod rewrites the Resolution from pending to a date: the entry is no longer pending.
+    const applied = (line: string) => answer(line).replace('**Resolution:** pending', '**Resolution:** 2026-10-23 — retried')
+    expect(replies(at([applied(halt)]))).toEqual([])
+    expect(replies(at([applied(halt), applied(decision)]))).toEqual([])
+    // One applied, one still pending and answered: only the pending one counts.
+    expect(one(at([applied(halt), answer(decision)])).why).toBe('You answered 1 entry: reply continue so pod reads it.')
+  })
+
+  it('never while pod works', () => {
+    expect(replies(at([answer(halt)], { agents: [running({ sprint: 'one', slice: 'A1' })] }))).toEqual([])
+    expect(replies(at([answer(decision)], { agents: [running({ type: 'pod:reviewer', plan: 'alpha' })] }))).toEqual([])
+    // Ended agents don't hold it back.
+    expect(one(at([answer(halt)], { agents: [ended({ plan: 'alpha' })] })).signal).toBe('answered')
+    // Not a run: nothing.
+    expect(replies(at([answer(halt)], { error: 'folder not found' }))).toEqual([])
+  })
+
+  it('an existing reply wins: never a second continue', () => {
+    // A merged wave beside an answered gate: only wave-merged.
+    expect(replies(at([answer(decision)], { prs: [gh(7, 'merged')] }, PUSHED))).toEqual([
+      { reply: 'continue', signal: 'wave-merged', why: 'PR #7 merged.', pr: 7, key: 'wave-merged:7' },
+    ])
+    // A wave waiting on your merge: only the merge-first continue.
+    expect(replies(at([answer(decision)], {}, PUSHED))).toEqual([merge(7)])
+    // A done sprint: only sprint-done.
+    expect(replies(repo(files({ ...BETWEEN, queue: [answer(decision)] }))).map((r) => r.signal)).toEqual(['sprint-done'])
+    // A fresh plan: only go.
+    expect(replies(repo(files({ ...FRESH, queue: [answer(decision)] }))).map((r) => r.signal)).toEqual(['not-started'])
+    // A halt still hides the other replies, so an answered halt gives only answered.
+    expect(replies(at([answer(halt)], { prs: [gh(7, 'merged')] }, PUSHED)).map((r) => r.signal)).toEqual(['answered'])
+    // At most one reply per word.
+    for (const r of [at([answer(halt)]), at([answer(decision)], { prs: [gh(7, 'merged')] }, PUSHED)]) {
+      expect(replies(r).filter((x) => x.reply === 'continue')).toHaveLength(1)
+    }
+  })
+
+  it('keys by the answered entries', () => {
+    const key = (queue: string[]) => one(at(queue)).key
+    // The same answers give the same key, on every rebuild.
+    expect(key([answer(halt)])).toBe(key([answer(halt)]))
+    // A line that isn't an answered entry doesn't change it.
+    const note = queueLine('NOTE', 'engineer → human', 'plan: alpha', 'FYI.')
+    expect(key([answer(halt), note])).toBe(key([answer(halt)]))
+    // Nor does an unanswered PENDING: the key names the answered entries.
+    expect(key([answer(halt), decision])).toBe(key([answer(halt)]))
+    // Nor an answered entry not routed to you.
+    expect(key([answer(halt), answer(engineerBlock)])).toBe(key([answer(halt)]))
+    // A new set of answers is a new stop.
+    const keys = new Set([
+      key([answer(halt)]),
+      key([answer(halt, 'other text')]),
+      key([answer(decision)]),
+      key([answer(halt), answer(decision)]),
+      key([answer(halt.replace('2026-10-21', '2026-10-22'))]),
+    ])
+    expect(keys.size).toBe(5)
+    // The key isn't the why.
+    expect(key([answer(halt)])).not.toContain('answered 1')
+  })
+
+  it('fix runs get no answered reply', () => {
+    // Queue entries join plans, not fix runs, so a fix run's replies stay its PR's.
+    const name = 'fix-scroll'
+    const eng = ended({ branch: name })
+    const fix = repo({ 'pod-docs/README.md': README, 'pod-docs/handoff-queue.md': answer(halt) }, { claims: [claim(name)], agents: [eng] })
+    expect(replies(fix, name)).toEqual([])
+  })
+})
 describe('replySession', () => {
   it('finds the chat to paste in', () => {
     const old = ended({ plan: 'alpha', session: 'sess-old', startedAt: NOW - 90 * MIN, lastAt: NOW - 30 * MIN })
