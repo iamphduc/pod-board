@@ -525,8 +525,10 @@ describe('board watcher', () => {
     failOpen = false
     const { next } = collect(watcher)
     await setT1(a, 'blocked')
+    // Waiting first: the event arrives during the rebuild.
+    const event = next((b) => t1Status(b) === 'blocked')
     await watcher.rebuild()
-    await next()
+    await event
   })
 
   test('the gh timer refreshes gh and rebuilds', async () => {

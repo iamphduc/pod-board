@@ -145,11 +145,16 @@ export function createBoardWatcher(o: BoardWatcherOptions): BoardWatcher {
         }
       }
     }
-    if (await sync(board)) schedule()
+    try {
+      if (await sync(board)) schedule()
+    } catch (err) {
+      onError(err)
+    }
   }
 
   function rebuild(): Promise<void> {
-    chain = chain.then(rebuildNow)
+    // A rejected link would skip every later rebuild, so report it and go on.
+    chain = chain.then(rebuildNow).catch(onError)
     return chain
   }
 
