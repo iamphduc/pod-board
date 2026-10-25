@@ -10,7 +10,7 @@ Screen 1: the runs list beside the selected run's pipeline (Plan, one stage per 
 - **Which runs:** each plan not archived or finished, plus each plan a claim file names. A claimed archived plan stays while its hand-back entry is pending (also after its PR merged, since pod still waits for `continue`), while halted, or while one of its agents wrote in the last 30 minutes.
 - **State,** first match: `blocked` → `needs-you` (a queue item for the human, or a PR waiting on you) → `running` → `idle`. Wave steps: `blocked` → `done` → `you` → `live` → `wait`.
 - **PRs waiting on you** (`waitingPrs`, one rule for the Merge button and the merge routes): the pending hand-back PR (`final`); a reviewed open fix PR (`fix`); a current-sprint wave whose unfinished slices are all `pushed`, no engineer runs, and whose PR is open (`wave`). Only that step carries `merge`.
-- **Live:** the page reads `/api/events`, recomputes every 30 s, and checks `/api/health` every 5 s; a failure shows `lost · retrying` and keeps the last board.
+- **Live:** the page reads `/api/events`, recomputes every 30 s, and checks `/api/health` every 5 s; a failure, or no answer within 4 s, shows `lost · retrying` and keeps the last board.
 
 ### Fix runs
 
@@ -88,3 +88,4 @@ The run's `needsYou` entries under the main view: type chip, date, route, and bo
 - 2026-10-22: a claimed archived plan stays a run while its hand-back entry is pending, also after the PR merges; the final PR stops waiting on you once merged (board-actions plan fix, review of #33).
 - 2026-10-22 · board-actions · plan complete: Merge, action log, Reply panel with Continue and Go, the auto-continue switch, and Waiting on you; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)
 - 2026-10-24 · fix-answered-continue · fixed: the Reply panel stayed on the page after its reply went away, because screen 1's siblings shared one key.
+- 2026-10-25 · fix-health-probe-timeout · fixed: a health check that hung kept the chip `live` on a dead server; it now fails after 4 s.
