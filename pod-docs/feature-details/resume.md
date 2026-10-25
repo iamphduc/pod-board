@@ -43,3 +43,4 @@ The board can send `continue` or `go` to a pod run's own Claude session, so you 
 - 2026-10-23 · fix-answered-continue: `answered` is a sendable signal, so the Continue button and auto-continue resume a run once you answered what it stopped on.
 - 2026-10-22 · board-actions · plan complete; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)
 - 2026-10-22 · fix-security-hardening: the runner drops every `ANTHROPIC_*` and `CLAUDE*` variable but `CLAUDE_CONFIG_DIR` (it dropped only the two key variables), starts `claude` and cmd.exe by absolute paths from absolute `PATH` entries only, and the spike uses the same env. Review fix: the child's `PATH` keeps only absolute entries, and on Windows `NoDefaultCurrentDirectoryInExePath=1` (a `node.bat` in the repo ran through an unreadable shim).
+- 2026-10-25 · fix-background-loops: an automatic check that throws is logged and holds no session; the next check runs.

@@ -40,6 +40,7 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - Through the web proxy, a stopped API answers `502` with an empty body.
 - Tests and manual runs must point `POD_BOARD_CONFIG_DIR` and `POD_BOARD_PORTS_DIR` at temp folders: the real ones belong to live pod runs.
 - chokidar 5 doesn't see a path that doesn't exist yet, and runs `ignored` on the watched folder itself; a filter must keep its own folder.
+- The rebuild chain must never stay rejected: one rejected link skips every later rebuild. `rebuild()` reports a failure through `onError` and goes on.
 - Keep the cap timer apart from the quiet-spell timer. Count boards per burst only with a fake watch and fake timers.
 - Drop cache entries once per build across all repos, not per repo. The cache trusts size and mtime; Claude only appends.
 - Agents on the Board carry no `description` (assistant-written text no page shows).
@@ -66,3 +67,4 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - 2026-10-22 · board-actions · plan complete: action token, `Origin` check, and the action guard on every action route; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)
 - 2026-10-22 · fix-security-hardening: `gh` runs by an absolute path from absolute `PATH` entries only (a `gh.exe` in a repo could run); `POST /api/repos` needs the session token and refuses UNC and device paths unread.
 - 2026-10-23 · fix-hardening-2: pod docs whose real path leaves the repo are skipped; `/api/actions/*` and `POST /api/repos` bodies over 64 KB get `413`.
+- 2026-10-25 · fix-background-loops: a watch that fails to open or close is logged, and later rebuilds still run.
