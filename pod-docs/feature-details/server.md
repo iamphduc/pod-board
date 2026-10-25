@@ -45,6 +45,7 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - Drop cache entries once per build across all repos, not per repo. The cache trusts size and mtime; Claude only appends.
 - Agents on the Board carry no `description` (assistant-written text no page shows).
 - A plan left `active` with every sprint done and no PR on its branch costs one `gh pr list` every 30 s.
+- Ctrl+C waits up to 70 s for running actions (`/api/actions/*`) and auto-continue sends, then exits; a second Ctrl+C quits at once. Don't wait for `server.close()`: open `/api/events` streams keep it from ever finishing.
 
 ## History
 
@@ -69,3 +70,4 @@ The API server (`packages/server`) finds the repos to show, reads their pod docs
 - 2026-10-23 · fix-hardening-2: pod docs whose real path leaves the repo are skipped; `/api/actions/*` and `POST /api/repos` bodies over 64 KB get `413`.
 - 2026-10-25 · fix-background-loops: a watch that fails to open or close is logged, and later rebuilds still run.
 - 2026-10-25 · test-main-boot: `main.test.ts` starts the real API from `main.ts` on temp folders and checks health, the Board, the token file, and the action guard; on macOS and Linux also a clean exit on SIGTERM.
+- 2026-10-25 · fix-shutdown-drain: Ctrl+C waits for running merges, answers, resumes, and auto-continue sends before exiting, so their action-log lines aren't lost; a second Ctrl+C quits now.
