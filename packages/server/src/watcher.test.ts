@@ -505,6 +505,30 @@ describe('board watcher', () => {
     expect(errors.every((e) => e instanceof Error && e.message === 'boom')).toBe(true)
   })
 
+  test('a watch that fails to open is logged, and later rebuilds still run', async () => {
+    const a = copyFixture('a')
+    const b = copyFixture('b')
+    await register(a)
+    const { watch: fakeWatch } = fakeWatches()
+    let failOpen = false
+    const watch = ((...args: Parameters<typeof fakeWatch>) => {
+      if (failOpen) throw new Error('open failed')
+      return fakeWatch(...args)
+    }) as typeof fakeWatch
+    const errors: unknown[] = []
+    watcher = createBoardWatcher({ service: service(), configFile, portsDir, claudeDir, watch, tickMs: 1e9, onError: (e) => errors.push(e) })
+    await watcher.start()
+    failOpen = true
+    await register(a, b)
+    await expect(watcher.rebuild()).resolves.toBeUndefined()
+    expect(errors.some((e) => e instanceof Error && e.message === 'open failed')).toBe(true)
+    failOpen = false
+    const { next } = collect(watcher)
+    await setT1(a, 'blocked')
+    await watcher.rebuild()
+    await next()
+  })
+
   test('the gh timer refreshes gh and rebuilds', async () => {
     const real = service()
     let refreshes = 0
