@@ -47,14 +47,20 @@ export const isAutopilot = (plan: Pick<PlanModel, 'autopilot'>) => plan.autopilo
 
 const TO_HUMAN = /(?:→|->)\s*human\s*$/i
 
+/** A PENDING halt names its gate (skills/autopilot/policy.md): gates 5–7, by number or by name. */
+const PENDING_GATE = /\bgate\s*[567]\b|\b(?:safety-bound|escalation-valve|plan-complete)\b/i
+
 /**
- * Autopilot stopped for you: halted (`isHalted`), or a pending PENDING from the orchestrator to you. The policy's
- * gates 5–7 halt with PENDING, and gate 6 withholds a mergeable PR for you to merge. Run state still follows
- * `isHalted` (BLOCKED → blocked; a PENDING reads needs-you).
+ * Autopilot stopped for you: halted (`isHalted`), or a pending PENDING from the orchestrator to you that names a
+ * halt gate. The policy's gates 5–7 halt with PENDING, and gate 6 withholds a mergeable PR for you to merge; the
+ * orchestrator's other PENDING notes to you (`now: …`, `someday: …`, an agent default) don't stop it. Run state
+ * still follows `isHalted` (BLOCKED → blocked; a PENDING reads needs-you).
  */
 export const isAutopilotStopped = (plan: Pick<PlanModel, 'queue'>) =>
   isHalted(plan) ||
-  plan.queue.some((e) => e.isPending && e.type === 'PENDING' && FROM_ORCHESTRATOR.test(e.route.trim()) && TO_HUMAN.test(e.route.trim()))
+  plan.queue.some(
+    (e) => e.isPending && e.type === 'PENDING' && FROM_ORCHESTRATOR.test(e.route.trim()) && TO_HUMAN.test(e.route.trim()) && PENDING_GATE.test(e.body),
+  )
 
 /** What a step with a PR waiting on you says: under autopilot, only a stop hands the merge to you. */
 export const waitingWords = (plan: Pick<PlanModel, 'autopilot'>) => (isAutopilot(plan) ? 'autopilot stopped' : 'you merge')
