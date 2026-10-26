@@ -39,4 +39,4 @@ Screen 2, at `#/<repoId>/<plan>/board`: one column per wave of the shown sprint,
 - 2026-10-19 · board-read · plan complete; checked in review at 1280 and 375 px (critical path H1 → M1 → T1 on chess-web) · [report](../reports/board-read.html)
 - 2026-10-20 · board-read · final review passed at round 5; filter, keys, 375 px, and live card update checked again · [report](../reports/board-read.html)
 - 2026-10-21 · merge-actions P1 · the cards of a wave whose PR waits on you read `needs you`, with `PR #N · you merge`.
-- 2026-10-26 · fix-autopilot-view · fixed: an autopilot wave's cards read `needs you · PR #N · you merge`; now they read `running` while autopilot merges, and `needs you · PR #N · autopilot stopped` after a halt. Card minutes leave out idle gaps over 10 minutes.
+- 2026-10-26 · fix-autopilot-view · fixed: an autopilot wave's cards read `needs you · PR #N · you merge`; now they read `running` while autopilot merges, and `needs you · PR #N · autopilot stopped` after a halt. Card minutes leave out idle gaps over 15 minutes.
