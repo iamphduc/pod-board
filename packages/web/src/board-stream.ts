@@ -3,7 +3,8 @@
 // too eager and can't be capped), keeps the last Board, reports `lost`, and
 // opens a new one after 1 s, doubling to 30 s at most. The delay resets once a
 // valid Board arrives. Data that isn't a Board is ignored. With a `probe`, a
-// failed health check while a stream is open counts as an error too.
+// failed health check (or one slower than 4 s) while a stream is open counts
+// as an error too.
 
 import type { Board } from '@pod-board/model'
 
@@ -18,6 +19,8 @@ export type StreamSource = {
 export const FIRST_RETRY_MS = 1000
 export const MAX_RETRY_MS = 30_000
 export const PROBE_EVERY_MS = 5000
+/** A health check slower than this counts as down; under PROBE_EVERY_MS, so checks never overlap. */
+export const PROBE_TIMEOUT_MS = 4000
 
 export type StreamOptions = {
   /** Resolves true while the server is up. Checked every `probeEveryMs` while a stream is open. */
@@ -25,10 +28,17 @@ export type StreamOptions = {
   probeEveryMs?: number
 }
 
-/** GET /api/health through the same origin as the stream. */
+/** GET /api/health through the same origin as the stream; rejects after PROBE_TIMEOUT_MS. */
 export async function healthProbe(fetchFn: typeof fetch = fetch): Promise<boolean> {
-  const res = await fetchFn('/api/health', { cache: 'no-store' })
-  return res.ok
+  // A hung request would block every later check (the stream skips while one runs).
+  const abort = new AbortController()
+  const timer = setTimeout(() => abort.abort(), PROBE_TIMEOUT_MS)
+  try {
+    const res = await fetchFn('/api/health', { cache: 'no-store', signal: abort.signal })
+    return res.ok
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /** A Board-shaped value: enough to render without throwing. */

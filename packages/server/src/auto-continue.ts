@@ -57,7 +57,15 @@ export type AutoContinue = {
   settled(): Promise<void>
 }
 
-export function createAutoContinue(d: ResumeDeps & { subscribe(fn: (b: Board) => void): () => void; tickMs?: number }): AutoContinue {
+export function createAutoContinue(
+  d: ResumeDeps & {
+    subscribe(fn: (b: Board) => void): () => void
+    tickMs?: number
+    /** Reports a check that threw; logs to the console unless a test passes one. */
+    onError?: (err: unknown) => void
+  },
+): AutoContinue {
+  const onError = d.onError ?? ((err: unknown) => console.error('pod-board auto-continue:', err))
   const now = d.now ?? Date.now
   let unsubscribe: (() => void) | undefined
   let timer: ReturnType<typeof setInterval> | undefined
@@ -72,8 +80,16 @@ export function createAutoContinue(d: ResumeDeps & { subscribe(fn: (b: Board) =>
   }
 
   function check(): Promise<void> {
-    const board = d.board()
-    const due = autoSends(board, d.store.list(), now(), idle).filter((s) => !isResuming(d, s.session))
+    let board: Board
+    let due: ReturnType<typeof autoSends>
+    try {
+      board = d.board()
+      due = autoSends(board, d.store.list(), now(), idle).filter((s) => !isResuming(d, s.session))
+    } catch (err) {
+      // From a timer, a throw here would crash the server.
+      onError(err)
+      return Promise.resolve()
+    }
     // Held at once, before anything waits, so a check or a request that comes next skips them.
     for (const s of due) d.inFlight.add(s.session)
     const done = Promise.all(

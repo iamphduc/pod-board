@@ -39,7 +39,7 @@ function fakeRunner(result: () => Promise<StartResult> | StartResult = () => ({ 
 }
 
 /** The check over a Board you set, with fakes for everything outside the server. */
-function setup(o: { board: Board; store?: AutoContinueStore; runner?: ReturnType<typeof fakeRunner>; idle?: (repo: BoardRepo, session: string) => boolean; inFlight?: Set<string> }) {
+function setup(o: { board: Board; store?: AutoContinueStore; runner?: ReturnType<typeof fakeRunner>; idle?: (repo: BoardRepo, session: string) => boolean; inFlight?: Set<string>; onError?: (err: unknown) => void }) {
   let board = o.board
   const subscribers = new Set<(b: Board) => void>()
   const logged: NewActionEntry[] = []
@@ -69,6 +69,7 @@ function setup(o: { board: Board; store?: AutoContinueStore; runner?: ReturnType
     idle: (repo, session) => idle(repo, session),
     inFlight,
     now: () => NOW,
+    onError: o.onError,
   })
   /** A new Board from the watcher. */
   const emit = (b: Board = board) => {
@@ -80,6 +81,26 @@ function setup(o: { board: Board; store?: AutoContinueStore; runner?: ReturnType
 
 
 describe('automatic check', () => {
+  /** A real store whose `list` throws, as a broken disk read would. */
+  const throwingStore = () => ({ ...createAutoContinueStore({ file }), list: (): never => { throw new Error('list failed') } }) as AutoContinueStore
+
+  test('a check that throws is logged and holds no session', async () => {
+    const errors: unknown[] = []
+    const s = setup({ board: boardOf(planRepo(SPRINT_DONE)), store: throwingStore(), onError: (e) => errors.push(e) })
+    expect(() => s.auto.check()).not.toThrow()
+    await s.auto.check()
+    expect(errors.length).toBe(2)
+    expect(errors.every((e) => e instanceof Error && e.message === 'list failed')).toBe(true)
+    expect(s.inFlight.size).toBe(0)
+    expect(s.runner.starts).toEqual([])
+  })
+
+  test('start survives a check that throws', () => {
+    const s = setup({ board: boardOf(planRepo(SPRINT_DONE)), store: throwingStore(), onError: () => {} })
+    expect(() => s.auto.start()).not.toThrow()
+    s.auto.stop()
+  })
+
   test('sends only with the toggle on', async () => {
     const s = setup({ board: boardOf(planRepo(SPRINT_DONE)) })
     await s.auto.check()

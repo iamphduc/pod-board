@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { buildFixPipeline, listRuns, type Board, type RunSummary } from '@pod-board/model'
+import { ErrorBoundary } from './ErrorBoundary.tsx'
 import { createBoardStream, healthProbe, type StreamState } from './board-stream.ts'
 import { boardSlices } from './screens/board/board-view.ts'
 import { RunsScreen } from './screens/runs/RunsScreen.tsx'
@@ -30,6 +31,17 @@ export function App() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
+  return (
+    <ErrorBoundary resetKey={board?.generatedAt}>
+      <BoardView board={board} stream={stream} now={now} hash={hash} setHash={setHash} />
+    </ErrorBoundary>
+  )
+}
+
+type BoardViewProps = { board: Board | undefined; stream: StreamState; now: number; hash: string; setHash: (h: string) => void }
+
+/** Everything computed from the Board, inside the error boundary so a throw here can't unmount the stream. */
+function BoardView({ board, stream, now, hash, setHash }: BoardViewProps) {
   const runs = useMemo(() => (board ? listRuns(board, now) : []), [board, now])
   const slicesOf = (run: RunSummary) =>
     run.plan === undefined ? [] : boardSlices(board?.repos.find((r) => r.id === run.repoId), run.plan, now)

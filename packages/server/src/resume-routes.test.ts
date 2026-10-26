@@ -175,6 +175,24 @@ describe('resume route', () => {
     expect(s.starts).toEqual([{ session: 'sess-1', word: 'go', cwd: '/r' }])
   })
 
+  test('sends continue on an answered stop, only when idle', async () => {
+    // Not answered yet: nothing to send.
+    const halted = setup({ board: boardOf(planRepo(HALTED)) })
+    await expectRes(await halted.resume({ repoId: 'id-r', run: 'alpha', reply: 'continue' }), 404, { error: 'not waiting on you' })
+    // Answered, session busy: 409, nothing ran.
+    const busy = setup({ board: boardOf(planRepo(ANSWERED)), idle: false })
+    await expectRes(await busy.resume({ repoId: 'id-r', run: 'alpha', reply: 'continue' }), 409, { error: 'session is busy' })
+    expect(busy.starts).toEqual([])
+    // Answered and idle: sent, and the toggle's lastKey is the answered key.
+    const s = setup({ board: boardOf(planRepo(ANSWERED)) })
+    await s.store.set('id-r', 'alpha', true)
+    await expectRes(await s.resume({ repoId: 'id-r', run: 'alpha', reply: 'continue' }), 200, { outcome: 'started', logged: true })
+    expect(s.starts).toEqual([{ session: 'sess-1', word: 'continue', cwd: '/r' }])
+    expect(s.store.list()[0]?.lastKey).toMatch(/^answered:alpha:1:[0-9a-f]{8}$/)
+    // go is never sent on it.
+    await expectRes(await s.resume({ repoId: 'id-r', run: 'alpha', reply: 'go' }), 404, { error: 'not waiting on you' })
+  })
+
   test('starts and logs a resume', async () => {
     const s = setup({ board: boardOf(planRepo(SPRINT_DONE)) })
     await s.store.set('id-r', 'alpha', true)
@@ -388,7 +406,7 @@ function sprintDoc(slug: string, plan: string, rows: BoardRow[]): string {
   ].join('\n')
 }
 
-type Stop = { sprints: SprintRow[]; docs?: Record<string, BoardRow[]>; prs?: PrStatus[] }
+type Stop = { sprints: SprintRow[]; docs?: Record<string, BoardRow[]>; prs?: PrStatus[]; queue?: string[] }
 
 const link = (n: number) => `[#${n}](https://github.com/o/r/pull/${n})`
 const gh = (number: number, state: PrStatus['state'], over: Partial<PrStatus> = {}): PrStatus => ({ number, state, checks: 'pass', checkedAt: NOW, ...over })
@@ -411,6 +429,11 @@ const WAVE_WAITING: Stop = { sprints: [['one', 'active']], docs: { one: PUSHED }
 const WAVE_MERGED: Stop = { sprints: [['one', 'active']], docs: { one: PUSHED }, prs: [gh(7, 'merged')] }
 /** No sprint started: `go`, key `not-started:alpha`. */
 const FRESH: Stop = { sprints: [['one', 'planned'], ['two', 'planned']] }
+const HALT = '- `[2026-10-22 · BLOCKED · orchestrator → human · plan: alpha]` Halted at gate 1. **Resolution:** pending'
+/** Halted, the halt answered on the board: `continue`, key `answered:alpha:1:<hash>`. */
+const ANSWERED: Stop = { sprints: [['one', 'active']], docs: { one: [[1, 'A1', '', 'in progress']] }, queue: [`${HALT} **Answer (human):** retry`] }
+/** Halted, not answered yet: no reply. */
+const HALTED: Stop = { ...ANSWERED, queue: [HALT] }
 /** Sprint one in progress with work left: no reply at all. */
 const WORKING: Stop = { sprints: [['one', 'active']], docs: { one: [[1, 'A1', '', 'in progress']] } }
 
@@ -425,7 +448,7 @@ function planRepo(stop: Stop, o: { session?: string; id?: string; path?: string 
   const files: RepoFiles = {
     'pod-docs/README.md': README,
     'pod-docs/plans/alpha.md': planDoc('alpha', stop.sprints),
-    'pod-docs/handoff-queue.md': '',
+    'pod-docs/handoff-queue.md': (stop.queue ?? []).join('\n'),
   }
   for (const [s, rows] of Object.entries(stop.docs ?? {})) files[`pod-docs/sprints/${s}.md`] = sprintDoc(s, 'alpha', rows)
   const session = o.session ?? 'sess-1'

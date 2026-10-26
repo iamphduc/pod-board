@@ -135,9 +135,17 @@ describe('queue answers', () => {
         entry('BLOCKED', 'orchestrator → human', 'pending', ' **Answer (human):**'),
       ].join('\n'),
     )
-    expect(items.map(isAnswerable)).toEqual([true, true, true, false, false, false, false, false, false])
+    // A BLOCKED between agents is listed (needsYou) but isn't yours to answer.
+    expect(items.map(isAnswerable)).toEqual([true, false, true, false, false, false, false, false, false])
+    expect(items[1]?.needsYou).toBe(true)
     // A NOTE that waits on you is still not answerable.
     expect(items[3]?.needsYou).toBe(true)
+  })
+
+  it('reads the route as pod writes it: either arrow, any case, spaces', () => {
+    const entry = (route: string) => `- \`[2026-10-21 · BLOCKED · ${route}]\` body **Resolution:** pending`
+    const items = queueOf([entry('orchestrator -> human'), entry('orchestrator → Human '), entry('human → orchestrator')].join('\n'))
+    expect(items.map(isAnswerable)).toEqual([true, true, false])
   })
 
   it('cleans the answer text', () => {

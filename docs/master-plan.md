@@ -1,6 +1,6 @@
 # Pod Board: master plan
 
-_Written: 2026-10-18 · Status: approved direction, not started · Design: [docs/design/preview.html](design/preview.html) ([published preview](https://claude.ai/artifact/H2xCmKqGwKRvvUyqCnx6P8))_
+_Written: 2026-10-18 · Status: phases 1 and 2 built (pod plans `board-read`, `board-actions`) · Design: [docs/design/preview.html](design/preview.html) ([published preview](https://claude.ai/artifact/H2xCmKqGwKRvvUyqCnx6P8))_
 
 This is the long-range plan. Each phase below is built as one or more pod plans (`/pod:ship` or `/pod:plan`), because a pod plan holds at most four sprints. Start each pod plan from this file: paste its phase section into the plan interview as the brief.
 
@@ -126,7 +126,7 @@ Claude Code + pod plugin ──writes──▶ <repo>/pod-docs/*.md, worktrees
 - Server: Hono or Fastify. File watching with chokidar. Live updates to the browser over server-sent events.
 - Web: React + Vite. No database: state is rebuilt from files on start and kept in memory.
 - Tests: Vitest for `model` (fixture-driven) and `server`, and browser checks with agent-browser per pod's rules.
-- Ship as `npx pod-board` later. Phase 1 runs with `pnpm dev`.
+- ~~Ship as `npx pod-board` later.~~ Dropped: [no npm publishing](../pod-docs/decisions.md#2026-10-21--no-npm-publishing). The board runs with `pnpm dev`.
 - **Security:**
   - Bind to `127.0.0.1` only.
   - Check the `Host` header against DNS rebinding.
@@ -186,7 +186,7 @@ Verification: run it against the four existing pod repos and one live `/pod:code
 ## Open questions
 
 1. Name: keep "Pod Board"?
-2. ~~npm in phase 1?~~ Decided: local only in phase 1; publish `npx pod-board` in phase 2.
+2. ~~npm in phase 1?~~ Decided 2026-10-21: no npm publishing; the board runs from the repo ([decision](../pod-docs/decisions.md#2026-10-21--no-npm-publishing)).
 3. Phase 3 route: engineer sessions via `/pod:create-wave-prompts`, or Claude Code workflows? First test whether a workflow agent can run `pod:engineer` with its own tools and model.
 4. Phone notifications: Telegram, ntfy, or only Claude Code's `PushNotification`?
 

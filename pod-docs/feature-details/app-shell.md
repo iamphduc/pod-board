@@ -35,6 +35,7 @@ The frame around every screen: the web app at `http://127.0.0.1:<web>/`, the bar
 - `tokens.test.ts` and `controls.test.ts` find rules by selector text. Write a new rule's selector exactly (`textarea.input {`, not `textarea.input{`), and keep `textarea.input` after `.input` so the older tests read the right block.
 - `base.css` takes colors from tokens only; `controls.test.ts` fails on any hex, `rgb()`, `hsl()`, or named color. `transparent` and `currentColor` are allowed.
 - agent-browser hangs when run from Git Bash on Windows; see [known-issues/agent-browser-git-bash.md](../known-issues/agent-browser-git-bash.md).
+- A render error shows a `render failed` notice in place of the board (`ErrorBoundary.tsx`), and the board tries again when the next changed Board arrives. Keep the stream in `App`, above the boundary: a boundary around `App` would stop the stream and never recover.
 
 ## History
 
@@ -42,3 +43,4 @@ The frame around every screen: the web app at `http://127.0.0.1:<web>/`, the bar
 - 2026-10-20 · board-read · final review passed at round 5; Theme, Theme boot, and PWA rows driven live · [report](../reports/board-read.html)
 - 2026-10-20 · fix-show-fix-runs: an outlined kind tag chip (`chip tag`) marks fix runs in the runs list.
 - 2026-10-21 · merge-actions L1: shared controls for the board's actions: `.btn.quiet`, `textarea.input`, `.switch`, `.inplace`, and 44 px controls at 480 px or less.
+- 2026-10-25 · fix-render-error-boundary: a render error shows a notice and recovers on the next Board; it used to leave a blank page until a reload.

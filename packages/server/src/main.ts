@@ -18,6 +18,7 @@ import { addRepo } from './repos-config.ts'
 import { createResumeRoutes } from './resume-routes.ts'
 import { createIdleCheck } from './session-activity.ts'
 import { createSessionToken, writeSessionToken } from './session-token.ts'
+import { createShutdown, createWorkTracker } from './shutdown.ts'
 import { claudeDir, transcriptDays } from './transcript-files.ts'
 import { createBoardWatcher } from './watcher.ts'
 
@@ -73,6 +74,9 @@ const resume = {
 const auto = createAutoContinue({ ...resume, subscribe: (fn) => watcher.subscribe(fn) })
 auto.start()
 
+// Every action is counted while it runs, so Ctrl+C can wait for it.
+const work = createWorkTracker()
+
 const app = createApp({
   ports: [listen.port, webPort],
   token,
@@ -80,6 +84,7 @@ const app = createApp({
   addRepo: (p) => addRepo(configFile, p, platform),
   timeline: createTimelineSource({ board: () => watcher.board(), ...settings, now: Date.now }).timeline,
   actions: new Hono()
+    .use('*', work.track)
     .route(
       '/',
       createActionRoutes({
@@ -100,10 +105,6 @@ const server = serve({ fetch: app.fetch, hostname: listen.hostname, port: listen
   console.log(`pod-board config: ${configFile}`)
 })
 
-const stop = () => {
-  auto.stop()
-  server.close()
-  void watcher.close().finally(() => process.exit(0))
-}
+const stop = createShutdown({ auto, server, work, watcher, exit: (code) => process.exit(code) })
 process.on('SIGINT', stop)
 process.on('SIGTERM', stop)

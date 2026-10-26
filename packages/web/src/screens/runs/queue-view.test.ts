@@ -81,8 +81,8 @@ describe('waiting on you', () => {
     expect(ANSWER_WAITING).toBe('Waiting for pod to read it.')
     // A NOTE is never answerable; its body is plain text.
     expect(note).toMatchObject({ chip: { cls: 's-idle', label: 'NOTE' }, body: 'Check the pnpm cache soon.', answerable: false })
-    // A BLOCKED routed to the orchestrator still waits on you.
-    expect(blocked).toMatchObject({ chip: { cls: 's-bad', label: 'BLOCKED' }, answerable: true })
+    // A BLOCKED routed to the orchestrator is listed, but has no Answer button.
+    expect(blocked).toMatchObject({ chip: { cls: 's-bad', label: 'BLOCKED' }, answerable: false })
     // Keys are unique even when two lines read the same.
     const twice = waitingRows(repo(['# Q', ALPHA_PENDING, ALPHA_PENDING].join('\n')), run())
     expect(twice).toHaveLength(2)
