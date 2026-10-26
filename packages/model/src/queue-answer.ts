@@ -39,13 +39,19 @@ export function splitAnswer(rest: string): { body: string; answer?: string } {
 
 const cutResolution = (text: string) => text.replace(/\*\*Resolution:\*\*.*$/i, '').trim()
 
-/** Pending, waiting on you, and a PENDING or BLOCKED: an entry you answer, answered yet or not. */
-export function asksYou(item: { type: string; isPending: boolean; needsYou: boolean }): boolean {
-  return item.isPending && item.needsYou && (item.type === 'PENDING' || item.type === 'BLOCKED')
+/** A route addressed to you: `… → human` or `… -> human`. */
+const TO_HUMAN = /(?:→|->)\s*human\s*$/i
+
+/**
+ * Pending, routed to you, and a PENDING or BLOCKED: an entry you answer, answered yet or not. A BLOCKED
+ * between agents still waits on you (`needsYou`, so it's listed), but pod resolves it, so it isn't yours to answer.
+ */
+export function asksYou(item: { type: string; route: string; isPending: boolean; needsYou: boolean }): boolean {
+  return item.isPending && item.needsYou && (item.type === 'PENDING' || item.type === 'BLOCKED') && TO_HUMAN.test(item.route)
 }
 
-/** Pending, waiting on you, a PENDING or BLOCKED, and not answered yet. */
-export function isAnswerable(item: { type: string; isPending: boolean; needsYou: boolean; answer?: string }): boolean {
+/** Pending, routed to you, a PENDING or BLOCKED, and not answered yet. */
+export function isAnswerable(item: { type: string; route: string; isPending: boolean; needsYou: boolean; answer?: string }): boolean {
   return asksYou(item) && item.answer === undefined
 }
 
