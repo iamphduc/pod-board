@@ -160,6 +160,27 @@ describe('autopilot run, stopped at a PENDING gate', () => {
     }
   })
 
+  it('a plain orchestrator note to you is no stop: only a PENDING that names a halt gate is', () => {
+    const notes = [
+      gate('now: at 375 px the header wraps onto two lines; left as is.'),
+      gate('someday: x.test.ts is flaky on Windows; re-ran it once.'),
+      gate('Default recorded: keep the old flag (agent default — override anytime).'),
+      // A gate number other than 5–7, or a word that only contains one, isn't a PENDING halt.
+      gate('gate 3 passed after a re-run of the checks.'),
+      gate('see the gate 50 notes.'),
+    ]
+    for (const entry of notes) {
+      const r = repo({ sprintMarker: MARKER, queue: [entry] })
+      expect(step(build(r), 'one/wave-1'), entry).toEqual({ key: 'one/wave-1', label: 'Wave 1', state: 'live', detail: 'PR #9 · autopilot merges' })
+      expect(waitingPrs(r, NOW), entry).toEqual([])
+    }
+    // Each halt gate, by number or by name, any case.
+    for (const body of ['Gate 7 plan-complete: staging PR open.', 'SAFETY-BOUND: --max-runtime=4h reached.', 'escalation-valve: PR #9 withheld.', 'plan-complete: no planned sprint left.', 'gate 5: --max-waves reached.']) {
+      const r = repo({ sprintMarker: MARKER, queue: [gate(body)] })
+      expect(step(build(r), 'one/wave-1')?.detail, body).toBe('PR #9 · autopilot stopped')
+    }
+  })
+
   it('only a pending entry from the orchestrator to you stops it', () => {
     const others = [
       GATE6.replace('**Resolution:** pending', '**Resolution:** 2026-10-25 — merged by hand'),
