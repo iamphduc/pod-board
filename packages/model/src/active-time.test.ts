@@ -45,16 +45,16 @@ describe('active spans from a transcript', () => {
   const raw = (...lines: unknown[]) => parseAgentTranscript({ id: 't', session: 's', meta: JSON.stringify({ agentType: 'pod:engineer' }), jsonl: lines.map((l) => JSON.stringify(l)).join('\n') })
 
   it('a tool call that runs to the Bash limit counts as active', () => {
-    expect(raw(prompt(0), call(1, 't1'), result(11.02, 't1'), rec(12, 'r')).active).toEqual([[ms(0), ms(12)]])
+    expect(raw(prompt(0), call(1, 't1'), result(11.02, 't1'), rec(12, 'r'))?.active).toEqual([[ms(0), ms(12)]])
   })
 
   it('a gap ending in the pending tool call’s result counts up to 30 minutes, not hours', () => {
-    expect(raw(prompt(0), call(1, 't1'), result(21, 't1')).active).toEqual([[ms(0), ms(21)]])
+    expect(raw(prompt(0), call(1, 't1'), result(21, 't1'))?.active).toEqual([[ms(0), ms(21)]])
     // The same gap with no call waiting on that result (another record, or another call's result) splits.
-    expect(raw(prompt(0), call(1, 't1'), rec(21, 'r')).active).toEqual([[ms(0), ms(1)], [ms(21), ms(21)]])
-    expect(raw(prompt(0), call(1, 't1'), result(2, 't1'), result(22, 't1')).active).toEqual([[ms(0), ms(2)], [ms(22), ms(22)]])
+    expect(raw(prompt(0), call(1, 't1'), rec(21, 'r'))?.active).toEqual([[ms(0), ms(1)], [ms(21), ms(21)]])
+    expect(raw(prompt(0), call(1, 't1'), result(2, 't1'), result(22, 't1'))?.active).toEqual([[ms(0), ms(2)], [ms(22), ms(22)]])
     // The laptop asleep mid-call: three hours, result or not, is idle.
-    expect(raw(prompt(0), call(1, 't1'), result(181, 't1')).active).toEqual([[ms(0), ms(1)], [ms(181), ms(181)]])
+    expect(raw(prompt(0), call(1, 't1'), result(181, 't1'))?.active).toEqual([[ms(0), ms(1)], [ms(181), ms(181)]])
   })
 
   it('start, last record, and tokens are unchanged', () => {
