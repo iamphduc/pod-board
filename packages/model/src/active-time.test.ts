@@ -56,17 +56,18 @@ const slice = (a: AgentRun, code: string): AgentRun => ({ ...a, sprint: 'one', s
 describe('slice and wave minutes count active time only', () => {
   // The pod-trial F1 slice: the first engineer worked 08:50–09:00, then wrote once after 180 min
   // and once after 997 more (the PC asleep); the re-dispatch worked 04:38–04:45 the next morning.
+  // 10 min, plus 04:37–04:45: the minute between the two engineers is under the gap, so it counts.
   const first = slice(parse('f1a', [0, 2, 4, 6, 8, 10, 190, 1187], true), 'F1')
   const second = slice(parse('f1b', [1188, 1190, 1192, 1195], true), 'F1')
   const now = ms(1300)
 
-  it('F1 reads 17 min, not 1195', () => {
+  it('F1 reads 18 min, not 1195', () => {
     const p = buildPipeline(repo([first, second]), 'alpha', now)
     const row = p?.log[0]?.rows[0]
-    expect(row).toMatchObject({ code: 'F1', minutes: 17 })
+    expect(row).toMatchObject({ code: 'F1', minutes: 18 })
     // Tokens unchanged: every message counted.
     expect(row?.tokens).toBe(first.tokens + second.tokens)
-    expect(p?.stages.find((s) => s.key === 'sprint:one')?.steps[0]?.detail).toBe('2 engineers · 17 min · 100 tok')
+    expect(p?.stages.find((s) => s.key === 'sprint:one')?.steps[0]?.detail).toBe('2 engineers · 18 min · 100 tok')
   })
 
   it('parallel engineers overlap: the wave counts wall time they were active, once', () => {

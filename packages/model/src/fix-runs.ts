@@ -44,10 +44,17 @@ function turnsOf(a: AgentRun, now: number): Turn[] {
   const turns = a.turns
   if (!turns || turns.length < 2) return [{ a, state: agentState(a, now) }]
   return turns.map((t, i) => ({
-    a: { ...a, startedAt: t.startedAt, lastAt: t.lastAt, tokens: t.tokens },
+    a: { ...a, startedAt: t.startedAt, lastAt: t.lastAt, tokens: t.tokens, ...clipActive(a, t.startedAt, t.lastAt) },
     turn: i,
     state: i === turns.length - 1 ? agentState(a, now) : 'ended',
   }))
+}
+
+/** The agent's active spans cut to one turn, so the time between turns never counts. */
+function clipActive(a: AgentRun, from: number, to: number): Pick<AgentRun, 'active'> {
+  if (!a.active) return {}
+  const active = a.active.filter(([x, y]) => y >= from && x <= to).map(([x, y]): [number, number] => [Math.max(x, from), Math.min(y, to)])
+  return { active }
 }
 
 /**
@@ -162,14 +169,8 @@ const COUNT_WORD: Record<string, string> = { Engineer: 'engineer', 'Fix pass': '
 function agentStep(key: string, label: string, xs: FixAgent[], waiting: string, now: number): Step {
   if (xs.length === 0) return { key, label, state: 'wait', detail: waiting }
   const live = xs.some((x) => x.state === 'running')
-  // Each turn's own time, added up: a fix pass resumed hours later doesn't count the hours between.
-  const { tokens } = spend(xs, live, now)
-  const ms = xs.reduce((sum, x) => {
-    const start = x.a.startedAt
-    const end = x.state === 'running' ? now : x.a.lastAt
-    return start === undefined || end === undefined ? sum : sum + Math.max(0, end - start)
-  }, 0)
-  const minutes = xs.some((x) => x.a.startedAt !== undefined) ? Math.round(ms / 60_000) : undefined
+  // Each turn's active time: a fix pass resumed hours later doesn't count the hours between, nor an idle gap.
+  const { minutes, tokens } = spend(xs.map((x) => ({ a: x.a, live: x.state === 'running' })), now)
   const parts: string[] = []
   if (xs.length > 1) parts.push(plural(xs.length, COUNT_WORD[label] ?? 'run'))
   if (minutes !== undefined) parts.push(live ? `${minutes} min so far` : `${minutes} min`)

@@ -11,6 +11,13 @@ import type { Usage } from './pod-flow/types.ts'
 /** An agent that wrote nothing for this long, and didn't end, reads as stale. */
 export const STALE_MS = 30 * 60 * 1000
 
+/**
+ * A gap between two records longer than this is idle, not work: it ends one active span. 10 minutes,
+ * the longest a foreground tool call can run (the Bash tool's limit) and Claude Code's stall watchdog,
+ * so a working agent never goes this long without a record.
+ */
+export const IDLE_GAP_MS = 10 * 60 * 1000
+
 /** One agent's files, as text: `agent-<id>.meta.json` and `agent-<id>.jsonl`. */
 export type AgentFile = { id: string; session: string; meta: string; jsonl: string }
 
@@ -28,6 +35,7 @@ export function parseAgentTranscript({ id, session, meta, jsonl }: AgentFile): A
   let startedAt: number | undefined
   let lastAt: number | undefined
   let model: string | undefined
+  const active: [number, number][] = []
   // A turn runs from a prompt to its hand-back (or end_turn); a prompt after that starts the next turn.
   let turn: Turn = { ended: false }
   const turns: Turn[] = [turn]
@@ -47,6 +55,9 @@ export function parseAgentTranscript({ id, session, meta, jsonl }: AgentFile): A
     const time = typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : Number.NaN
     if (Number.isFinite(time)) {
       startedAt ??= time
+      const span = active.at(-1)
+      if (span && time - span[1] <= IDLE_GAP_MS) span[1] = Math.max(span[1], time)
+      else active.push([time, time])
       lastAt = time
       turn.startedAt ??= time
       turn.lastAt = time
@@ -78,6 +89,7 @@ export function parseAgentTranscript({ id, session, meta, jsonl }: AgentFile): A
   if (model !== undefined) run.model = model
   if (startedAt !== undefined) run.startedAt = startedAt
   if (lastAt !== undefined) run.lastAt = lastAt
+  if (active.length > 0) run.active = active
   // Only a resumed agent gets its turns: one turn says nothing the run's own fields don't.
   const timed = turns.filter((t): t is Turn & { startedAt: number; lastAt: number } => t.startedAt !== undefined && t.lastAt !== undefined)
   if (timed.length > 1) {

@@ -7,7 +7,7 @@
 import type { AgentRun, BoardRepo, PrStatus } from './board.ts'
 import { formatTokens, isDone } from './pod-flow/model.ts'
 import type { PlanModel, SliceModel, SprintModel, WaveModel } from './run-model.ts'
-import { agentState, STALE_MS } from './transcript.ts'
+import { agentState, IDLE_GAP_MS, STALE_MS } from './transcript.ts'
 
 export type StepState = 'done' | 'live' | 'wait' | 'you' | 'blocked' | 'unknown'
 /** `merge` is set only on a step that shows a PR waiting on you (see `waitingPrs`). */
@@ -256,18 +256,47 @@ function isWaveLive(ctx: Ctx, s: SprintModel, w: WaveModel): boolean {
   return current || w.slices.some((x) => x.status === 'pushed') || waveAgents(ctx, s, w).some((x) => x.live)
 }
 
-/** Minutes from the earliest start to the latest record (or now while live), and tokens. Nothing with no agents. */
-export function spend(agents: { a: AgentRun }[], live: boolean, now: number): { minutes?: number; tokens?: number } {
+/**
+ * Active minutes and tokens of a group of agents. Minutes: the agents' active spans joined, so
+ * parallel engineers count once and an idle gap (over IDLE_GAP_MS between records) not at all. A live
+ * agent's last span runs on to now while its last record is within IDLE_GAP_MS. Nothing with no agents.
+ */
+export function spend(agents: { a: AgentRun; live: boolean }[], now: number): { minutes?: number; tokens?: number } {
   if (agents.length === 0) return {}
   const out: { minutes?: number; tokens?: number } = {}
-  const finite = (v: number | undefined): v is number => v !== undefined && Number.isFinite(v)
-  const starts = agents.map(({ a }) => a.startedAt).filter(finite)
-  const ends = agents.map(({ a }) => a.lastAt).filter(finite)
-  const end = live ? now : ends.length > 0 ? Math.max(...ends) : undefined
-  if (starts.length > 0 && end !== undefined) out.minutes = Math.max(0, Math.round((end - Math.min(...starts)) / 60_000))
+  const spans = agents.flatMap(({ a, live }) => activeSpans(a, live, now))
+  if (spans.length > 0) out.minutes = Math.round(joinedLength(spans) / 60_000)
   const tokens = agents.reduce((sum, { a }) => sum + (Number.isFinite(a.tokens) ? a.tokens : 0), 0)
   if (tokens > 0) out.tokens = tokens
   return out
+}
+
+const finite = (v: number | undefined): v is number => v !== undefined && Number.isFinite(v)
+
+/** An agent's active spans; one with none (a Board from before spans) is one span from its start to its last record. */
+function activeSpans(a: AgentRun, live: boolean, now: number): [number, number][] {
+  const spans: [number, number][] = (a.active ?? (finite(a.startedAt) && finite(a.lastAt) ? [[a.startedAt, a.lastAt]] : []))
+    .filter(([from, to]) => finite(from) && finite(to) && to >= from)
+    .map(([from, to]) => [from, to])
+  const last = spans.at(-1)
+  if (live && last && now >= last[1] && now - last[1] <= IDLE_GAP_MS) last[1] = now
+  return spans
+}
+
+/**
+ * The spans' length once joined as one stream of records: overlaps count once, and a gap between
+ * one agent's last record and the next one's first counts only when it is within IDLE_GAP_MS, the
+ * same rule as inside one transcript (an orchestrator's minute between two engineers is work).
+ */
+function joinedLength(spans: [number, number][]): number {
+  let total = 0
+  let end = Number.NEGATIVE_INFINITY
+  for (const [from, to] of [...spans].sort((x, y) => x[0] - y[0])) {
+    if (to <= end) continue
+    total += to - (from - end <= IDLE_GAP_MS ? end : from)
+    end = to
+  }
+  return total
 }
 
 function waveDetail(ctx: Ctx, s: SprintModel, w: WaveModel, state: StepState): string {
@@ -275,7 +304,7 @@ function waveDetail(ctx: Ctx, s: SprintModel, w: WaveModel, state: StepState): s
   const agents = waveAgents(ctx, s, w)
   if (agents.length === 0) return count(w.slices.length, 'slice')
   const live = state === 'live'
-  const { minutes, tokens } = spend(agents, live, ctx.now)
+  const { minutes, tokens } = spend(agents, ctx.now)
   const parts = [count(agents.length, 'engineer')]
   if (minutes !== undefined) parts.push(live ? `${minutes} min so far` : `${minutes} min`)
   if (!live && tokens !== undefined) parts.push(`${formatTokens(tokens)} tok`)
@@ -345,7 +374,7 @@ function logGroup(ctx: Ctx, s: SprintModel, i: number, w: WaveModel): LogGroup {
     const row: LogRow = { code: x.code, title: x.title, live }
     if (x.model) row.model = x.model
     if (!NO_CONFIDENCE.has(x.confidence.trim())) row.confidence = x.confidence.trim()
-    Object.assign(row, spend(agents, live, ctx.now))
+    Object.assign(row, spend(agents, ctx.now))
     return row
   })
   return { sprint: s.slug, wave: w.wave, label: `Sprint ${i + 1} · wave ${w.wave}`, status: logStatus(ctx, s, w), rows }
