@@ -36,6 +36,7 @@ const NOTE = '- `[2026-10-20 · NOTE · engineer → human · plan: alpha]` a no
 const DONE = '- `[2026-10-19 · PENDING · engineer → human · plan: alpha]` resolved one **Resolution:** 2026-10-20 — fixed'
 const ANSWERED = '- `[2026-10-19 · PENDING · engineer → human · plan: alpha]` asked before **Resolution:** pending **Answer (human):** yes'
 const TO_POD = '- `[2026-10-19 · PENDING · engineer → orchestrator · plan: alpha]` for pod **Resolution:** pending'
+const TO_POD_BLOCKED = '- `[2026-10-19 · BLOCKED · engineer → orchestrator · plan: alpha]` stuck for pod **Resolution:** pending'
 const CLAIMED_ASK = '- `[2026-10-21 · PENDING · orchestrator → human · plan: beta]` Which port? **Resolution:** pending'
 
 let root: string
@@ -53,7 +54,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'pod-board-a1-routes-'))
   repoPath = join(root, 'repos', 'r')
   claimedPath = join(root, 'repos', 'c')
-  await makeRepo(repoPath, 'alpha', [HALT, NOTE, DONE, ANSWERED, TO_POD, ASK])
+  await makeRepo(repoPath, 'alpha', [HALT, NOTE, DONE, ANSWERED, TO_POD, TO_POD_BLOCKED, ASK])
   await makeRepo(claimedPath, 'beta', [CLAIMED_ASK])
   await mkdir(join(root, 'cfg'), { recursive: true })
   await writeFile(join(root, 'cfg', 'config.json'), JSON.stringify({ version: 1, repos: [{ path: repoPath }] }))
@@ -168,11 +169,12 @@ describe('answer route', () => {
       // Only the whole line counts, not a part of it or the body.
       { repoId: s.repoId, line: ASK.slice(0, 40), text: 'x' },
       { repoId: s.repoId, line: 'Pick a name for the ladder', text: 'x' },
-      // On the queue but not answerable: a NOTE, resolved, answered, and one for pod.
+      // On the queue but not answerable: a NOTE, resolved, answered, and two for pod.
       { repoId: s.repoId, line: NOTE, text: 'x' },
       { repoId: s.repoId, line: DONE, text: 'x' },
       { repoId: s.repoId, line: ANSWERED, text: 'x' },
       { repoId: s.repoId, line: TO_POD, text: 'x' },
+      { repoId: s.repoId, line: TO_POD_BLOCKED, text: 'x' },
       // A repo path in the body counts for nothing.
       { repoId: 'nope', line: ASK, text: 'x', path: repoPath },
     ]

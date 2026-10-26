@@ -75,6 +75,7 @@ All optional, set as environment variables:
 | `POD_BOARD_CONFIG_DIR` | Folder for `config.json` | per OS, as above |
 | `POD_BOARD_PORTS_DIR` | Where pod writes its run claims | `<temp>/pod-ports` |
 | `POD_BOARD_CLAUDE_DIR` | Claude's folder, for agent transcripts (read only) | `CLAUDE_CONFIG_DIR`, else `~/.claude` |
+| `POD_BOARD_CLAUDE_BIN` | The `claude` program that Continue, Go, and auto-continue start | `claude` on `PATH` |
 | `POD_BOARD_TRANSCRIPT_DAYS` | How many days of sessions to read | `30` |
 | `POD_BOARD_POLL` | `1` watches files by polling, for network drives | off |
 
@@ -89,7 +90,7 @@ pnpm verify
 ```
 
 This runs `pnpm typecheck`, then `pnpm test` (Vitest), then `pnpm build`. CI
-runs the same command on Windows, macOS, and Linux.
+runs the same command on Windows only; macOS and Linux aren't checked.
 
 ## Layout
 

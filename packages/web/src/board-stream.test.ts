@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Board } from '@pod-board/model'
-import { createBoardStream, PROBE_EVERY_MS, type StreamSource, type StreamState } from './board-stream.ts'
+import {
+  createBoardStream,
+  healthProbe,
+  PROBE_EVERY_MS,
+  PROBE_TIMEOUT_MS,
+  type StreamSource,
+  type StreamState,
+} from './board-stream.ts'
 
 type Listener = (ev: { data?: unknown }) => void
 
@@ -243,5 +250,52 @@ describe('notices a dead server behind a proxy that keeps the stream open', () =
     answer(false)
     await vi.advanceTimersByTimeAsync(0)
     expect(states).toEqual(['connecting'])
+  })
+})
+
+/** A fetch that never answers, and rejects once its signal aborts, as fetch does. */
+const hangingFetch = ((_url: string, init?: RequestInit) =>
+  new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+  })) as typeof fetch
+
+describe('the health probe gives up on a hung request', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('rejects once a request hangs past PROBE_TIMEOUT_MS', async () => {
+    const p = healthProbe(hangingFetch)
+    const settled = p.then(
+      () => 'resolved',
+      () => 'rejected',
+    )
+    await vi.advanceTimersByTimeAsync(PROBE_TIMEOUT_MS - 1)
+    expect(await Promise.race([settled, Promise.resolve('pending')])).toBe('pending')
+    await vi.advanceTimersByTimeAsync(1)
+    expect(await settled).toBe('rejected')
+  })
+
+  it('a quick answer leaves no timer behind', async () => {
+    expect(await healthProbe((async () => new Response(null, { status: 200 })) as typeof fetch)).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('a hung health request turns a live stream lost', async () => {
+    const sources: FakeSource[] = []
+    const states: StreamState[] = []
+    createBoardStream(
+      () => {
+        const s = new FakeSource()
+        sources.push(s)
+        return s
+      },
+      () => {},
+      (s) => states.push(s),
+      { probe: () => healthProbe(hangingFetch) },
+    )
+    sources[0]!.fire('board', JSON.stringify(board(1)))
+    await vi.advanceTimersByTimeAsync(PROBE_EVERY_MS + PROBE_TIMEOUT_MS)
+    expect(states.at(-1)).toBe('lost')
+    expect(sources[0]!.closed).toBe(true)
   })
 })

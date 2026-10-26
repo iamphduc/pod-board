@@ -53,3 +53,4 @@ Which reply pod waits for on a run (`continue`, `go`, or `try`), why, and the ch
 - 2026-10-22 · board-actions · plan complete; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)
 - 2026-10-23 · fix-hardening-2 · fixed: the copied `cd` single-quotes a POSIX path, so `$(...)` and backticks in it don't run.
 - 2026-10-23 · fix-answered-continue · added: the `answered` signal, a sendable `continue` once you answered a stopped run's entries and no `BLOCKED` of it is unanswered, halted runs included. Then: only `→ human` entries count, and auto-send sends each `answered` key once.
+- 2026-10-26 · fix-answer-only-yours · fixed: only entries routed `→ human` are answerable, as the Queue answers rule says; the answer route refuses the rest with 404.
