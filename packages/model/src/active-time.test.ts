@@ -6,7 +6,8 @@ import { buildRepoModel } from './run-model.ts'
 import { IDLE_GAP_MS, parseAgentTranscript } from './transcript.ts'
 
 // Slice, wave, and fix-run times count only active time: a gap between two records longer
-// than IDLE_GAP_MS (the laptop asleep, a run left waiting) is left out. Tokens are unchanged.
+// than IDLE_GAP_MS (the laptop asleep, a run left waiting) is left out, unless it ends in the result of
+// the tool call the agent was waiting on (up to 30 minutes). Tokens are unchanged.
 // Every snapshot is built inline: test/no-io.test.ts scans this folder, so no file reads here.
 
 const MIN = 60_000
@@ -24,18 +25,36 @@ const parse = (id: string, minutes: number[], end = false): AgentRun => {
 const ms = (m: number) => T0 + m * MIN
 
 describe('active spans from a transcript', () => {
-  it('the idle-gap threshold is 10 minutes', () => {
-    expect(IDLE_GAP_MS).toBe(10 * MIN)
+  it('the idle-gap threshold is 15 minutes: headroom over the Bash tool’s 10-minute limit', () => {
+    expect(IDLE_GAP_MS).toBe(15 * MIN)
   })
 
-  it('a gap over 10 minutes splits the run; a gap of exactly 10 does not', () => {
+  it('a gap over 15 minutes splits the run; a gap of exactly 15 does not', () => {
     expect(parse('a', [0, 5, 10, 190, 195]).active).toEqual([[ms(0), ms(10)], [ms(190), ms(195)]])
-    expect(parse('b', [0, 10, 20]).active).toEqual([[ms(0), ms(20)]])
-    expect(parse('c', [0, 10.5]).active).toEqual([[ms(0), ms(0)], [ms(10.5), ms(10.5)]])
+    expect(parse('b', [0, 15, 30]).active).toEqual([[ms(0), ms(30)]])
+    expect(parse('c', [0, 15.5]).active).toEqual([[ms(0), ms(0)], [ms(15.5), ms(15.5)]])
     // One record: a span of no length. No timestamps: no spans.
     expect(parse('d', [3]).active).toEqual([[ms(3), ms(3)]])
     const none = parseAgentTranscript({ id: 'e', session: 's', meta: JSON.stringify({ agentType: 'pod:engineer' }), jsonl: '{"type":"user"}' })
     expect(none).not.toHaveProperty('active')
+  })
+
+  // A Bash call that runs to its 600 s limit writes its result about 10.02 minutes after the call.
+  const call = (m: number, id: string) => ({ type: 'assistant', timestamp: at(m), message: { id: `m-${id}`, role: 'assistant', model: 'x', stop_reason: 'tool_use', usage: { input_tokens: 1, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }, content: [{ type: 'tool_use', id, name: 'Bash', input: {} }] } })
+  const result = (m: number, id: string) => ({ type: 'user', timestamp: at(m), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'x' }] } })
+  const raw = (...lines: unknown[]) => parseAgentTranscript({ id: 't', session: 's', meta: JSON.stringify({ agentType: 'pod:engineer' }), jsonl: lines.map((l) => JSON.stringify(l)).join('\n') })
+
+  it('a tool call that runs to the Bash limit counts as active', () => {
+    expect(raw(prompt(0), call(1, 't1'), result(11.02, 't1'), rec(12, 'r')).active).toEqual([[ms(0), ms(12)]])
+  })
+
+  it('a gap ending in the pending tool call’s result counts up to 30 minutes, not hours', () => {
+    expect(raw(prompt(0), call(1, 't1'), result(21, 't1')).active).toEqual([[ms(0), ms(21)]])
+    // The same gap with no call waiting on that result (another record, or another call's result) splits.
+    expect(raw(prompt(0), call(1, 't1'), rec(21, 'r')).active).toEqual([[ms(0), ms(1)], [ms(21), ms(21)]])
+    expect(raw(prompt(0), call(1, 't1'), result(2, 't1'), result(22, 't1')).active).toEqual([[ms(0), ms(2)], [ms(22), ms(22)]])
+    // The laptop asleep mid-call: three hours, result or not, is idle.
+    expect(raw(prompt(0), call(1, 't1'), result(181, 't1')).active).toEqual([[ms(0), ms(1)], [ms(181), ms(181)]])
   })
 
   it('start, last record, and tokens are unchanged', () => {

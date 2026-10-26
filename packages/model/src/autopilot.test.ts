@@ -142,6 +142,38 @@ describe('autopilot run, halted', () => {
   })
 })
 
+describe('autopilot run, stopped at a PENDING gate', () => {
+  // Gates 5, 6, and 7 halt with PENDING; gate 6 withholds a mergeable PR for the human to merge.
+  const gate = (body: string) => `- \`[2026-10-25 · PENDING · orchestrator → human · plan: alpha · sprint: one]\` ${body} **Resolution:** pending`
+  const GATE6 = gate(`gate 6 escalation-valve: wave PR ${pr(9)} withheld, slice F1 reported Confidence: low; merge it if you agree.`)
+  const GATE5 = gate('gate 5 safety-bound: --max-waves=1 reached.')
+
+  it('gate 6 and gate 5: the step says autopilot stopped and Merge is yours', () => {
+    for (const entry of [GATE6, GATE5]) {
+      const r = repo({ sprintMarker: MARKER, queue: [entry] })
+      expect(step(build(r), 'one/wave-1'), entry).toEqual({ key: 'one/wave-1', label: 'Wave 1', state: 'you', detail: 'PR #9 · autopilot stopped', merge: { number: 9 } })
+      expect(waitingPrs(r, NOW)).toEqual([{ kind: 'wave', number: 9, run: 'alpha', sprint: 'one', wave: 1 }])
+      // A PENDING halt isn't BLOCKED: the run needs you, it isn't blocked.
+      expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW)[0]?.state).toBe('needs-you')
+      // No wave reply: answering the entry is what resumes it.
+      expect(runReplies(r, 'alpha', NOW)).toEqual([])
+    }
+  })
+
+  it('only a pending entry from the orchestrator to you stops it', () => {
+    const others = [
+      GATE6.replace('**Resolution:** pending', '**Resolution:** 2026-10-25 — merged by hand'),
+      '- `[2026-10-25 · PENDING · reviewer → human · plan: alpha]` someday: keep the old flag? **Resolution:** pending',
+      '- `[2026-10-25 · PENDING · orchestrator → engineer · plan: alpha · sprint: one]` re-run the check **Resolution:** pending',
+    ]
+    for (const entry of others) {
+      const r = repo({ sprintMarker: MARKER, queue: [entry] })
+      expect(step(build(r), 'one/wave-1')?.detail, entry).toBe('PR #9 · autopilot merges')
+      expect(waitingPrs(r, NOW), entry).toEqual([])
+    }
+  })
+})
+
 describe('a /pod:code run (no marker) is unchanged', () => {
   it('reads you merge, with Merge, the wave-waiting reply, and the Go step', () => {
     const r = repo({})
