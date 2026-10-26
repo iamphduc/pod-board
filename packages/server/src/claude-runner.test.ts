@@ -1,11 +1,11 @@
 import { spawnSync } from 'node:child_process'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path, { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { childEnv, claudeBin, createClaudeRunner, RESUME_WINDOW_MS } from './claude-runner.ts'
+import { childEnv, claudeBin, createClaudeRunner, MAX_RESUME_LOGS, pruneLogs, RESUME_WINDOW_MS } from './claude-runner.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const FAKE = join(here, '..', 'test', 'fake-claude.mjs')
@@ -367,6 +367,54 @@ describe('createClaudeRunner', () => {
     const unsafe = createClaudeRunner({ bin: join(odd, 'claude.cmd'), logDir, env: envWith(), windowMs: 3000 })
     expect(await unsafe.start({ session: SESSION, word: 'go', cwd: repo })).toEqual({ outcome: 'failed', message: 'unsafe claude path' })
     expect(existsSync(recordFile)).toBe(false)
+  })
+  test('keeps only the newest resume logs', async () => {
+    expect(MAX_RESUME_LOGS).toBe(20)
+    mkdirSync(logDir, { recursive: true })
+    const seeded = Array.from({ length: 25 }, (_, i) => `old-${i}.log`)
+    seeded.forEach((name, i) => {
+      const file = join(logDir, name)
+      writeFileSync(file, 'x')
+      utimesSync(file, 1_000 + i, 1_000 + i)
+    })
+    const runner = createClaudeRunner({ bin: 'claude', logDir, env: envWith(), windowMs: 3000 })
+    expect(await runner.start({ session: SESSION, word: 'continue', cwd: repo })).toEqual({ outcome: 'started' })
+    const logs = readdirSync(logDir).filter((n) => n.endsWith('.log'))
+    expect(logs).toHaveLength(MAX_RESUME_LOGS)
+    const fresh = logs.filter((n) => n.startsWith(SESSION))
+    expect(fresh).toHaveLength(1)
+    expect(logs.filter((n) => n.startsWith('old-')).sort()).toEqual(seeded.slice(seeded.length - (MAX_RESUME_LOGS - 1)).sort())
+    expect(statSync(join(logDir, fresh[0]!)).mtimeMs).toBeGreaterThan(1_000_000)
+  })
+})
+
+describe('pruneLogs', () => {
+  test('deletes the oldest .log files and leaves everything else', () => {
+    mkdirSync(logDir, { recursive: true })
+    for (let i = 0; i < 25; i++) {
+      const file = join(logDir, `r-${i}.log`)
+      writeFileSync(file, 'x')
+      utimesSync(file, 1_000 + i, 1_000 + i)
+    }
+    writeFileSync(join(logDir, 'notes.txt'), 'keep me')
+    mkdirSync(join(logDir, 'sub.log'))
+    pruneLogs(logDir, 19)
+    const left = readdirSync(logDir)
+    const logs = left.filter((n) => n.startsWith('r-')).sort()
+    expect(logs).toEqual(Array.from({ length: 19 }, (_, i) => `r-${i + 6}.log`).sort())
+    expect(left).toContain('notes.txt')
+    expect(left).toContain('sub.log')
+  })
+
+  test('does not throw for a missing folder', () => {
+    expect(() => pruneLogs(join(logDir, 'nope'), 19)).not.toThrow()
+  })
+
+  test('deletes nothing when there are fewer files than keep', () => {
+    mkdirSync(logDir, { recursive: true })
+    for (let i = 0; i < 3; i++) writeFileSync(join(logDir, `r-${i}.log`), 'x')
+    pruneLogs(logDir, 19)
+    expect(readdirSync(logDir)).toHaveLength(3)
   })
 })
 
