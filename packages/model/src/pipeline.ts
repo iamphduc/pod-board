@@ -42,6 +42,12 @@ export function pendingHandBack(repo: Pick<BoardRepo, 'prs'>, plan: Pick<PlanMod
 export const isHalted = (plan: Pick<PlanModel, 'queue'>) =>
   plan.queue.some((e) => e.isPending && e.type === 'BLOCKED' && FROM_ORCHESTRATOR.test(e.route.trim()))
 
+/** A `/pod:autopilot` run (see `PlanModel.autopilot`): pod merges its wave PRs itself unless it halts. */
+export const isAutopilot = (plan: Pick<PlanModel, 'autopilot'>) => plan.autopilot === true
+
+/** What a step with a PR waiting on you says: under autopilot, only a halt hands the merge to you. */
+export const waitingWords = (plan: Pick<PlanModel, 'autopilot'>) => (isAutopilot(plan) ? 'autopilot stopped' : 'you merge')
+
 /** A blocked or skipped slice, by its status or its PR cell. */
 export const isBlockedSlice = (s: SliceModel) =>
   s.status === 'blocked' || s.status === 'skipped' || s.pr.state === 'blocked' || s.pr.state === 'skipped'
@@ -130,12 +136,21 @@ export function isRun(repo: BoardRepo, plan: PlanModel, now: number): boolean {
 }
 
 /**
- * The PR of a wave handed back to you: the plan is listed, the sprint is current, the wave isn't
+ * The PR of a wave handed back to you. Under autopilot, pod merges it itself, so only while the run is
+ * halted (the merge is then yours to override with); else `waveHandedPr`.
+ */
+export function waveWaitingPr(repo: BoardRepo, plan: PlanModel, s: SprintModel, w: WaveModel, now: number): number | undefined {
+  if (isAutopilot(plan) && !isHalted(plan)) return undefined
+  return waveHandedPr(repo, plan, s, w, now)
+}
+
+/**
+ * The PR of a wave whose engineers are done: the plan is listed, the sprint is current, the wave isn't
  * blocked or done, every unfinished slice is `pushed`, and none of the wave's engineers (slice or
  * `<sprint>-w<N>-fix`) runs. The first unfinished slice's open PR number that gh doesn't report
  * merged or closed (unknown counts as open). Undefined otherwise.
  */
-export function waveWaitingPr(repo: BoardRepo, plan: PlanModel, s: SprintModel, w: WaveModel, now: number): number | undefined {
+export function waveHandedPr(repo: BoardRepo, plan: PlanModel, s: SprintModel, w: WaveModel, now: number): number | undefined {
   if (s.slug !== plan.currentSprint || w.slices.some(isBlockedSlice) || w.slices.every(isSliceDone)) return undefined
   const open = w.slices.filter((x) => !isSliceDone(x))
   if (!open.every((x) => x.status.trim().toLowerCase() === 'pushed')) return undefined
@@ -171,9 +186,10 @@ export function buildPipeline(repo: BoardRepo, planSlug: string, now: number): P
     {
       key: 'plan',
       caption: 'Plan',
+      // Autopilot records no Go: the run starts on its own command.
       steps: [
         { key: 'plan', label: 'Plan', state: 'done', detail: count(n, 'sprint') },
-        { key: 'go', label: 'Go', state: 'unknown', detail: 'not recorded yet' },
+        ...(isAutopilot(plan) ? [] : [{ key: 'go', label: 'Go', state: 'unknown' as const, detail: 'not recorded yet' }]),
       ],
     },
     ...plan.sprints.map((s, i) => ({ key: `sprint:${s.slug}`, caption: `Sprint ${i + 1} of ${n}`, steps: sprintSteps(ctx, s) })),
@@ -195,7 +211,10 @@ function sprintSteps(ctx: Ctx, s: SprintModel): Step[] {
       const state = waveState(ctx, s, w)
       const step: Step = { key: `${s.slug}/wave-${w.wave}`, label: `Wave ${w.wave}`, state, detail: waveDetail(ctx, s, w, state) }
       const n = state === 'you' ? waveWaitingPr(ctx.repo, ctx.plan, s, w, ctx.now) : undefined
-      if (n !== undefined) Object.assign(step, { detail: `PR #${n} · you merge`, merge: { number: n } })
+      if (n !== undefined) return Object.assign(step, { detail: `PR #${n} · ${waitingWords(ctx.plan)}`, merge: { number: n } })
+      // Autopilot, not halted: the PR is pod's to merge. No merge, and the wave reads live, not you.
+      const auto = state === 'live' && isAutopilot(ctx.plan) ? waveHandedPr(ctx.repo, ctx.plan, s, w, ctx.now) : undefined
+      if (auto !== undefined) step.detail = `PR #${auto} · autopilot merges`
       return step
     })
   }
