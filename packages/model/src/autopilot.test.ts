@@ -14,7 +14,7 @@ const NOW = Date.UTC(2026, 9, 25, 12)
 const MARKER = '<!-- autopilot-run: started=2026-10-25T08:50:32Z sprints=0 waves=1 -->'
 
 type Row = [wave: number, code: string, pr: string, status: string]
-type Opts = { sprints?: [string, string][]; rows?: Row[] | undefined; sprintMarker?: string; planMarker?: string; queue?: string[] }
+type Opts = { sprints?: [string, string][]; rows?: Row[] | null; sprintMarker?: string; planMarker?: string; queue?: string[] }
 
 const pr = (n: number) => `https://github.com/o/r/pull/${n}`
 
@@ -83,8 +83,8 @@ describe('autopilot marker', () => {
   })
 
   it('between sprints, the plan doc carries it', () => {
-    expect(autopilot({ sprints: [['one', 'planned']], rows: undefined, planMarker: MARKER })).toBe(true)
-    expect(autopilot({ sprints: [['one', 'planned']], rows: undefined })).toBeUndefined()
+    expect(autopilot({ sprints: [['one', 'planned']], rows: null, planMarker: MARKER })).toBe(true)
+    expect(autopilot({ sprints: [['one', 'planned']], rows: null })).toBeUndefined()
   })
 
   it('a started sprint doc decides, not a marker left in the plan doc', () => {
@@ -116,7 +116,7 @@ describe('autopilot run, not halted', () => {
     // gh says the wave PR merged: autopilot moves on by itself.
     expect(runReplies(repo({ sprintMarker: MARKER }, [{ number: 9, state: 'merged', checks: 'pass', checkedAt: NOW }]), 'alpha', NOW)).toEqual([])
     // A done sprint with the next not drafted: autopilot drafts it by itself.
-    const between = repo({ sprints: [['zero', 'done'], ['one', 'planned']], rows: undefined, planMarker: MARKER })
+    const between = repo({ sprints: [['zero', 'done'], ['one', 'planned']], rows: null, planMarker: MARKER })
     expect(runReplies(between, 'alpha', NOW)).toEqual([])
   })
 
