@@ -45,7 +45,18 @@ export const isHalted = (plan: Pick<PlanModel, 'queue'>) =>
 /** A `/pod:autopilot` run (see `PlanModel.autopilot`): pod merges its wave PRs itself unless it halts. */
 export const isAutopilot = (plan: Pick<PlanModel, 'autopilot'>) => plan.autopilot === true
 
-/** What a step with a PR waiting on you says: under autopilot, only a halt hands the merge to you. */
+const TO_HUMAN = /(?:→|->)\s*human\s*$/i
+
+/**
+ * Autopilot stopped for you: halted (`isHalted`), or a pending PENDING from the orchestrator to you. The policy's
+ * gates 5–7 halt with PENDING, and gate 6 withholds a mergeable PR for you to merge. Run state still follows
+ * `isHalted` (BLOCKED → blocked; a PENDING reads needs-you).
+ */
+export const isAutopilotStopped = (plan: Pick<PlanModel, 'queue'>) =>
+  isHalted(plan) ||
+  plan.queue.some((e) => e.isPending && e.type === 'PENDING' && FROM_ORCHESTRATOR.test(e.route.trim()) && TO_HUMAN.test(e.route.trim()))
+
+/** What a step with a PR waiting on you says: under autopilot, only a stop hands the merge to you. */
 export const waitingWords = (plan: Pick<PlanModel, 'autopilot'>) => (isAutopilot(plan) ? 'autopilot stopped' : 'you merge')
 
 /** A blocked or skipped slice, by its status or its PR cell. */
@@ -136,11 +147,11 @@ export function isRun(repo: BoardRepo, plan: PlanModel, now: number): boolean {
 }
 
 /**
- * The PR of a wave handed back to you. Under autopilot, pod merges it itself, so only while the run is
- * halted (the merge is then yours to override with); else `waveHandedPr`.
+ * The PR of a wave handed back to you. Under autopilot, pod merges it itself, so only while it is stopped
+ * for you (`isAutopilotStopped`: the merge is then yours, or yours to override with); else `waveHandedPr`.
  */
 export function waveWaitingPr(repo: BoardRepo, plan: PlanModel, s: SprintModel, w: WaveModel, now: number): number | undefined {
-  if (isAutopilot(plan) && !isHalted(plan)) return undefined
+  if (isAutopilot(plan) && !isAutopilotStopped(plan)) return undefined
   return waveHandedPr(repo, plan, s, w, now)
 }
 
