@@ -8,7 +8,7 @@ Screen 2, at `#/<repoId>/<plan>/board`: one column per wave of the shown sprint,
 
 - **Shown sprint:** the plan's current sprint, else the last sprint with a doc. No such sprint or no slices → `Sprint <s> isn't drafted yet.` (or `No sprint with a doc yet.`).
 - **Columns** take their status from the pipeline's slice log for that wave, and each card's row is that log's row.
-- **Card state**, first match: `blocked` → `merged` → `needs-you` (a queue item for the human naming the slice, or its wave's PR waiting on you, see `waitingPrs` in `runs-and-pipeline.md`) → `running` (status `pushed`, or a running engineer for the slice) → `waiting`. Meta: model, confidence, minutes; or the latest entry's text cut to 60 characters, else `PR #N · you merge`; or `needs <codes>`.
+- **Card state**, first match: `blocked` → `merged` → `needs-you` (a queue item for the human naming the slice, or its wave's PR waiting on you, see `waitingPrs` in `runs-and-pipeline.md`) → `running` (status `pushed`, or a running engineer for the slice) → `waiting`. Meta: model, confidence, minutes; or the latest entry's text cut to 60 characters, else `PR #N · you merge` (`PR #N · autopilot stopped` on a halted autopilot run, whose wave PR waits on you only then); or `needs <codes>`.
 - **Edges:** one per dependency on a slice of this board in an earlier wave. **Critical path:** the longest chain by slice count; a tie goes to the chain whose slices come first in board order.
 - **Lines** are SVG curves from the right edge of one card to the left edge of the next, redrawn on board change, resize, and once fonts load.
 - **Filters:** chips are toggle buttons; with any on, other cards dim in place, lines stay, and counts never change. The set clears when the shown sprint changes.
@@ -39,3 +39,4 @@ Screen 2, at `#/<repoId>/<plan>/board`: one column per wave of the shown sprint,
 - 2026-10-19 · board-read · plan complete; checked in review at 1280 and 375 px (critical path H1 → M1 → T1 on chess-web) · [report](../reports/board-read.html)
 - 2026-10-20 · board-read · final review passed at round 5; filter, keys, 375 px, and live card update checked again · [report](../reports/board-read.html)
 - 2026-10-21 · merge-actions P1 · the cards of a wave whose PR waits on you read `needs you`, with `PR #N · you merge`.
+- 2026-10-26 · fix-autopilot-view · fixed: an autopilot wave's cards read `needs you · PR #N · you merge`; now they read `running` while autopilot merges, and `needs you · PR #N · autopilot stopped` after a halt. Card minutes leave out idle gaps over 15 minutes.

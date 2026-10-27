@@ -293,9 +293,10 @@ describe('buildFixPipeline', () => {
   })
 
   it('two build engineers show their count', () => {
+    // 60→50 and 49→40 minutes ago: the 1-minute gap between them is under the idle gap, so it counts (20 min).
     const agents = [engineer('fix-scroll', 60, 50, { ended: true }), engineer('fix-scroll', 49, 40, { ended: true })]
     expect(stages(repo({ claims: [claim('fix-scroll')], agents }))?.[0]?.[1]).toEqual([
-      ['Engineer', 'done', '2 engineers · 19 min'],
+      ['Engineer', 'done', '2 engineers · 20 min'],
       ['Fix pass', 'wait', 'only if review fails'],
     ])
   })

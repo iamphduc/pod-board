@@ -7,7 +7,7 @@
 import type { AgentRun, BoardRepo, PrStatus } from './board.ts'
 import { formatTokens, isDone } from './pod-flow/model.ts'
 import type { PlanModel, SliceModel, SprintModel, WaveModel } from './run-model.ts'
-import { agentState, STALE_MS } from './transcript.ts'
+import { agentState, IDLE_GAP_MS, STALE_MS } from './transcript.ts'
 
 export type StepState = 'done' | 'live' | 'wait' | 'you' | 'blocked' | 'unknown'
 /** `merge` is set only on a step that shows a PR waiting on you (see `waitingPrs`). */
@@ -41,6 +41,34 @@ export function pendingHandBack(repo: Pick<BoardRepo, 'prs'>, plan: Pick<PlanMod
 /** A pending BLOCKED entry from the orchestrator halts the plan. */
 export const isHalted = (plan: Pick<PlanModel, 'queue'>) =>
   plan.queue.some((e) => e.isPending && e.type === 'BLOCKED' && FROM_ORCHESTRATOR.test(e.route.trim()))
+
+/** A `/pod:autopilot` run (see `PlanModel.autopilot`): pod merges its wave PRs itself unless it halts. */
+export const isAutopilot = (plan: Pick<PlanModel, 'autopilot'>) => plan.autopilot === true
+
+const TO_HUMAN = /(?:→|->)\s*human\s*$/i
+
+/**
+ * A halt entry starts with its gate (skills/autopilot/policy.md): gates 1–7, by number or by name, maybe in bold
+ * or after `Autopilot`. `\b(?!-)` keeps a longer word (`safety-bounded`, `plan-complete-ish`) from reading as a gate name.
+ */
+const PENDING_GATE =
+  /^\s*(?:\*\*)?(?:autopilot\s+)?(?:gate\s*[1-7]\b|(?:blocked-concern|plan-review-fail|auto-merge-fail|inter-wave-verify|safety-bound|escalation-valve|plan-complete)\b(?!-))/i
+
+/**
+ * Autopilot stopped for you: halted (`isHalted`), or a pending PENDING from the orchestrator to you that starts
+ * with a halt gate. The policy's gates 5–7 halt with PENDING (pod has filed gate 3 that way too), and gate 6
+ * withholds a mergeable PR for you to merge; the orchestrator's other PENDING notes to you (`now: …`,
+ * `someday: …`, an agent default, a note that names a gate mid-sentence) don't stop it. Run state
+ * still follows `isHalted` (BLOCKED → blocked; a PENDING reads needs-you).
+ */
+export const isAutopilotStopped = (plan: Pick<PlanModel, 'queue'>) =>
+  isHalted(plan) ||
+  plan.queue.some(
+    (e) => e.isPending && e.type === 'PENDING' && FROM_ORCHESTRATOR.test(e.route.trim()) && TO_HUMAN.test(e.route.trim()) && PENDING_GATE.test(e.body),
+  )
+
+/** What a step with a PR waiting on you says: under autopilot, only a stop hands the merge to you. */
+export const waitingWords = (plan: Pick<PlanModel, 'autopilot'>) => (isAutopilot(plan) ? 'autopilot stopped' : 'you merge')
 
 /** A blocked or skipped slice, by its status or its PR cell. */
 export const isBlockedSlice = (s: SliceModel) =>
@@ -130,12 +158,21 @@ export function isRun(repo: BoardRepo, plan: PlanModel, now: number): boolean {
 }
 
 /**
- * The PR of a wave handed back to you: the plan is listed, the sprint is current, the wave isn't
+ * The PR of a wave handed back to you. Under autopilot, pod merges it itself, so only while it is stopped
+ * for you (`isAutopilotStopped`: the merge is then yours, or yours to override with); else `waveHandedPr`.
+ */
+export function waveWaitingPr(repo: BoardRepo, plan: PlanModel, s: SprintModel, w: WaveModel, now: number): number | undefined {
+  if (isAutopilot(plan) && !isAutopilotStopped(plan)) return undefined
+  return waveHandedPr(repo, plan, s, w, now)
+}
+
+/**
+ * The PR of a wave whose engineers are done: the plan is listed, the sprint is current, the wave isn't
  * blocked or done, every unfinished slice is `pushed`, and none of the wave's engineers (slice or
  * `<sprint>-w<N>-fix`) runs. The first unfinished slice's open PR number that gh doesn't report
  * merged or closed (unknown counts as open). Undefined otherwise.
  */
-export function waveWaitingPr(repo: BoardRepo, plan: PlanModel, s: SprintModel, w: WaveModel, now: number): number | undefined {
+export function waveHandedPr(repo: BoardRepo, plan: PlanModel, s: SprintModel, w: WaveModel, now: number): number | undefined {
   if (s.slug !== plan.currentSprint || w.slices.some(isBlockedSlice) || w.slices.every(isSliceDone)) return undefined
   const open = w.slices.filter((x) => !isSliceDone(x))
   if (!open.every((x) => x.status.trim().toLowerCase() === 'pushed')) return undefined
@@ -171,9 +208,10 @@ export function buildPipeline(repo: BoardRepo, planSlug: string, now: number): P
     {
       key: 'plan',
       caption: 'Plan',
+      // Autopilot records no Go: the run starts on its own command.
       steps: [
         { key: 'plan', label: 'Plan', state: 'done', detail: count(n, 'sprint') },
-        { key: 'go', label: 'Go', state: 'unknown', detail: 'not recorded yet' },
+        ...(isAutopilot(plan) ? [] : [{ key: 'go', label: 'Go', state: 'unknown' as const, detail: 'not recorded yet' }]),
       ],
     },
     ...plan.sprints.map((s, i) => ({ key: `sprint:${s.slug}`, caption: `Sprint ${i + 1} of ${n}`, steps: sprintSteps(ctx, s) })),
@@ -195,7 +233,10 @@ function sprintSteps(ctx: Ctx, s: SprintModel): Step[] {
       const state = waveState(ctx, s, w)
       const step: Step = { key: `${s.slug}/wave-${w.wave}`, label: `Wave ${w.wave}`, state, detail: waveDetail(ctx, s, w, state) }
       const n = state === 'you' ? waveWaitingPr(ctx.repo, ctx.plan, s, w, ctx.now) : undefined
-      if (n !== undefined) Object.assign(step, { detail: `PR #${n} · you merge`, merge: { number: n } })
+      if (n !== undefined) return Object.assign(step, { detail: `PR #${n} · ${waitingWords(ctx.plan)}`, merge: { number: n } })
+      // Autopilot, not halted: the PR is pod's to merge. No merge, and the wave reads live, not you.
+      const auto = state === 'live' && isAutopilot(ctx.plan) ? waveHandedPr(ctx.repo, ctx.plan, s, w, ctx.now) : undefined
+      if (auto !== undefined) step.detail = `PR #${auto} · autopilot merges`
       return step
     })
   }
@@ -237,18 +278,47 @@ function isWaveLive(ctx: Ctx, s: SprintModel, w: WaveModel): boolean {
   return current || w.slices.some((x) => x.status === 'pushed') || waveAgents(ctx, s, w).some((x) => x.live)
 }
 
-/** Minutes from the earliest start to the latest record (or now while live), and tokens. Nothing with no agents. */
-export function spend(agents: { a: AgentRun }[], live: boolean, now: number): { minutes?: number; tokens?: number } {
+/**
+ * Active minutes and tokens of a group of agents. Minutes: the agents' active spans joined, so
+ * parallel engineers count once and an idle gap (over IDLE_GAP_MS between records) not at all. A live
+ * agent's last span runs on to now while its last record is within IDLE_GAP_MS. Nothing with no agents.
+ */
+export function spend(agents: { a: AgentRun; live: boolean }[], now: number): { minutes?: number; tokens?: number } {
   if (agents.length === 0) return {}
   const out: { minutes?: number; tokens?: number } = {}
-  const finite = (v: number | undefined): v is number => v !== undefined && Number.isFinite(v)
-  const starts = agents.map(({ a }) => a.startedAt).filter(finite)
-  const ends = agents.map(({ a }) => a.lastAt).filter(finite)
-  const end = live ? now : ends.length > 0 ? Math.max(...ends) : undefined
-  if (starts.length > 0 && end !== undefined) out.minutes = Math.max(0, Math.round((end - Math.min(...starts)) / 60_000))
+  const spans = agents.flatMap(({ a, live }) => activeSpans(a, live, now))
+  if (spans.length > 0) out.minutes = Math.round(joinedLength(spans) / 60_000)
   const tokens = agents.reduce((sum, { a }) => sum + (Number.isFinite(a.tokens) ? a.tokens : 0), 0)
   if (tokens > 0) out.tokens = tokens
   return out
+}
+
+const finite = (v: number | undefined): v is number => v !== undefined && Number.isFinite(v)
+
+/** An agent's active spans; one with none (a Board from before spans) is one span from its start to its last record. */
+function activeSpans(a: AgentRun, live: boolean, now: number): [number, number][] {
+  const spans: [number, number][] = (a.active ?? (finite(a.startedAt) && finite(a.lastAt) ? [[a.startedAt, a.lastAt]] : []))
+    .filter(([from, to]) => finite(from) && finite(to) && to >= from)
+    .map(([from, to]) => [from, to])
+  const last = spans.at(-1)
+  if (live && last && now >= last[1] && now - last[1] <= IDLE_GAP_MS) last[1] = now
+  return spans
+}
+
+/**
+ * The spans' length once joined as one stream of records: overlaps count once, and a gap between
+ * one agent's last record and the next one's first counts only when it is within IDLE_GAP_MS, the
+ * same rule as inside one transcript (an orchestrator's minute between two engineers is work).
+ */
+function joinedLength(spans: [number, number][]): number {
+  let total = 0
+  let end = Number.NEGATIVE_INFINITY
+  for (const [from, to] of [...spans].sort((x, y) => x[0] - y[0])) {
+    if (to <= end) continue
+    total += to - (from - end <= IDLE_GAP_MS ? end : from)
+    end = to
+  }
+  return total
 }
 
 function waveDetail(ctx: Ctx, s: SprintModel, w: WaveModel, state: StepState): string {
@@ -256,7 +326,7 @@ function waveDetail(ctx: Ctx, s: SprintModel, w: WaveModel, state: StepState): s
   const agents = waveAgents(ctx, s, w)
   if (agents.length === 0) return count(w.slices.length, 'slice')
   const live = state === 'live'
-  const { minutes, tokens } = spend(agents, live, ctx.now)
+  const { minutes, tokens } = spend(agents, ctx.now)
   const parts = [count(agents.length, 'engineer')]
   if (minutes !== undefined) parts.push(live ? `${minutes} min so far` : `${minutes} min`)
   if (!live && tokens !== undefined) parts.push(`${formatTokens(tokens)} tok`)
@@ -326,7 +396,7 @@ function logGroup(ctx: Ctx, s: SprintModel, i: number, w: WaveModel): LogGroup {
     const row: LogRow = { code: x.code, title: x.title, live }
     if (x.model) row.model = x.model
     if (!NO_CONFIDENCE.has(x.confidence.trim())) row.confidence = x.confidence.trim()
-    Object.assign(row, spend(agents, live, ctx.now))
+    Object.assign(row, spend(agents, ctx.now))
     return row
   })
   return { sprint: s.slug, wave: w.wave, label: `Sprint ${i + 1} · wave ${w.wave}`, status: logStatus(ctx, s, w), rows }

@@ -155,6 +155,20 @@ describe('card state', () => {
     expect(stateOf(old, 'B1')).toBe('running')
   })
 
+  it('cards of an autopilot wave: autopilot merges, or it stopped', () => {
+    const rows: BoardRow[] = [{ wave: 1, code: 'B1', status: 'pushed', pr: pr(7) }]
+    const autopilot = (queue: string[]): BoardRepo => {
+      const f = files({ sprints: [['s1', 'active']], docs: { s1: rows }, queue })
+      f['pod-docs/sprints/s1.md'] = f['pod-docs/sprints/s1.md']!.replace('## Status board', '<!-- autopilot-run: started=2026-10-18T10:00:00Z sprints=0 waves=1 -->\n\n## Status board')
+      return { id: 'id-r', name: 'r', path: '/r', source: 'registered', model: buildRepoModel(f), agents: [], prs: [], claims: [] }
+    }
+    // Not halted: pod merges it, so the card is running, not yours.
+    expect(stateOf(autopilot([]), 'B1')).toBe('running')
+    // Halted (a pending BLOCKED from the orchestrator): it needs you, and says autopilot stopped.
+    const halted = wb(autopilot([q('BLOCKED', 'orchestrator → human', 'plan: alpha · sprint: s1', 'gate 3 auto-merge-fail: no passing CI')]))
+    expect(card(halted, 'B1')).toMatchObject({ state: 'needs-you', meta: 'PR #7 · autopilot stopped' })
+  })
+
   it('needs-you only from an entry naming this slice, with this sprint or none', () => {
     const rows = [{ wave: 1, code: 'C1' }]
     expect(stateOf(one(rows, { queue: [q('PENDING', 'engineer → human', 'plan: alpha · slice: C1', 'x')] }), 'C1')).toBe('needs-you')

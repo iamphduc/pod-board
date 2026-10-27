@@ -11,6 +11,17 @@ import type { Usage } from './pod-flow/types.ts'
 /** An agent that wrote nothing for this long, and didn't end, reads as stale. */
 export const STALE_MS = 30 * 60 * 1000
 
+/**
+ * A gap between two records longer than this is idle, not work: it ends one active span. 15 minutes:
+ * headroom over the longest a foreground tool call runs (the Bash tool's 10-minute limit; a call that
+ * runs to it writes its result about 10.02 minutes later) and Claude Code's 600 s stall watchdog. A
+ * laptop asleep leaves gaps of hours.
+ */
+export const IDLE_GAP_MS = 15 * 60 * 1000
+
+/** A gap that ends in the result of a tool call the agent was waiting on counts as active up to this long. */
+export const TOOL_GAP_MS = 30 * 60 * 1000
+
 /** One agent's files, as text: `agent-<id>.meta.json` and `agent-<id>.jsonl`. */
 export type AgentFile = { id: string; session: string; meta: string; jsonl: string }
 
@@ -28,6 +39,9 @@ export function parseAgentTranscript({ id, session, meta, jsonl }: AgentFile): A
   let startedAt: number | undefined
   let lastAt: number | undefined
   let model: string | undefined
+  const active: [number, number][] = []
+  // Tool calls the agent waits on: their ids, from tool_use blocks, until a tool_result answers them.
+  const calls = new Set<string>()
   // A turn runs from a prompt to its hand-back (or end_turn); a prompt after that starts the next turn.
   let turn: Turn = { ended: false }
   const turns: Turn[] = [turn]
@@ -45,8 +59,15 @@ export function parseAgentTranscript({ id, session, meta, jsonl }: AgentFile): A
       else turn = Object.assign(turn, { ended: false, endedAt: undefined })
     }
     const time = typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : Number.NaN
+    const answers = record.type === 'user' && message !== undefined && answersCall(message.content, calls)
+    if (record.type === 'assistant' && message && Array.isArray(message.content)) {
+      for (const b of message.content) if (isObject(b) && b.type === 'tool_use' && typeof b.id === 'string') calls.add(b.id)
+    }
     if (Number.isFinite(time)) {
       startedAt ??= time
+      const span = active.at(-1)
+      if (span && time - span[1] <= (answers ? TOOL_GAP_MS : IDLE_GAP_MS)) span[1] = Math.max(span[1], time)
+      else active.push([time, time])
       lastAt = time
       turn.startedAt ??= time
       turn.lastAt = time
@@ -78,6 +99,7 @@ export function parseAgentTranscript({ id, session, meta, jsonl }: AgentFile): A
   if (model !== undefined) run.model = model
   if (startedAt !== undefined) run.startedAt = startedAt
   if (lastAt !== undefined) run.lastAt = lastAt
+  if (active.length > 0) run.active = active
   // Only a resumed agent gets its turns: one turn says nothing the run's own fields don't.
   const timed = turns.filter((t): t is Turn & { startedAt: number; lastAt: number } => t.startedAt !== undefined && t.lastAt !== undefined)
   if (timed.length > 1) {
@@ -119,6 +141,16 @@ function promptText(content: unknown): string | undefined {
   if (!Array.isArray(content)) return undefined
   const block = content.find((b) => isObject(b) && b.type === 'text' && typeof b.text === 'string')
   return block?.text as string | undefined
+}
+
+/** A user record's content answers a call in `calls`; the answered ids leave the set. */
+function answersCall(content: unknown, calls: Set<string>): boolean {
+  if (!Array.isArray(content)) return false
+  let answered = false
+  for (const b of content) {
+    if (isObject(b) && b.type === 'tool_result' && typeof b.tool_use_id === 'string' && calls.delete(b.tool_use_id)) answered = true
+  }
+  return answered
 }
 
 const isHandback = (block: unknown) => isObject(block) && block.type === 'tool_use' && block.name === 'SubagentHandback'

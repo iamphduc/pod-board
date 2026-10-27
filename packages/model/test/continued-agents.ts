@@ -4,6 +4,8 @@
 // dispatch in the real field shape, so the agents join their fix run. Cut from the transcripts of
 // agents a0b2da9a7a9669669 (pod:reviewer: round 1, then continued for round 2) and
 // a31b714fcabe030d3 (pod:engineer: the build, then continued for the fix pass, then again).
+// The fix pass (18:19–18:54) keeps six padding tool results, one every 5 minutes, so its active time
+// reads as the real transcript's (34.7 min): the cut left gaps longer than the idle-gap rule allows.
 
 type Rec = { type: string; timestamp: string; message: { content: unknown } & Record<string, unknown> } & Record<string, unknown>
 
@@ -37,6 +39,12 @@ export const CONTINUED_ENGINEER: Rec[] = withDispatch([
   {"type":"user","timestamp":"2026-10-20T18:08:50.152Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_x","content":"RESULT"}]}},
   {"type":"user","timestamp":"2026-10-20T18:19:37.869Z","isMeta":true,"origin":{"kind":"coordinator"},"message":{"role":"user","content":"PROMPT"}},
   {"type":"assistant","timestamp":"2026-10-20T18:19:41.534Z","message":{"id":"msg_1011","model":"claude-opus-5-5","stop_reason":null,"usage":{"input_tokens":10,"output_tokens":10},"content":[{"type":"text","text":"TEXT"}]}},
+  {"type":"user","timestamp":"2026-10-20T18:25:00.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_pad","content":"RESULT"}]}},
+  {"type":"user","timestamp":"2026-10-20T18:30:00.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_pad","content":"RESULT"}]}},
+  {"type":"user","timestamp":"2026-10-20T18:35:00.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_pad","content":"RESULT"}]}},
+  {"type":"user","timestamp":"2026-10-20T18:40:00.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_pad","content":"RESULT"}]}},
+  {"type":"user","timestamp":"2026-10-20T18:45:00.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_pad","content":"RESULT"}]}},
+  {"type":"user","timestamp":"2026-10-20T18:50:00.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_pad","content":"RESULT"}]}},
   {"type":"assistant","timestamp":"2026-10-20T18:53:58.739Z","message":{"id":"msg_1220","model":"claude-opus-5-5","stop_reason":null,"usage":{"input_tokens":10,"output_tokens":10},"content":[{"type":"tool_use","id":"toolu_1220","name":"Bash","input":{}}]}},
   {"type":"assistant","timestamp":"2026-10-20T18:54:18.835Z","message":{"id":"msg_1225","model":"claude-opus-5-5","stop_reason":null,"usage":{"input_tokens":10,"output_tokens":10},"content":[{"type":"tool_use","id":"toolu_1225","name":"SubagentHandback","input":{}}]}},
   {"type":"user","timestamp":"2026-10-20T18:54:19.144Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_x","content":"RESULT"}]}},

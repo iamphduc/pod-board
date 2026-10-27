@@ -3,7 +3,7 @@
 
 import type { AgentRun, BoardRepo } from './board.ts'
 import { fixPr, fixRunAgents, fixRunNames, fixWaitingPr, listedFixRuns } from './fix-runs.ts'
-import { handBackPr, isBlockedSlice, isHalted, isPlanAgent, isRun, isRunning, isSliceDone, pendingHandBack, planAgentRunning, waveWaitingPr } from './pipeline.ts'
+import { handBackPr, isAutopilot, isBlockedSlice, isHalted, isPlanAgent, isRun, isRunning, isSliceDone, pendingHandBack, planAgentRunning, waveWaitingPr } from './pipeline.ts'
 import { asksYou } from './queue-answer.ts'
 import type { PlanModel } from './run-model.ts'
 
@@ -92,6 +92,8 @@ function stopReplies(repo: BoardRepo, plan: PlanModel, now: number): RunReply[] 
   // handBackPr reads only pending entries, so a merged PR here is a hand-back pod hasn't resolved yet.
   const handed = handBackPr(plan)
   if (handed !== undefined) return [merged('final-merged', handed, `PR #${handed} merged: pod cleans up.`)]
+  // Autopilot merges its waves and drafts the next sprint by itself: it waits for no continue between them.
+  if (isAutopilot(plan)) return []
 
   const index = plan.sprints.findIndex((s) => s.slug === plan.currentSprint)
   const current = plan.sprints[index]

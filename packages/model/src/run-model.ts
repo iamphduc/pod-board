@@ -55,6 +55,8 @@ export type PlanModel = {
   sprints: SprintModel[]
   queue: QueueItem[]
   currentSprint?: string
+  /** Set (true) on a `/pod:autopilot` run: its active sprint doc, or the plan doc while no sprint doc is active, has the `<!-- autopilot-run … -->` line. */
+  autopilot?: true
 }
 
 export type RepoModel = { docs: DocsVersion; plans: PlanModel[]; queue: QueueItem[] }
@@ -175,8 +177,14 @@ function buildPlan(doc: PlanDoc, md: string, files: SprintFile[], queue: QueueIt
   }
   const current = doc.status === 'archived' ? undefined : sprints.find((s) => s.status !== 'done')
   if (current) plan.currentSprint = current.slug
+  // The active sprint doc decides; between sprints (no doc yet) or after the last, the plan doc.
+  const active = current ? docBySlug.get(current.slug) : undefined
+  if (AUTOPILOT_RUN.test(active ? active.md : md)) plan.autopilot = true
   return plan
 }
+
+/** pod's autopilot counter line, `<!-- autopilot-run: started=… sprints=… waves=… -->`. Only its start counts: the fields may be anything. */
+const AUTOPILOT_RUN = /^[ \t]*<!--\s*autopilot-run(?![\w-])/im
 
 /**
  * An entry with no `plan:` or `sprint:` that is the orchestrator's hand-back of plan `slug`: its body starts
