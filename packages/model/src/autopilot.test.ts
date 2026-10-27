@@ -160,25 +160,64 @@ describe('autopilot run, stopped at a PENDING gate', () => {
     }
   })
 
-  it('a plain orchestrator note to you is no stop: only a PENDING that names a halt gate is', () => {
-    const notes = [
-      gate('now: at 375 px the header wraps onto two lines; left as is.'),
-      gate('someday: x.test.ts is flaky on Windows; re-ran it once.'),
-      gate('Default recorded: keep the old flag (agent default — override anytime).'),
-      // A gate number other than 5–7, or a word that only contains one, isn't a PENDING halt.
-      gate('gate 3 passed after a re-run of the checks.'),
-      gate('see the gate 50 notes.'),
-    ]
-    for (const entry of notes) {
-      const r = repo({ sprintMarker: MARKER, queue: [entry] })
-      expect(step(build(r), 'one/wave-1'), entry).toEqual({ key: 'one/wave-1', label: 'Wave 1', state: 'live', detail: 'PR #9 · autopilot merges' })
-      expect(waitingPrs(r, NOW), entry).toEqual([])
-    }
-    // Each halt gate, by number or by name, any case.
-    for (const body of ['Gate 7 plan-complete: staging PR open.', 'SAFETY-BOUND: --max-runtime=4h reached.', 'escalation-valve: PR #9 withheld.', 'plan-complete: no planned sprint left.', 'gate 5: --max-waves reached.']) {
-      const r = repo({ sprintMarker: MARKER, queue: [gate(body)] })
-      expect(step(build(r), 'one/wave-1')?.detail, body).toBe('PR #9 · autopilot stopped')
-    }
+  // Real PENDING · orchestrator → human bodies from pod queues and Queue logs (chess-web, sparring-liem,
+  // watchless, pod-board, pod-trial), cut short; PR links point at #9. A halt starts with its gate
+  // (skills/autopilot/policy.md: gates 1–7, by number or by name); a note that only mentions one is no stop.
+  const STOPS: [string, string][] = [
+    ['gate 5 by number and name', 'Gate 5 (safety-bound): `--max-runtime` (default 4h) hit — run started 2026-10-04T06:58:18Z, halted 22:56Z before dispatching wave 2 (`D1`).'],
+    ['gate 6, capitalised', `Gate 6 (escalation-valve): wave PR ${pr(9)} is mergeable but withheld because F1 is a one-way door.`],
+    ['gate 6 after Autopilot', `Autopilot gate 6 (escalation-valve): wave PR ${pr(9)} is mergeable (CI green, clean) but withheld because D1 is a one-way door (GPL-3.0-or-later \`LICENSE\`). Merge it with a merge commit (\`gh pr merge 9 --merge\`).`],
+    ['gate 6 in bold', `**gate 6** (escalation-valve): wave 1 PR ${pr(9)} is a one-way door (schema 2; older builds refuse a migrated file). Merge it yourself with \`gh pr merge 9 --merge\`, then reply \`continue\`.`],
+    ['gate 3 filed as PENDING', `gate 3 (auto-merge-fail): wave 1 PR ${pr(9)} is two-way but stacked on the unmerged #23–#27, so merging it would land them unreviewed. Merge it after #27.`],
+    ['gate 7 by number', 'gate 7 (plan-complete): staging PR open; never merged by pod.'],
+    ['safety-bound by name only', 'safety-bound: `--max-waves=1` reached before wave 2.'],
+    ['escalation-valve by name only', `escalation-valve: wave PR ${pr(9)} withheld, F1 reported Confidence: low.`],
+    ['plan-complete by name only, any case', 'PLAN-COMPLETE: no planned sprint left.'],
+    ['gate 1 by name', 'blocked-concern: an engineer stalled twice on F1.'],
+    ['gate 2 by name', 'plan-review-fail: the final review still finds FIX items.'],
+    ['gate 4 by name, any case', 'Inter-Wave-Verify: the wave check failed on the merged board.'],
+    ['leading whitespace', `   gate 6 (escalation-valve): wave PR ${pr(9)} withheld.`],
+    ['gate without a space', 'gate6 (escalation-valve): withheld.'],
+  ]
+  const NOTES: [string, string][] = [
+    ['now: note', "now: YouTube's plain channel RSS feed returns 404 in long bursts (measured for 6+ minutes across 4 channels), so some nights a channel's new videos may be missed."],
+    ['someday: note', 'someday: `packages/server/src/claude-runner.test.ts › isRunning stays true while any child for the session lives` is flaky.'],
+    ['Someday (Look) note', 'Someday (Look): on phones the review’s graph sits above the "vs Liem / Two players" tabs, so the tabs move.'],
+    ['agent default', 'Default recorded: keep the old flag (agent default — override anytime).'],
+    ['decision ask', 'Needs your decision: Lichess’s real grade levels are **5 / 10 / 15** win-% points, not the 10 / 20 / 30 the plan took.'],
+    ['Look note in bold', '**Look:** at 375 px his name reads "Le Quang Li…" on the in-game Liem card.'],
+    ['a gate name mid-sentence', 'someday: the plan-complete review should also re-run the e2e suite; kept going.'],
+    ['a gate number mid-sentence', 'Runtime safety bound (gate 6) note: run clock reads ~12h at W2 dispatch, over the default `--max-runtime=4h`. NOT halted; continuing.'],
+    ['the hand-back (the Ship step’s, not a wave stop)', 'plan alpha complete — final PR https://github.com/o/r/pull/12, review pass, 4 open entries.'],
+    ['PLAN COMPLETE in words', '**PLAN COMPLETE — `alpha`.** All sprints done. Plan-complete gate (gate 9): no `planned` rows remain.'],
+    ['gate 50', 'gate 50 notes: see the wave log.'],
+    ['gate 8', 'gate 8: no such gate.'],
+    ['gate 0', 'gate 0: no such gate.'],
+    ['regate 5', 'regate 5 after the fix.'],
+    ['a gate name glued to a word', 'safety-bounded: the run stayed under every bound.'],
+  ]
+  const stopOf = (body: string) => step(build(repo({ sprintMarker: MARKER, queue: [gate(body)] })), 'one/wave-1')
+
+  it.each(STOPS)('stops autopilot: %s', (_, body) => {
+    const r = repo({ sprintMarker: MARKER, queue: [gate(body)] })
+    expect(stopOf(body)).toEqual({ key: 'one/wave-1', label: 'Wave 1', state: 'you', detail: 'PR #9 · autopilot stopped', merge: { number: 9 } })
+    expect(waitingPrs(r, NOW)).toEqual([{ kind: 'wave', number: 9, run: 'alpha', sprint: 'one', wave: 1 }])
+    // A PENDING stop reads needs-you, never blocked: isHalted is for BLOCKED only.
+    expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW)[0]?.state).toBe('needs-you')
+  })
+
+  it.each(NOTES)('is no stop: %s', (_, body) => {
+    const r = repo({ sprintMarker: MARKER, queue: [gate(body)] })
+    expect(stopOf(body)).toEqual({ key: 'one/wave-1', label: 'Wave 1', state: 'live', detail: 'PR #9 · autopilot merges' })
+    // No wave PR waits on you (the hand-back case still lists its final PR, the Ship step's own rule).
+    expect(waitingPrs(r, NOW).filter((w) => w.kind === 'wave')).toEqual([])
+  })
+
+  it('a BLOCKED from the orchestrator stops it whatever its body says', () => {
+    const blocked = `- \`[2026-10-25 · BLOCKED · orchestrator → human · plan: alpha · sprint: one]\` someday: the plan-complete review should re-run e2e. **Resolution:** pending`
+    const r = repo({ sprintMarker: MARKER, queue: [blocked] })
+    expect(step(build(r), 'one/wave-1')?.detail).toBe('PR #9 · autopilot stopped')
+    expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW)[0]?.state).toBe('blocked')
   })
 
   it('only a pending entry from the orchestrator to you stops it', () => {
