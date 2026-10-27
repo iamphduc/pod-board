@@ -34,7 +34,7 @@ The board can send `continue` or `go` to a pod run's own Claude session, so you 
 - **A quiet turn:** one long tool call can leave every file quiet for over 60 s; a send then happens only if pod also shows a sendable stop.
 - **Unlisted runs:** the toggle route answers `404 not a run`, even to turn it off; such a toggle stays in the file but never sends.
 - **A `claude` on a relative `PATH` entry is skipped:** a `PATH` with `.` or `bin` in it would resolve against the repo folder the run starts in. Put `claude`'s folder on `PATH` as an absolute path, or set `POD_BOARD_CLAUDE_BIN`.
-- **Tests and smoke runs** use a fake runner or `packages/server/test/fake-claude.mjs` and a temp config, never the real `claude` or `auto-continue.json`. The resume logs are never trimmed.
+- **Tests and smoke runs** use a fake runner or `packages/server/test/fake-claude.mjs` and a temp config, never the real `claude` or `auto-continue.json`. The runner keeps the newest 20 `.log` files in `resume-logs/` and deletes older ones when it starts a run; a log a running child still holds open on Windows is kept until a later start.
 
 ## History
 
@@ -44,3 +44,4 @@ The board can send `continue` or `go` to a pod run's own Claude session, so you 
 - 2026-10-22 · board-actions · plan complete; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)
 - 2026-10-22 · fix-security-hardening: the runner drops every `ANTHROPIC_*` and `CLAUDE*` variable but `CLAUDE_CONFIG_DIR` (it dropped only the two key variables), starts `claude` and cmd.exe by absolute paths from absolute `PATH` entries only, and the spike uses the same env. Review fix: the child's `PATH` keeps only absolute entries, and on Windows `NoDefaultCurrentDirectoryInExePath=1` (a `node.bat` in the repo ran through an unreadable shim).
 - 2026-10-25 · fix-background-loops: an automatic check that throws is logged and holds no session; the next check runs.
+- 2026-10-26 · fix-resume-log-pruning: the runner keeps only the newest 20 resume logs; it never trimmed them.

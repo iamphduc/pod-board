@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { closeSync, mkdirSync, openSync, readFileSync, statSync } from 'node:fs'
+import { closeSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import path from 'node:path'
 import type { ReplyWord } from '@pod-board/model'
 import { envKey, isFile, resolveBin, safeChildEnv } from './bin-path.ts'
@@ -18,6 +18,8 @@ export type ClaudeRunner = {
 
 /** How long `start` watches the child before it calls the run started. */
 export const RESUME_WINDOW_MS = 10_000
+/** How many resume logs stay in `logDir`, counting the one a new run opens. */
+export const MAX_RESUME_LOGS = 20
 const TAIL_CHARS = 500
 
 /**
@@ -33,6 +35,36 @@ const CMD_UNSAFE = /["%!^&|<>\r\n]/
 // CSI sequences, OSC sequences, and other two-byte escapes.
 // eslint-disable-next-line no-control-regex
 const ANSI = /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)|\u001b[@-Z\\-_]/g
+
+/**
+ * Deletes the oldest `.log` files in `dir` (by mtime, then name) until `keep` remain. Other files
+ * and folders stay. Every failure is ignored, so a log a running child holds open is kept for a later start.
+ */
+export function pruneLogs(dir: string, keep: number): void {
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return
+  }
+  const logs: { name: string; mtime: number }[] = []
+  for (const e of entries) {
+    if (!e.isFile() || !e.name.endsWith('.log')) continue
+    try {
+      logs.push({ name: e.name, mtime: statSync(path.join(dir, e.name)).mtimeMs })
+    } catch {
+      // gone already
+    }
+  }
+  logs.sort((a, b) => b.mtime - a.mtime || (a.name < b.name ? 1 : a.name > b.name ? -1 : 0))
+  for (const old of logs.slice(Math.max(0, keep))) {
+    try {
+      rmSync(path.join(dir, old.name))
+    } catch {
+      // still open, or gone
+    }
+  }
+}
 
 /** The claude binary: `POD_BOARD_CLAUDE_BIN`, else `claude` (found on PATH). */
 export function claudeBin(env: Env): string {
@@ -152,6 +184,7 @@ export function createClaudeRunner(o: {
     let fd: number
     try {
       mkdirSync(o.logDir, { recursive: true })
+      pruneLogs(o.logDir, MAX_RESUME_LOGS - 1)
       fd = openSync(logPath, 'a')
     } catch (err) {
       return failed(`couldn't open the resume log: ${(err as Error).message}`)
