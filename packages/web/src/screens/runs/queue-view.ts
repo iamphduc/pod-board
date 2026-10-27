@@ -6,7 +6,14 @@ import { isAnswerable, type BoardRepo, type QueueItem, type RunSummary } from '@
 import type { AnswerState } from './answer-flow.ts'
 import type { Chip, ChipClass } from './view.ts'
 
+/** A plan run's note: its Continue resumes /pod:code, which reads the answer. */
 export const ANSWER_NOTE = 'Answer here, then press Continue. pod reads it when the run continues.'
+/** A fix run's or repo row's note: /pod:fix reads no answers and a repo row has no Continue. */
+export const ANSWER_NOTE_NEXT_WAVE = 'Answer here. pod reads it when a /pod:code run next starts a wave.'
+
+/** The answer form's note for the selected run. */
+export const answerNote = (selected: RunSummary): string =>
+  selected.fix === undefined && selected.plan !== undefined ? ANSWER_NOTE : ANSWER_NOTE_NEXT_WAVE
 export const ANSWER_WAITING = 'Waiting for pod to read it.'
 
 export type WaitingRow = {

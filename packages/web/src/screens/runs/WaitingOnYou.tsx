@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { BoardRepo, RunSummary } from '@pod-board/model'
 import { Chip } from './Chip.tsx'
 import { INITIAL, createAnswerFlow, formView, type AnswerFlow, type AnswerState } from './answer-flow.ts'
-import { formAnchor, waitingRows } from './queue-view.ts'
+import { answerNote, formAnchor, waitingRows } from './queue-view.ts'
 
 type Props = { repo: BoardRepo; run: RunSummary }
 
@@ -23,7 +23,7 @@ export function WaitingOnYou({ repo, run }: Props) {
 
   if (rows.length === 0 && anchor === undefined) return null
   const saving = state.kind === 'saving'
-  const form = <AnswerForm state={state} flow={flow} />
+  const form = <AnswerForm state={state} flow={flow} note={answerNote(run)} />
   return (
     <section className="waiting" aria-label="Waiting on you">
       <span className="eyebrow">Waiting on you</span>
@@ -66,9 +66,9 @@ export function WaitingOnYou({ repo, run }: Props) {
   )
 }
 
-/** The form under its entry: the text, Save answer, and Cancel, with the note that pod may not read it yet. */
-function AnswerForm({ state, flow }: { state: AnswerState; flow: AnswerFlow }) {
-  const view = formView(state)
+/** The form under its entry: the text, Save answer, and Cancel, with the note on when pod reads it. */
+function AnswerForm({ state, flow, note }: { state: AnswerState; flow: AnswerFlow; note: string }) {
+  const view = formView(state, note)
   const ref = useRef<HTMLElement>(null)
   const textRef = useRef<HTMLTextAreaElement>(null)
   const line = state.kind === 'idle' ? undefined : state.target.line
