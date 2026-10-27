@@ -6,7 +6,7 @@ import { isAnswerable, type BoardRepo, type QueueItem, type RunSummary } from '@
 import type { AnswerState } from './answer-flow.ts'
 import type { Chip, ChipClass } from './view.ts'
 
-export const ANSWER_NOTE = 'pod reads board answers only once its pod plugin supports them. Until then, also give the answer in the chat.'
+export const ANSWER_NOTE = 'Answer here, then press Continue. pod reads it when the run continues.'
 export const ANSWER_WAITING = 'Waiting for pod to read it.'
 
 export type WaitingRow = {
