@@ -89,8 +89,9 @@ describe('waiting on you', () => {
     expect(new Set(twice.map((r) => r.key)).size).toBe(2)
   })
 
-  it('the form says pod may not read it yet', () => {
-    expect(ANSWER_NOTE).toBe('pod reads board answers only once its pod plugin supports them. Until then, also give the answer in the chat.')
+  it('the form says to answer here, then Continue', () => {
+    expect(ANSWER_NOTE).toBe('Answer here, then press Continue. pod reads it when the run continues.')
+    expect(ANSWER_NOTE).not.toMatch(/chat/i)
     const target = { repoId: 'id-r', line: trim(ALPHA_PENDING) }
     const editing: AnswerState = { kind: 'editing', seq: 1, target, text: '' }
     expect(formView(editing)?.note).toBe(ANSWER_NOTE)
