@@ -47,13 +47,18 @@ export const isAutopilot = (plan: Pick<PlanModel, 'autopilot'>) => plan.autopilo
 
 const TO_HUMAN = /(?:→|->)\s*human\s*$/i
 
-/** A PENDING halt names its gate (skills/autopilot/policy.md): gates 5–7, by number or by name. */
-const PENDING_GATE = /\bgate\s*[567]\b|\b(?:safety-bound|escalation-valve|plan-complete)\b/i
+/**
+ * A halt entry starts with its gate (skills/autopilot/policy.md): gates 1–7, by number or by name, maybe in bold
+ * or after `Autopilot`. `\b(?!-)` keeps a longer word (`safety-bounded`, `plan-complete-ish`) from reading as a gate name.
+ */
+const PENDING_GATE =
+  /^\s*(?:\*\*)?(?:autopilot\s+)?(?:gate\s*[1-7]\b|(?:blocked-concern|plan-review-fail|auto-merge-fail|inter-wave-verify|safety-bound|escalation-valve|plan-complete)\b(?!-))/i
 
 /**
- * Autopilot stopped for you: halted (`isHalted`), or a pending PENDING from the orchestrator to you that names a
- * halt gate. The policy's gates 5–7 halt with PENDING, and gate 6 withholds a mergeable PR for you to merge; the
- * orchestrator's other PENDING notes to you (`now: …`, `someday: …`, an agent default) don't stop it. Run state
+ * Autopilot stopped for you: halted (`isHalted`), or a pending PENDING from the orchestrator to you that starts
+ * with a halt gate. The policy's gates 5–7 halt with PENDING (pod has filed gate 3 that way too), and gate 6
+ * withholds a mergeable PR for you to merge; the orchestrator's other PENDING notes to you (`now: …`,
+ * `someday: …`, an agent default, a note that names a gate mid-sentence) don't stop it. Run state
  * still follows `isHalted` (BLOCKED → blocked; a PENDING reads needs-you).
  */
 export const isAutopilotStopped = (plan: Pick<PlanModel, 'queue'>) =>
