@@ -93,10 +93,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const realSetTimeout = globalThis.setTimeout
 const realYield = () => new Promise((r) => realSetTimeout(r, 2))
 
-/** Moves fake time forward in small steps, giving real I/O a turn after each. */
-async function advance(ms: number) {
-  for (let left = ms; left > 0; left -= 50) {
-    await vi.advanceTimersByTimeAsync(Math.min(50, left))
+/**
+ * Moves fake time forward in `step` ms steps, giving real I/O a turn after each. Each turn waits
+ * a real timer, which Windows rounds up to about 15 ms, so setup that measures nothing takes bigger steps.
+ */
+async function advance(ms: number, step = 50) {
+  for (let left = ms; left > 0; left -= step) {
+    await vi.advanceTimersByTimeAsync(Math.min(step, left))
     await realYield()
   }
 }
@@ -155,59 +158,43 @@ describe('board watcher', () => {
       watcher = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, poll })
       const first = await watcher.start()
       expect(t1Status(first)).toBe('pending')
-      const { events, next } = collect(watcher)
+      const { next } = collect(watcher)
       // Let the start-up rebuilds finish, so the edit below can reach clients only through the watcher.
       await quiet(poll ? 1500 : 800)
 
+      // A burst of edits is pinned in 'a burst of real edits', with fake time, so a runner stall can't split it.
       const started = Date.now()
       await setT1(repo, 'pushed')
       const got = await next((b) => t1Status(b) === 'pushed', 5000)
       expect(Date.now() - started).toBeLessThan(5000)
       expect(watcher.board()).toBe(got)
-
-      // Three quick edits reach clients, and the last board carries the last
-      // one. How many boards they give is pinned in 'a burst of real edits':
-      // here a runner stall between two writes can split them, correctly.
-      await quiet(poll ? 1500 : 800)
-      const before = events.length
-      const burst = Date.now()
-      await setT1(repo, 'blocked')
-      await setT1(repo, 'pending')
-      await setT1(repo, 'done')
-      await next((b) => t1Status(b) === 'done', 5000)
-      expect(Date.now() - burst).toBeLessThan(5000)
-      await sleep(poll ? 2500 : 1000)
-      expect(events.length).toBeGreaterThan(before)
-      expect(t1Status(events.at(-1)!)).toBe('done')
-      expect(watcher.board()).toBe(events.at(-1))
     }, 15_000) // The 5 s bound is checked above; the whole test, with its waits, takes longer.
   }
 
-  for (const poll of [false, true]) {
-    test(`a config edit reaches clients within 5 seconds${poll ? ' (polling)' : ''}`, async () => {
-      const repo = copyFixture('chess-web')
-      await register(repo)
-      const { service: svc, quiet } = tracked(service())
-      watcher = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir, poll })
-      const first = await watcher.start()
-      expect(first.configError).toBeUndefined()
-      const { next } = collect(watcher)
-      // Let the start-up rebuilds finish, so only the watcher can see the edits below.
-      await quiet(poll ? 1500 : 800)
+  // Polling is the same chokidar option on every watch, so the polling test above covers it here too.
+  test('a config edit reaches clients within 5 seconds', async () => {
+    const repo = copyFixture('chess-web')
+    await register(repo)
+    const { service: svc, quiet } = tracked(service())
+    watcher = createBoardWatcher({ service: svc, configFile, portsDir, claudeDir })
+    const first = await watcher.start()
+    expect(first.configError).toBeUndefined()
+    const { next } = collect(watcher)
+    // Let the start-up rebuilds finish, so only the watcher can see the edits below.
+    await quiet(800)
 
-      let started = Date.now()
-      await writeFile(configFile, '{ not json')
-      const broken = await next((b) => b.configError === 'config unreadable', 5000)
-      expect(Date.now() - started).toBeLessThan(5000)
-      expect(broken.repos).toHaveLength(1)
+    let started = Date.now()
+    await writeFile(configFile, '{ not json')
+    const broken = await next((b) => b.configError === 'config unreadable', 5000)
+    expect(Date.now() - started).toBeLessThan(5000)
+    expect(broken.repos).toHaveLength(1)
 
-      await quiet(poll ? 1500 : 800)
-      started = Date.now()
-      await register(repo)
-      await next((b) => b.configError === undefined, 5000)
-      expect(Date.now() - started).toBeLessThan(5000)
-    }, 20_000)
-  }
+    await quiet(800)
+    started = Date.now()
+    await register(repo)
+    await next((b) => b.configError === undefined, 5000)
+    expect(Date.now() - started).toBeLessThan(5000)
+  }, 20_000)
 
   test('in poll mode, events up to one poll interval apart give one rebuild', async () => {
     vi.useFakeTimers()
@@ -259,7 +246,7 @@ describe('board watcher', () => {
       watcher = w
       await w.start()
       // Lets the start-up rebuilds run and finish.
-      await advance(5000)
+      await advance(5000, 500)
       expect(fakes.length).toBeGreaterThan(0)
       builds.length = 0
       return { fakes, builds, emit: () => fakes[0]!.emit('all', 'change', configFile) }
@@ -365,7 +352,7 @@ describe('board watcher', () => {
       const first = await w.start()
       expect(t1Status(first)).toBe('pending')
       // Lets the start-up rebuilds run, then waits for the last one to finish.
-      await advance(5000)
+      await advance(5000, 500)
       await w.rebuild()
       expect(fakes.length).toBeGreaterThan(0)
       const { events } = collect(w)
