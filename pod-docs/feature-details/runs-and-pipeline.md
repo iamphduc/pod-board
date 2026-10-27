@@ -40,7 +40,7 @@ In the run bar next to the state chip: a `role="switch"` button labelled `auto-c
 
 ### Waiting on you
 
-The run's `needsYou` entries under the main view: type chip, date, route, and body as plain text. Answer shows only on entries routed `→ human`; a `BLOCKED` between agents is listed without it, since pod resolves it, or writes you a new entry if it can't. Answer opens a form in place with the note that pod reads board answers only once its plugin supports them. Save cleans the text, posts it, and the row then reads `Your answer: … Waiting for pod to read it.`
+The run's `needsYou` entries under the main view: type chip, date, route, and body as plain text. Answer shows only on entries routed `→ human`; a `BLOCKED` between agents is listed without it, since pod resolves it, or writes you a new entry if it can't. Answer opens a form in place with a note on when pod reads the answer. A plan run's note is `Answer here, then press Continue. pod reads it when the run continues.` A fix run or repo row gets `Answer here. pod reads it when a /pod:code run next starts a wave.`, since `/pod:fix` reads no answers and a repo row has no Continue (`answerNote`). Save cleans the text, posts it, and the row then reads `Your answer: … Waiting for pod to read it.`
 
 ## Why it's this way
 
@@ -98,6 +98,7 @@ The run's `needsYou` entries under the main view: type chip, date, route, and bo
 - 2026-10-22 · queue-and-replies U2 · a Waiting on you list under the main view shows the run's queue entries for you, and an Answer button opens a form in place that appends your answer to the entry's line.
 - 2026-10-22 · resume-runs U1 · an `auto-continue` switch beside the run's state chip turns the board's automatic `continue` on or off per run, and the Reply panel's sendable rows get Continue or Go buttons that resume the session from the board.
 - 2026-10-22: a claimed archived plan stays a run while its hand-back entry is pending, also after the PR merges; the final PR stops waiting on you once merged (board-actions plan fix, review of #33).
+- 2026-10-27 · fix-answer-note · the Answer form note has no chat step: a plan run says `Answer here, then press Continue. pod reads it when the run continues.`; a fix run or repo row says `Answer here. pod reads it when a /pod:code run next starts a wave.`
 - 2026-10-22 · board-actions · plan complete: Merge, action log, Reply panel with Continue and Go, the auto-continue switch, and Waiting on you; final PR #33 passed review at round 2 after fix PR #34 · [report](../reports/board-actions.html)
 - 2026-10-24 · fix-answered-continue · fixed: the Reply panel stayed on the page after its reply went away, because screen 1's siblings shared one key.
 - 2026-10-25 · fix-health-probe-timeout · fixed: a health check that hung kept the chip `live` on a dead server; it now fails after 4 s.
