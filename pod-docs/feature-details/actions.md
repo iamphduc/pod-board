@@ -21,7 +21,7 @@ Board actions change something outside the board: merge a PR that waits on you (
 - **`queued` only from a merge-queue entry:** gh 2.92's `pr view --json` has no merge-queue field, and an open PR after a successful call can also be a lagging re-read. Calling that `queued` would be false, so it reads `unconfirmed` (merge-actions wave 2 fix).
 - **`--match-head-commit`:** merges only the commit you saw, so a push after the confirm (autopilot racing you, say) is refused as `stale`.
 - **The board writes only the queue file, one answer line** ([plan](../plans/board-actions.md#key-decisions)): this changes phase 1's "never writes into a repo" rule as little as possible. Turned down: editing plans, sprint docs, or the entry body.
-- **Build answers before pod reads them** ([decision](../decisions.md#2026-10-21--build-queue-answers-before-pod-reads-them)): the board writes the master plan's format now; the claude-pod change comes separately. Trade-off: until pod reads it, the answer sits unread and the form says to also answer in the chat.
+- **Build answers before pod reads them** ([decision](../decisions.md#2026-10-21--build-queue-answers-before-pod-reads-them)): the board wrote the master plan's format first; claude-pod 0.8.0+ (claude-pod #96) now reads it at wave start and on resume, so the form says to answer here, then Continue, with no chat step. On a fix run or repo row it says the next `/pod:code` wave reads it instead, since `/pod:fix` reads no answers.
 - **A write by pod wins:** the re-read before the rename turns a race into `changed` instead of losing pod's line.
 - **Retry only on `EPERM` and `EBUSY`:** on Windows an editor or a scanner can hold the file for a moment; other codes won't pass on a retry.
 
@@ -42,3 +42,4 @@ Board actions change something outside the board: merge a PR that waits on you (
 - 2026-10-21 · queue-and-replies A1: the answer route, the queue writer, and answer entries in the action log.
 - 2026-10-22 · resume-runs S1: resume entries in the action log.
 - 2026-10-22 · board-actions · plan complete: merge, answer, and resume actions with one action log; final PR #33 passed review at round 2 after fix PR #34, which made a quoted answer marker count only after the Resolution · [report](../reports/board-actions.html)
+- 2026-10-27 · fix-answer-note · the Answer form note now says to answer here, then Continue; claude-pod #96 reads the line, so no chat step. On a fix run or repo row it says pod reads it when a `/pod:code` run next starts a wave.
