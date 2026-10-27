@@ -27,6 +27,11 @@ export type AgentRun = {
   model?: string
   startedAt?: number
   lastAt?: number
+  /**
+   * When it was active: `[from, to]` spans, oldest first, split wherever two records are more than
+   * IDLE_GAP_MS apart (the laptop asleep, a run left waiting). Times only. Missing on an agent with no timed record.
+   */
+  active?: [number, number][]
   tokens: number
   /** Its last turn handed back (or ended its turn) after its last prompt. */
   ended: boolean

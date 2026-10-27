@@ -10,6 +10,7 @@ import {
   isSliceDone,
   roleOf,
   waitingPrs,
+  waitingWords,
   type AgentRun,
   type BoardRepo,
   type LogRow,
@@ -126,7 +127,7 @@ function cardMeta(plan: PlanModel, sprint: string, slice: SliceModel, row: LogRo
       return join([slice.model, mins(row)])
     case 'needs-you': {
       const e = plan.queue.findLast((x) => x.needsYou && naming(x, sprint, slice.code))
-      return e ? entryLine(e) : mergePr !== undefined ? `PR #${mergePr} · you merge` : ''
+      return e ? entryLine(e) : mergePr !== undefined ? `PR #${mergePr} · ${waitingWords(plan)}` : ''
     }
     case 'blocked': {
       const e = plan.queue.findLast((x) => x.isPending && x.type === 'BLOCKED' && naming(x, sprint, slice.code))
