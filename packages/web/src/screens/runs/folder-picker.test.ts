@@ -325,6 +325,7 @@ describe('folder picker', () => {
     await flush()
     expect(fs.asked).toEqual(['E:\\gone', undefined])
     expect(p.state().atRoots).toBe(true)
+    expect(p.state().input).toBe('')
     expect(p.state().error).toBeUndefined()
 
     // 409 shows `Already registered.` and keeps the panel open.
