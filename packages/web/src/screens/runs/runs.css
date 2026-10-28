@@ -121,6 +121,9 @@
   gap: 12px;
   align-content: start;
   min-width: 0;
+  /* A long list scrolls in its own row, so Add repo stays at the bottom in view. */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .run-list {
@@ -718,6 +721,10 @@
     padding: 16px 20px;
     border-right: 0;
     border-bottom: 1px solid var(--border);
+  }
+
+  .runs {
+    overflow: visible;
   }
 
   .main {
