@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calm dashboard: Vercel style</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Dark first, black and white, in the style of Vercel's Geist. */
+:root, :root[data-theme="dark"] {
+  --bg:#000; --surface:#0a0a0a; --raised:#111; --hover:#1a1a1a;
+  --border:#262626; --border-strong:#3a3a3a;
+  --fg:#ededed; --muted:#a1a1a1; --faint:#6e6e6e;
+  --primary-bg:#ededed; --primary-fg:#0a0a0a;
+  --link:#52a8ff;
+  --green:#3ecf72; --amber:#f5a623; --red:#ff5f5f; --gray:#8f8f8f; --blue:#52a8ff;
+  --font:'Geist',system-ui,sans-serif; --mono:'Geist Mono',ui-monospace,monospace;
+  color-scheme:dark;
+}
+:root[data-theme="light"] {
+  --bg:#fff; --surface:#fafafa; --raised:#fff; --hover:#f2f2f2;
+  --border:#eaeaea; --border-strong:#d4d4d4;
+  --fg:#171717; --muted:#666; --faint:#8f8f8f;
+  --primary-bg:#171717; --primary-fg:#fff;
+  --link:#0068d6;
+  --green:#1a8a45; --amber:#b25d00; --red:#d0262f; --gray:#7d7d7d; --blue:#0068d6;
+  color-scheme:light;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 var(--font); -webkit-font-smoothing:antialiased; }
+h1,h2,h3 { margin:0; font-weight:600; letter-spacing:-.02em; }
+a { color:var(--fg); text-decoration:underline; text-decoration-color:var(--border-strong); text-underline-offset:3px; }
+a:hover { text-decoration-color:var(--fg); }
+code, .mono { font-family:var(--mono); font-size:13px; }
+.muted { color:var(--muted); }
+
+.page { max-width:1240px; margin:0 auto; padding:48px 24px 96px; }
+.intro { display:flex; flex-wrap:wrap; gap:16px 32px; align-items:flex-start; justify-content:space-between; margin-bottom:48px; }
+.intro h1 { font-size:32px; }
+.intro p { margin:12px 0 0; color:var(--muted); max-width:66ch; }
+.sec { margin-top:72px; }
+.sec > h2 { font-size:20px; margin-bottom:8px; }
+.sec > p { margin:0 0 24px; color:var(--muted); font-size:14px; }
+.lbl { font:500 12px var(--mono); color:var(--faint); text-transform:uppercase; letter-spacing:.06em; margin:0 0 12px; }
+.grid2 > *, .grid3 > * { min-width:0; }
+.grid2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:40px; }
+.grid3 { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr)); gap:32px; }
+@media (max-width:860px) { .grid2 { grid-template-columns:1fr; } }
+
+/* Controls */
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:40px; padding:0 20px; border-radius:6px; font:500 14px var(--font); color:var(--fg); background:var(--bg); border:1px solid var(--border-strong); cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s; }
+.btn:hover, .btn.is-hover { background:var(--hover); }
+.btn:active, .btn.is-press { background:var(--border); }
+.btn.primary { background:var(--primary-bg); color:var(--primary-fg); border-color:var(--primary-bg); }
+.btn.primary:hover, .btn.primary.is-hover { opacity:.88; }
+.btn.primary:active, .btn.primary.is-press { opacity:.76; }
+.btn.ghost { border-color:transparent; background:transparent; color:var(--muted); }
+.btn.ghost:hover, .btn.ghost.is-hover { color:var(--fg); background:var(--hover); }
+.btn.sm { height:32px; padding:0 12px; gap:6px; }
+.btn svg { width:16px; height:16px; flex:none; }
+/* Optical balance: the icon side gets 2-4 px less padding than the text side. */
+.btn.lead { padding-left:16px; }
+.btn.sm.lead { padding-left:10px; }
+.btn.icon { width:40px; padding:0; }
+.btn.sm.icon { width:32px; }
+.btn:focus-visible { outline:2px solid var(--link); outline-offset:2px; }
+.input { height:40px; padding:0 12px; border-radius:6px; border:1px solid var(--border-strong); background:var(--bg); color:var(--fg); font:14px var(--font); min-width:0; }
+.input:focus, .input.is-focus { outline:none; border-color:var(--fg); box-shadow:0 0 0 3px color-mix(in srgb,var(--fg) 14%,transparent); }
+.switch { display:inline-flex; align-items:center; gap:10px; background:none; border:0; padding:0; color:var(--fg); font:14px var(--font); cursor:pointer; }
+.switch::before { content:''; width:32px; height:18px; border-radius:9px; background:var(--border-strong); background-image:radial-gradient(circle at 9px 9px,var(--bg) 6px,transparent 6.5px); }
+.switch.on::before { background-color:var(--fg); background-image:radial-gradient(circle at 23px 9px,var(--bg) 6px,transparent 6.5px); }
+
+/* Status: a dot and a word, never color alone. */
+.status { display:inline-flex; align-items:center; gap:8px; font:500 13px var(--font); color:var(--muted); white-space:nowrap; }
+.status::before { content:''; width:8px; height:8px; border-radius:50%; background:var(--c,var(--gray)); }
+.status.you { --c:var(--amber); color:var(--fg); }
+.status.bad { --c:var(--red); color:var(--fg); }
+.status.ok { --c:var(--green); }
+.status.run { --c:var(--blue); }
+.status.run::before { animation:pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity:.35; } }
+
+/* App frame */
+.phone { width:375px; max-width:100%; margin:0 auto; border:1px solid var(--border); border-radius:24px; overflow:hidden; background:var(--bg); min-height:760px; }
+.appbar { display:flex; align-items:center; gap:12px; height:64px; padding:0 20px; border-bottom:1px solid var(--border); }
+.logo { display:flex; align-items:center; gap:10px; font:600 15px var(--font); }
+.logo i { width:18px; height:18px; background:var(--fg); clip-path:polygon(50% 8%,96% 90%,4% 90%); }
+.sp { flex:1; }
+.scr { padding:24px 20px 32px; }
+
+.runs { display:flex; flex-direction:column; border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:40px; }
+.run { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; font-size:14px; background:var(--bg); }
+.run + .run { border-top:1px solid var(--border); }
+.run.sel { background:var(--hover); }
+.run b { font-weight:500; }
+
+.head { margin-bottom:24px; }
+.head .crumb { font:13px var(--mono); color:var(--faint); margin-bottom:6px; }
+.head h1 { font-size:24px; }
+.head .meta { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin-top:10px; }
+.bar5 { display:flex; gap:4px; }
+.bar5 i { width:20px; height:4px; border-radius:2px; background:var(--border-strong); }
+.bar5 i.d { background:var(--fg); }
+.bar5 i.c { background:var(--fg); opacity:.45; }
+
+/* Next step card: plain, no colored edge. */
+.card { border:1px solid var(--border); border-radius:12px; background:var(--surface); padding:24px; }
+.card .top { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+.card .k { font:500 12px var(--mono); color:var(--faint); text-transform:uppercase; letter-spacing:.06em; }
+.card h3 { font-size:20px; line-height:1.3; }
+.card p { margin:8px 0 0; color:var(--muted); font-size:14px; }
+.card .acts { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:24px; }
+.card.calm { background:transparent; border-style:dashed; }
+
+/* Tabs, Vercel style */
+.tabs { display:flex; gap:4px; border-bottom:1px solid var(--border); margin-top:40px; }
+.tab { position:relative; padding:10px 12px 12px; font-size:14px; color:var(--muted); }
+.tab:hover, .tab.is-hover { color:var(--fg); }
+.tab.on { color:var(--fg); }
+.tab.on::after { content:''; position:absolute; left:12px; right:12px; bottom:-1px; height:2px; background:var(--fg); }
+.tab .n { font:12px var(--mono); color:var(--faint); margin-left:6px; }
+.panel { padding-top:16px; }
+
+.list { list-style:none; margin:0; padding:0; }
+.list li { display:flex; align-items:center; gap:12px; padding:14px 0; border-bottom:1px solid var(--border); font-size:14px; }
+.list li:last-child { border-bottom:0; }
+.list .ic { width:16px; text-align:center; color:var(--faint); font-size:12px; }
+.list li.done { color:var(--muted); }
+.list li.done .ic { color:var(--green); }
+.list li.cur { font-weight:500; }
+.list .sub { color:var(--muted); font-size:13px; padding:0 0 14px 28px; display:block; border-bottom:1px solid var(--border); }
+.q { padding:16px 0; border-bottom:1px solid var(--border); font-size:14px; }
+.q:last-child { border-bottom:0; }
+.q .from { font:12px var(--mono); color:var(--faint); margin-bottom:6px; }
+.q .clamp { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+.menu { width:248px; border:1px solid var(--border); border-radius:12px; background:var(--surface); padding:8px; font-size:14px; box-shadow:0 12px 32px rgb(0 0 0 / .4); }
+:root[data-theme="light"] .menu { box-shadow:0 12px 32px rgb(0 0 0 / .08); }
+.menu .mi { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-radius:8px; }
+.menu .mi:hover { background:var(--hover); }
+.menu hr { border:0; border-top:1px solid var(--border); margin:6px 0; }
+.seg { display:flex; padding:3px; border:1px solid var(--border); border-radius:8px; gap:2px; }
+.seg span { flex:1; text-align:center; padding:4px 0; border-radius:5px; font-size:12px; color:var(--muted); }
+.seg span.on { background:var(--hover); color:var(--fg); }
+
+.desk-wrap { width:100%; overflow:hidden; border:1px solid var(--border); border-radius:12px; }
+.desk { width:1280px; transform-origin:0 0; background:var(--bg); }
+.desk-body { display:grid; grid-template-columns:280px 1fr; gap:64px; padding:48px 48px 64px; }
+.desk-main { max-width:720px; }
+
+.palette { display:flex; flex-wrap:wrap; gap:16px; }
+.sw { width:88px; font:12px var(--mono); color:var(--muted); }
+.sw i { display:block; height:48px; border-radius:8px; border:1px solid var(--border); margin-bottom:8px; }
+.typo { display:flex; flex-direction:column; gap:14px; }
+@media (max-width:480px) { .page { padding:32px 16px 64px; } }
+.states { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+.note { border:1px solid var(--border); border-radius:12px; padding:24px; margin-top:72px; }
+.note ul { margin:12px 0 0; padding-left:20px; color:var(--muted); font-size:14px; }
+.note li { margin:6px 0; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="intro">
+    <div>
+      <h1>Calm dashboard, Vercel style</h1>
+      <p>The simpler C from the last draft, redrawn the way Vercel's dashboard looks: black and white, Geist fonts, thin grey borders, and more room around everything. Status is a small dot with a word, and cards have no colored edge. It's dark first; light is still one click away.</p>
+    </div>
+    <div class="seg" style="width:160px" role="group" aria-label="Theme"><span class="on" data-t="dark">Dark</span><span data-t="light">Light</span></div>
+  </div>
+
+  <div class="grid2">
+    <div>
+      <p class="lbl">Phone · 375 px</p>
+      <div class="phone">
+        <div class="appbar"><span class="logo"><i></i>Pod Board</span><span class="sp"></span><button aria-label="Add repo" class="btn sm lead"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg>Repo</button><button class="btn sm icon" aria-label="Menu"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="13" cy="8" r="1.25"/></svg></button></div>
+        <div class="scr">
+          <div class="runs">
+            <div class="run sel"><b>chess-web</b><span class="status you">Needs you</span></div>
+            <div class="run"><b>watchless</b><span class="status run">Running</span></div>
+          </div>
+          <div class="head"><div class="crumb">chess-web /</div><h1>sparring-ladder</h1>
+            <div class="meta"><span class="bar5"><i class="d"></i><i class="d"></i><i class="d"></i><i class="c"></i><i></i></span><span class="mono muted">Wave 3 of 3</span></div></div>
+          <div class="card"><div class="top"><span class="k">Next step</span><span class="status you">Needs you</span></div>
+            <h3>Merge <a href="#">PR #78</a></h3><p>Wave 3 is checked and CI passed.</p>
+            <div class="acts"><button class="btn primary">Merge</button></div></div>
+          <div class="tabs"><span class="tab">Waiting<span class="n">3</span></span><span class="tab">Plan</span><span class="tab">Log</span></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="lbl">Phone · 375 px · Waiting tab open</p>
+      <div class="phone">
+        <div class="appbar"><span class="logo"><i></i>Pod Board</span><span class="sp"></span><button aria-label="Add repo" class="btn sm lead"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg>Repo</button><button class="btn sm icon" aria-label="Menu"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="13" cy="8" r="1.25"/></svg></button></div>
+        <div class="scr">
+          <div class="head" style="margin-top:0"><div class="crumb">chess-web /</div><h1>sparring-ladder</h1>
+            <div class="meta"><span class="bar5"><i class="d"></i><i class="d"></i><i class="d"></i><i class="c"></i><i></i></span><span class="mono muted">Wave 3 of 3</span></div></div>
+          <div class="card"><div class="top"><span class="k">Next step</span><span class="status you">Needs you</span></div>
+            <h3>Merge <a href="#">PR #78</a></h3><p>Wave 3 is checked and CI passed.</p>
+            <div class="acts"><button class="btn primary">Merge</button></div></div>
+          <div class="tabs"><span class="tab on">Waiting<span class="n">3</span></span><span class="tab">Plan</span><span class="tab">Log</span></div>
+          <div class="panel">
+            <div class="q"><div class="from">engineer → you · decision</div><div class="clamp">Recent arenas gave too few players near 2300 (7) and 2500 (1), so rung baseline also reads those players' opponents.</div></div>
+            <div class="q"><div class="from">engineer → you · look</div><div class="clamp">Below 768 px the Liem card's detail reads "2732" instead of "GM·2732", because the GM tag already sits by his name.</div></div>
+            <div class="q"><div class="from">orchestrator → you · look</div><div class="clamp">At 375 px his name reads "Le Quang Li…" on the in-game Liem card.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>Desktop</h2>
+    <p>The same page at 1280 px, scaled to fit. The runs list sits on the left; the main column stays narrow, so lines don't run long.</p>
+    <div class="desk-wrap"><div class="desk">
+      <div class="appbar" style="padding:0 48px"><span class="logo"><i></i>Pod Board</span><span class="sp"></span><button aria-label="Add repo" class="btn sm lead"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg>Repo</button><button class="btn sm icon" aria-label="Menu"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="13" cy="8" r="1.25"/></svg></button></div>
+      <div class="desk-body">
+        <div><p class="lbl">Runs</p><div class="runs">
+          <div class="run sel"><b>chess-web</b><span class="status you">Needs you</span></div>
+          <div class="run"><b>watchless</b><span class="status run">Running</span></div>
+          <div class="run"><b>ytb-feed</b><span class="status">Idle</span></div></div></div>
+        <div class="desk-main">
+          <div class="head"><div class="crumb">chess-web /</div><h1>sparring-ladder</h1>
+            <div class="meta"><span class="bar5"><i class="d"></i><i class="d"></i><i class="d"></i><i class="c"></i><i></i></span><span class="mono muted">Wave 3 of 3</span></div></div>
+          <div class="card"><div class="top"><span class="k">Next step</span><span class="status you">Needs you</span></div>
+            <h3>Merge <a href="#">PR #78</a></h3><p>Wave 3 is checked and CI passed.</p>
+            <div class="acts"><button class="btn primary">Merge</button></div></div>
+          <div class="tabs"><span class="tab">Waiting<span class="n">3</span></span><span class="tab on">Plan</span><span class="tab">Log</span></div>
+          <div class="panel"><ul class="list">
+            <li class="done"><span class="ic">✓</span>Plan</li><li class="done"><span class="ic">✓</span>Wave 1</li><li class="done"><span class="ic">✓</span>Wave 2</li>
+            <li class="cur" style="border-bottom:0"><span class="ic">●</span>Wave 3<span class="sp"></span><span class="status you">You merge</span></li></ul>
+            <span class="sub" style="display:block;color:var(--muted);font-size:13px;padding:0 0 14px 28px;border-bottom:1px solid var(--border)">T1 · Tune the step table · pushed · 18 min</span>
+            <ul class="list"><li><span class="ic">○</span><span class="muted">Final review</span></li></ul>
+            <p style="font-size:14px;margin:16px 0 0"><a href="#">Open the wave board</a></p></div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="sec">
+    <h2>Next step card in every state</h2>
+    <p>The status dot carries the state; the card itself stays plain. When nothing waits, the card turns into a quiet dashed outline.</p>
+    <div class="grid3">
+      <div><p class="lbl">Blocked</p><div class="card"><div class="top"><span class="k">Next step</span><span class="status bad">Blocked</span></div><h3>Answer: H1 can't reach the rates file</h3><p>The run is stopped until you answer.</p><div class="acts"><button class="btn primary">Answer</button></div></div></div>
+      <div><p class="lbl">PR to merge</p><div class="card"><div class="top"><span class="k">Next step</span><span class="status you">Needs you</span></div><h3>Merge <a href="#">PR #78</a></h3><p>Wave 3 is checked and CI passed.</p><div class="acts"><button class="btn primary">Merge</button></div></div></div>
+      <div><p class="lbl">Entry to answer</p><div class="card"><div class="top"><span class="k">Next step</span><span class="status you">Needs you</span></div><h3>Decide: keep the 2300 and 2500 baselines?</h3><p>In use: keep the default.</p><div class="acts"><button class="btn primary">Answer</button></div></div></div>
+      <div><p class="lbl">Reply to send</p><div class="card"><div class="top"><span class="k">Next step</span><span class="status ok">Ready</span></div><h3>Send continue</h3><p>Wave 2 merged. pod waits for your reply.</p><div class="acts"><button class="btn primary">Continue</button><a href="#" style="font-size:14px">Run it yourself</a></div></div></div>
+      <div><p class="lbl">Nothing to do</p><div class="card calm"><div class="top"><span class="k">Nothing to do</span><span class="status run">Running</span></div><h3>pod is working on wave 3</h3><p>2 engineers running.</p></div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>Controls</h2>
+    <p>Each state is shown as a static copy: normal, hover, pressed.</p>
+    <div class="grid3">
+      <div><p class="lbl">Primary</p><div class="states"><button class="btn primary">Merge</button><button class="btn primary is-hover">Merge</button><button class="btn primary is-press">Merge</button></div></div>
+      <div><p class="lbl">Secondary</p><div class="states"><button aria-label="Add repo" class="btn sm lead"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg>Repo</button><button aria-label="Add repo" class="btn sm lead is-hover"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg>Repo</button><button aria-label="Add repo" class="btn sm lead is-press"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg>Repo</button></div></div>
+      <div><p class="lbl">Ghost</p><div class="states"><button class="btn ghost">Cancel</button><button class="btn ghost is-hover">Cancel</button></div></div>
+      <div><p class="lbl">Input · normal / focus</p><div class="states"><input class="input" style="flex:1" placeholder="Folder path" aria-label="Folder path"><input class="input is-focus" style="flex:1" value="E:\Projects\" aria-label="Folder path, focused"></div></div>
+      <div><p class="lbl">Tabs · normal / hover / open</p><div class="tabs" style="margin:0"><span class="tab">Waiting<span class="n">3</span></span><span class="tab is-hover">Plan</span><span class="tab on">Log</span></div></div>
+      <div><p class="lbl">Status</p><div class="states" style="gap:20px"><span class="status bad">Blocked</span><span class="status you">Needs you</span><span class="status run">Running</span><span class="status ok">Ready</span><span class="status">Idle</span></div></div>
+      <div><p class="lbl">⋯ menu, open</p><div class="menu">
+        <div class="mi"><button class="switch">Auto-continue</button><span class="mono muted" style="font-size:12px">this run</span></div><hr>
+        <div class="mi" style="display:block"><div class="seg"><span>System</span><span class="on">Dark</span><span>Light</span></div></div>
+        <div class="mi"><span>Ports</span><span class="mono muted">4000</span></div></div></div>
+      <div><p class="lbl">Switch · off / on</p><div class="states" style="gap:24px"><button class="switch">Auto-continue</button><button class="switch on">Auto-continue</button></div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>Colors and type</h2>
+    <p>Mostly black, white and greys. Color appears only in status dots. Links are white with a grey underline.</p>
+    <div class="palette" style="margin-bottom:40px">
+      <div class="sw"><i style="background:var(--bg)"></i>bg</div><div class="sw"><i style="background:var(--surface)"></i>surface</div><div class="sw"><i style="background:var(--hover)"></i>hover</div>
+      <div class="sw"><i style="background:var(--border-strong)"></i>border</div><div class="sw"><i style="background:var(--muted)"></i>muted</div><div class="sw"><i style="background:var(--fg)"></i>fg</div>
+      <div class="sw"><i style="background:var(--red)"></i>blocked</div><div class="sw"><i style="background:var(--amber)"></i>needs you</div><div class="sw"><i style="background:var(--blue)"></i>running</div><div class="sw"><i style="background:var(--green)"></i>ready</div>
+    </div>
+    <div class="typo">
+      <span style="font-size:32px;font-weight:600;letter-spacing:-.02em">sparring-ladder · 32 / 600</span>
+      <span style="font-size:20px;font-weight:600;letter-spacing:-.02em">Merge PR #78 · 20 / 600</span>
+      <span>Wave 3 is checked and CI passed. · Geist 16 / 400</span>
+      <span class="muted" style="font-size:14px">engineer → you · decision · 14 muted</span>
+      <span class="mono">claude --resume 5d1c9a2e · Geist Mono 13</span>
+    </div>
+  </div>
+
+  <div class="note">
+    <h2 style="font-size:18px">What's different from the last draft</h2>
+    <ul>
+      <li>Dark first, with a near-black page and white text. Light still works from the ⋯ menu.</li>
+      <li>Geist and Geist Mono replace Bricolage Grotesque, Instrument Sans and JetBrains Mono. Both are open fonts the board can host itself.</li>
+      <li>No colored card edges. State is a small dot plus a word, so it never relies on color alone.</li>
+      <li>About twice the space: 24 px inside cards, 40 px between sections, and a narrower main column on desktop.</li>
+      <li>The primary button is white on black (black on white in light), the way Vercel does it, instead of blue.</li>
+    </ul>
+  </div>
+</div>
+<script>
+document.querySelectorAll('[data-t]').forEach(s => s.onclick = () => {
+  document.documentElement.dataset.theme = s.dataset.t;
+  document.querySelectorAll('[data-t]').forEach(x => x.classList.toggle('on', x === s));
+  fit();
+});
+function fit() {
+  document.querySelectorAll('.desk-wrap').forEach(w => {
+    const d = w.firstElementChild, s = w.clientWidth / d.offsetWidth;
+    d.style.transform = `scale(${s})`; w.style.height = d.offsetHeight * s + 'px';
+  });
+}
+addEventListener('resize', fit); addEventListener('load', fit); fit();
+</script>
+</body>
+</html>

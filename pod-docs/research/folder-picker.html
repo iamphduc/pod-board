@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Research: folder picker for Pod Board</title>
+<style>
+:root{--bg:#fafafa;--fg:#1b1b1f;--card:#fff;--bd:#d8d8e0;--ok:#1a7f37;--no:#b42318;--mid:#9a6700}
+@media(prefers-color-scheme:dark){:root{--bg:#16161a;--fg:#e8e8ee;--card:#1f1f25;--bd:#3a3a44;--ok:#4cc26a;--no:#ff7b72;--mid:#e3b341}}
+body{font:16px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:16px;max-width:1000px;margin:auto}
+h1{font-size:1.6rem}h2{margin-top:2rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:12px}
+.card h3{margin:0 0 6px;font-size:1.05rem}
+.bar{height:10px;background:var(--bd);border-radius:5px;overflow:hidden;margin:6px 0}
+.bar i{display:block;height:100%}
+.tag{font-size:.9rem;font-weight:600}
+.no{color:var(--no)}.ok{color:var(--ok)}.mid{color:var(--mid)}
+a{color:inherit}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;margin-top:8px}
+.opts div{border:1px dashed var(--bd);border-radius:6px;padding:6px}
+small{opacity:.8}
+</style></head><body>
+<h1>Folder picker for a localhost web UI</h1>
+<p><small>Generated 2026-10-27 · standard · 10 searches · 13 pages. Focus: how people build it. Assumes Node/Hono on 127.0.0.1 with a per-launch token, Chrome/Edge, Windows first.</small></p>
+
+<h2>What exists (closeness to the idea)</h2>
+<div class="grid">
+<div class="card"><h3><a href="https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/webkitdirectory">input webkitdirectory</a></h3><div class="bar"><i style="width:5%;background:var(--no)"></i></div><span class="tag no">Cannot work</span><p>Relative path only (starts at the folder name). Nothing uploaded unless your code sends it.</p></div>
+<div class="card"><h3><a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/showDirectoryPicker">showDirectoryPicker</a></h3><div class="bar"><i style="width:5%;background:var(--no)"></i></div><span class="tag no">Cannot work</span><p>Returns a handle, no path. <a href="https://wicg.github.io/file-system-access/">Spec</a> blocks home, system and Downloads folders.</p></div>
+<div class="card"><h3><a href="https://web.dev/articles/files/drag-and-drop-directories">Folder drag and drop</a></h3><div class="bar"><i style="width:5%;background:var(--no)"></i></div><span class="tag no">Cannot work</span><p>Entry or handle, no documented absolute path.</p></div>
+<div class="card"><h3><a href="https://docs.syncthing.net/rest/system-browse-get.html">Syncthing /rest/system/browse</a></h3><div class="bar"><i style="width:90%;background:var(--ok)"></i></div><span class="tag ok">Very close</span><p><code>current</code> param, server adds <code>*</code>, returns path strings; roots if empty. API key header.</p></div>
+<div class="card"><h3><a href="https://typescript-sdk.jellyfin.org/interfaces/generated-client.EnvironmentApiGetDirectoryContentsRequest.html">Jellyfin DirectoryContents</a></h3><div class="bar"><i style="width:80%;background:var(--ok)"></i></div><span class="tag ok">Close</span><p><code>path</code>, <code>includeFiles</code>, <code>includeDirectories</code>.</p></div>
+<div class="card"><h3><a href="https://betadev.emby.media/reference/RestAPI/EnvironmentService/postEnvironmentDirectorycontents.html">Emby DirectoryContents</a></h3><div class="bar"><i style="width:80%;background:var(--ok)"></i></div><span class="tag ok">Close</span><p>Same-named POST endpoint. Requires admin authentication.</p></div>
+<div class="card"><h3><a href="https://github.com/devopsarr/readarr-go/blob/v1.0.0/docs/FileSystemAPI.md">Radarr/Readarr filesystem</a></h3><div class="bar"><i style="width:80%;background:var(--ok)"></i></div><span class="tag ok">Close</span><p><code>path</code>, <code>includeFiles</code> default false. <code>X-Api-Key</code>. UI use not verified.</p></div>
+<div class="card"><h3><a href="https://jupyter-server.readthedocs.io/en/latest/developers/rest-api.html">Jupyter Contents API</a></h3><div class="bar"><i style="width:50%;background:var(--mid)"></i></div><span class="tag mid">Partial</span><p>Lists a directory; docs do not say if paths are root-relative.</p></div>
+<div class="card"><h3><a href="https://www.pkgstats.com/pkg:win-dialogs">win-dialogs (npm)</a></h3><div class="bar"><i style="width:60%;background:var(--mid)"></i></div><span class="tag mid">Windows dialog, maybe stale</span><p>PowerShell + WinForms. v1.4.0, "a year ago".</p></div>
+<div class="card"><h3><a href="https://app.unpkg.com/open-linux-file-dialog@1.0.0/files/README.md">open-linux-file-dialog</a></h3><div class="bar"><i style="width:40%;background:var(--mid)"></i></div><span class="tag mid">Partial</span><p>Tries zenity, kdialog, yad and more; osascript on macOS; documents files, not folders.</p></div>
+</div>
+
+<h2>Gaps</h2>
+<ul>
+<li>No browser-only option returns an absolute path (<a href="https://wicg.github.io/file-system-access/">spec</a>).</li>
+<li>The Windows dialog can open behind the browser. Fix: a TopMost owner form (<a href="https://dbremen.github.io/powershell/2016/05/06/powershell-tricks-open-a-dialog-as-topmost-window.html">2016 write-up, maybe stale</a>).</li>
+<li>Linux may have no dialog tool; wrappers return an empty list (<a href="https://app.unpkg.com/open-linux-file-dialog@1.0.0/files/README.md">README</a>).</li>
+<li>Not verified: code-server, qBittorrent, Portainer, JupyterLab UI behaviour.</li>
+</ul>
+
+<h2>Best practices</h2>
+<ul>
+<li>Check Host header for localhost, 127.0.0.1, [::1], and still authenticate (<a href="https://github.com/nccgroup/singularity/wiki/%5BAnnouncement-Blog-Post%5D--Singularity-of-Origin:-A-DNS-Rebinding-Attack-Framework">NCC, 2018</a>).</li>
+<li>Put listing behind the API key, as Syncthing and Radarr do.</li>
+<li>List folders only by default.</li>
+<li>Treat cancel and "no dialog tool" as separate results.</li>
+</ul>
+
+<h2>Ideas, minimal to bold</h2>
+<div class="grid">
+<div class="card"><h3>1. Autocomplete</h3>Keep the text box; add <code>/api/fs/list</code> (folders only).</div>
+<div class="card"><h3>2. pod-docs flag</h3>Mark listed folders that contain pod-docs.</div>
+<div class="card"><h3>3. Folder browser panel</h3>Breadcrumbs, drives, up button.</div>
+<div class="card"><h3>4. Browse button (Windows)</h3><code>POST /api/fs/pick</code> runs PowerShell; falls back to the panel.</div>
+<div class="card"><h3>5. Smart start folder</h3>Parent of existing repos, then home, then drives.</div>
+<div class="card"><h3>6. Scan a parent</h3>Find all subfolders with pod-docs; "add all".</div>
+<div class="card"><h3>7. Mac and Linux dialogs</h3>osascript, zenity, kdialog behind a capability check.</div>
+</div>
+
+<h2>Questions for the plan</h2>
+<div class="grid">
+<div class="card"><h3>Native dialog worth it?</h3><small>Adds spawn risk and per-OS code.</small><div class="opts"><div>Panel only</div><div>Panel + Windows dialog</div><div>Dialog on all OSes</div></div></div>
+<div class="card"><h3>Limit listing to a root?</h3><small>A root blocks repos elsewhere.</small><div class="opts"><div>Whole disk</div><div>Repo roots + home</div><div>Whole disk + deny list</div></div></div>
+<div class="card"><h3>List files too?</h3><small>Tools default to folders only.</small><div class="opts"><div>Folders only</div><div>Folders + pod-docs flag</div></div></div>
+<div class="card"><h3>Dialog behind the PWA window?</h3><small>TopMost owner is the only fix found; untested with a PWA.</small><div class="opts"><div>TopMost owner</div><div>Show hint</div><div>Skip dialog</div></div></div>
+<div class="card"><h3>Timeout and one-at-a-time?</h3><small>No source covered this.</small><div class="opts"><div>Single dialog, 2-5 min abort</div><div>No timeout</div></div></div>
+<div class="card"><h3>Host header check today?</h3><small>A token alone does not stop DNS rebinding per NCC.</small><div class="opts"><div>All routes</div><div>fs routes only</div></div></div>
+</div>
+
+<h2>Suspect pages</h2><p>none</p>
+</body></html>

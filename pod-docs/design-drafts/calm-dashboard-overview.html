@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calm dashboard overview</title>
+<style>
+:root { --bg:#000; --surface:#0a0a0a; --border:#262626; --fg:#ededed; --muted:#a1a1a1; color-scheme:dark; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg:#fff; --surface:#fafafa; --border:#eaeaea; --fg:#171717; --muted:#666; color-scheme:light; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 system-ui, sans-serif; }
+.page { max-width:1100px; margin:0 auto; padding:40px 16px 80px; }
+h1 { font-size:28px; margin:0 0 8px; letter-spacing:-.02em; }
+h2 { font-size:20px; margin:48px 0 12px; }
+p { color:var(--muted); max-width:72ch; }
+table { width:100%; border-collapse:collapse; font-size:14px; border:1px solid var(--border); }
+th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+th { background:var(--surface); }
+code { font:13px ui-monospace, monospace; }
+.wrap { overflow-x:auto; }
+.diagram { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; overflow-x:auto; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Calm dashboard: how it fits together</h1>
+  <p><b>Goal:</b> make screen 1 calm. When you open it, you see in a couple of seconds what pod needs from you, if anything, and how to do it, and everything else is one click away. The whole board moves to a dark-first, black-and-white look in the style of Vercel, and "+ Repo" picks a folder from a folder browser. One sprint: <code>calm-screen</code>.</p>
+
+  <h2>Parts</h2>
+  <div class="wrap"><table>
+    <tr><th>Part</th><th>New or changed</th><th>Where</th><th>Does</th></tr>
+    <tr><td>Theme</td><td>changed</td><td><code>packages/web/src/theme/</code></td><td>Geist tokens and fonts, dark by default, light and System kept</td></tr>
+    <tr><td>Controls</td><td>changed</td><td><code>packages/web/src/theme/</code></td><td>Buttons, inputs, switch, tabs, menu and status dot in the new look</td></tr>
+    <tr><td>Next step</td><td>new</td><td><code>packages/web/src/screens/runs/</code></td><td>Picks the selected run's most urgent item and its action from model data</td></tr>
+    <tr><td>Runs screen</td><td>changed</td><td><code>packages/web/src/screens/runs/</code></td><td>Card, tabs, header with progress strip, folded sections, remembered tab</td></tr>
+    <tr><td>Bar menu</td><td>new</td><td><code>packages/web/src/screens/runs/</code></td><td>Auto-continue, theme and ports in one menu</td></tr>
+    <tr><td>Folder picker</td><td>new</td><td><code>packages/web/src/screens/runs/</code></td><td>Folder browser with typing and <code>pod-docs</code> marks; adds through <code>POST /api/repos</code></td></tr>
+    <tr><td>Folder listing</td><td>new</td><td><code>packages/server/src/</code></td><td>Lists subfolders of a path, or the drives and roots, with a <code>pod-docs</code> flag</td></tr>
+    <tr><td>Wave board, engineer view</td><td>changed (look only)</td><td><code>packages/web/src/screens/board/</code>, engineer screen</td><td>Take the new tokens and fonts</td></tr>
+  </table></div>
+
+  <h2>How they connect</h2>
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  Theme -->|tokens, fonts| Controls
+  Controls -->|styled parts| RunsScreen[Runs screen]
+  Controls -->|styled parts| BarMenu[Bar menu]
+  Controls -->|styled parts| Picker[Folder picker]
+  Model[(Board model)] -->|waitingPrs, queue, replies| NextStep[Next step]
+  NextStep -->|card item and action| RunsScreen
+  BarMenu -->|auto-continue, theme| RunsScreen
+  Picker -->|path typed or clicked| Listing[Folder listing API]
+  Picker -->|chosen folder| AddRepo[POST /api/repos]
+  Theme -->|tokens, fonts| Board[Wave board and engineer view]
+  </pre></div>
+
+  <h2>Main flow</h2>
+  <div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  actor You
+  participant Page as Runs screen
+  participant Next as Next step
+  participant API as Server
+  You->>Page: open the board
+  Page->>Next: selected run's model data
+  Next-->>Page: most urgent item (e.g. merge PR #78)
+  Page-->>You: Next step card with one button
+  You->>Page: press Merge, confirm
+  Page->>API: existing merge action (token, Host, Origin)
+  API-->>Page: what GitHub reports
+  You->>Page: + Repo
+  Page->>API: GET folder listing (token, Host)
+  API-->>Page: subfolders, pod-docs marks
+  You->>Page: click down to the folder, Add
+  Page->>API: POST /api/repos (existing)
+  </pre></div>
+
+  <h2>Data</h2>
+  <p><code>config.json</code> doesn't change. The browser keeps <code>pod-board-theme</code> (nothing stored now means Dark) and a new key for the open tab. The folder listing reads folder names only, stores nothing, and never reads file contents.</p>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+const dark = document.documentElement.dataset.theme === 'dark' || matchMedia('(prefers-color-scheme: dark)').matches;
+mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral', securityLevel: 'strict' });
+</script>
+</body>
+</html>
