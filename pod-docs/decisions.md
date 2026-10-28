@@ -190,3 +190,7 @@ Plan `calm-dashboard`. On a reply, the card shows only `Copy continue` (or Conti
 ## 2026-10-28 — folder picker Add with a partly typed name (agent default — override anytime)
 
 Plan `calm-dashboard`. Add posts a folder only when the typed text ends in a separator, or its last part is a listed folder's whole name (any case); otherwise Add is disabled, and the footer shows the exact path Add will post. Posting the open folder instead would silently add the parent of what you typed. Change it in `packages/web/src/screens/runs/folder-picker.ts`.
+
+## 2026-10-28 — Add repo opens a modal dialog from the sidebar
+
+The human asked for the old full-height sidebar back, with Add repo at its bottom opening the folder picker in a dialog. That dialog is the one exception to the calm-dashboard Look's "controls open in place, never a modal" rule. The ⋯ menu sits at the right end of the run header (fix PR https://github.com/iamphduc/pod-board/pull/56).
