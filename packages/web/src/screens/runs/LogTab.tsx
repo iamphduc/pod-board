@@ -1,17 +1,31 @@
 import { useEffect, useRef } from 'react'
-import type { BoardRepo, FixPipeline, RunSummary } from '@pod-board/model'
+import { otherActivity, type ActionEntry, type BoardRepo, type FixPipeline, type Pipeline, type RunSummary } from '@pod-board/model'
 import { EngineerView } from '../engineer/EngineerView.tsx'
+import { ActionLog } from './ActionLog.tsx'
 import { Chip } from './Chip.tsx'
-import { Pipeline } from './Pipeline.tsx'
+import { OtherActivity } from './OtherActivity.tsx'
+import { SliceLog } from './SliceLog.tsx'
 import { agentChip, agentLogRows } from './view.ts'
+import './tabs.css'
 
-type Props = { repo: BoardRepo; run: RunSummary; pipeline: FixPipeline; agent: string | undefined; now: number }
+type Props = { repo: BoardRepo; run: RunSummary; pipeline?: Pipeline; fixPipeline?: FixPipeline; agent?: string; now: number; actions: ActionEntry[] }
 
-/** A fix run: its pipeline, its agent log, and the open engineer's view below them. */
-export function FixRun({ repo, run, pipeline, agent, now }: Props) {
+/** The Log tab: the slice log for a plan, or the agent log and the open engineer for a fix run; then Other activity and the Action log. */
+export function LogTab({ repo, run, pipeline, fixPipeline, agent, now, actions }: Props) {
+  return (
+    <div className="tab-panel log-tab">
+      {fixPipeline ? <FixLog repo={repo} run={run} pipeline={fixPipeline} agent={agent} now={now} /> : pipeline && <SliceLog log={pipeline.log} />}
+      <OtherActivity list={otherActivity(repo, now)} />
+      <ActionLog entries={actions} now={now} />
+    </div>
+  )
+}
+
+/** A fix run's agent log, and the open engineer's view below it. */
+function FixLog({ repo, run, pipeline, agent, now }: { repo: BoardRepo; run: RunSummary; pipeline: FixPipeline; agent: string | undefined; now: number }) {
   const rows = agentLogRows(run, pipeline.log)
   // A resumed engineer has a row per turn; its view shows the latest one.
-  const open = pipeline.log.findLast((x) => x.agentId === agent && x.engineer)
+  const open = agent === undefined ? undefined : pipeline.log.findLast((x) => x.agentId === agent && x.engineer)
   const engineer = open && repo.agents.find((a) => a.id === open.agentId)
 
   const viewRef = useRef<HTMLDivElement>(null)
@@ -21,7 +35,6 @@ export function FixRun({ repo, run, pipeline, agent, now }: Props) {
 
   return (
     <>
-      <Pipeline pipeline={pipeline} repoId={repo.id} />
       {rows.length === 0 ? (
         <p className="muted note">No agent has started on this fix yet.</p>
       ) : (

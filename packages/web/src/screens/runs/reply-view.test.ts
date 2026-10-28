@@ -3,7 +3,7 @@ import { buildRepoModel, runReplies, type AgentRun, type BoardRepo, type Claim, 
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { NO_SESSION, replyPanel } from './reply-view.ts'
-import { ReplyPanel } from './ReplyPanel.tsx'
+import { ReplyChat, ReplyPanel } from './ReplyPanel.tsx'
 
 const NOW = Date.UTC(2026, 9, 21, 12)
 const MIN = 60_000
@@ -280,5 +280,56 @@ describe('answered stop', () => {
     // The halt not answered yet: no panel.
     const open = planRepo({ docs: { one: [[1, 'A1', '—', 'in progress']] }, queue: [HALT] })
     expect(replyPanel(run(), open, NOW)).toBeUndefined()
+  })
+})
+
+describe('run it yourself', () => {
+  const ID = '0f6c1e2a-5b7d-4c11-9a3e-2d4f6b8c0e1a'
+  const render = (r: BoardRepo, framed?: boolean) => {
+    const view = replyPanel(run(), r, NOW)
+    return renderToStaticMarkup(createElement(ReplyPanel, { view, target: view!.target, ...(framed === undefined ? {} : { framed }) }))
+  }
+
+  it('run it yourself', () => {
+    const page = render(merged(ID))
+    // The commands sit behind a closed Run it yourself.
+    expect(page).toMatch(/<button[^>]*aria-expanded="false"[^>]*>(<svg[\s\S]*?<\/svg>)?Run it yourself(<svg[\s\S]*?<\/svg>)?<\/button>/)
+    expect(page).not.toContain(`Session ${ID}`)
+    expect(page).not.toContain('aria-label="Copy cd command"')
+    expect(page).not.toContain('aria-label="Copy resume command"')
+    expect(page).not.toContain(`claude --resume ${ID}`)
+    // The rows stay in view: word, why, Copy, and Continue following send.
+    expect(page).toContain('PR #7 merged.')
+    expect(page).toContain('aria-label="Copy continue"')
+    expect(page).toMatch(SEND_BUTTON)
+    const waiting = repo([agent({ session: ID, startedAt: NOW - 50 * MIN, lastAt: NOW - 40 * MIN })])
+    expect(render(waiting)).not.toMatch(SEND_BUTTON) // the PR isn't merged: no send, Copy only
+    expect(render(waiting)).toContain('aria-label="Copy continue"')
+    // Go follows send too.
+    const go = replyPanel(run(), BY_SIGNAL['not-started'].repo, NOW)!
+    expect(renderToStaticMarkup(createElement(ReplyPanel, { view: go, target: go.target }))).toMatch(/<button class="btn primary"[^>]*>Go<\/button>/)
+
+    // Framed by default: the panel's frame and heading. framed={false} drops both, for use in the card.
+    expect(page).toMatch(/<section class="inplace reply-panel"/)
+    expect(page).toContain('Reply pod waits for</span>')
+    expect(render(merged(ID), true)).toBe(page)
+    const bare = render(merged(ID), false)
+    expect(bare).not.toContain('inplace')
+    expect(bare).not.toContain('Reply pod waits for</span>')
+    expect(bare).toMatch(SEND_BUTTON)
+    expect(bare).toMatch(/aria-expanded="false"[^>]*>(<svg[\s\S]*?<\/svg>)?Run it yourself/)
+
+    // What opens: the session line, cd and claude --resume, each with Copy.
+    const s = replyPanel(run(), merged(ID), NOW)!
+    const chat = renderToStaticMarkup(createElement(ReplyChat, { view: s }))
+    expect(chat).toContain(`Session ${ID}`)
+    expect(chat).toContain('aria-label="Copy cd command"')
+    expect(chat).toContain(`claude --resume ${ID}`)
+    expect(chat).toContain('aria-label="Copy resume command"')
+    // No session: the no-session note is what opens.
+    const lone = repo()
+    lone.prs = [{ number: 7, state: 'merged', checks: 'pass', checkedAt: NOW }]
+    expect(renderToStaticMarkup(createElement(ReplyChat, { view: replyPanel(run(), lone, NOW)! }))).toContain(NO_SESSION)
+    expect(render(lone)).not.toContain(NO_SESSION)
   })
 })

@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calm dashboard: layouts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Tokens: the approved board-read look, unchanged (plan Q3). */
+:root {
+  --bg:#f4f5f8; --panel:#fff; --panel-2:#eef0f5; --line:#d9dde7; --fg:#161a26; --muted:#5d6478;
+  --accent:#2f55d4; --accent-soft:#e4e9fb;
+  --ok:#1d8a55; --ok-soft:#dff3e8; --you:#b26a00; --you-soft:#fbefd9; --bad:#c2373a; --bad-soft:#f9e1e1; --idle:#7a8194; --idle-soft:#eceef3;
+  --display:'Bricolage Grotesque',system-ui,sans-serif; --body:'Instrument Sans',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg:#0f121a; --panel:#171b26; --panel-2:#1e2331; --line:#2c3344; --fg:#e8eaf1; --muted:#9aa1b4;
+  --accent:#7e9bff; --accent-soft:#232c4d;
+  --ok:#4fc58a; --ok-soft:#173326; --you:#f0ae47; --you-soft:#3a2c14; --bad:#f07a7c; --bad-soft:#3d1d20; --idle:#8b92a6; --idle-soft:#232836;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.45 var(--body); }
+h1,h2,h3 { font-family:var(--display); margin:0; }
+.page { max-width:1500px; margin:0 auto; padding:24px 16px 64px; }
+.intro { display:flex; flex-wrap:wrap; gap:12px 24px; align-items:baseline; justify-content:space-between; margin-bottom:20px; }
+.intro p { margin:4px 0 0; color:var(--muted); max-width:70ch; }
+.theme-pick { display:flex; gap:6px; }
+
+/* The comparison grid: one row per item, columns A, B, C. */
+.grid { display:grid; grid-template-columns:160px repeat(3, minmax(0,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+.grid > * { background:var(--bg); padding:14px; min-width:0; }
+.rowhead { font:600 13px/1.3 var(--body); color:var(--muted); text-transform:uppercase; letter-spacing:.04em; background:var(--panel-2); }
+.colhead { background:var(--panel-2); }
+.colhead h2 { font-size:22px; }
+.colhead p { margin:4px 0 0; color:var(--muted); font-size:14px; }
+@media (max-width: 900px) {
+  .grid { grid-template-columns:1fr; }
+  .grid > .corner { display:none; }
+  .rowhead { position:sticky; top:0; z-index:2; }
+}
+.cell-note { font-size:13px; color:var(--muted); margin:8px 0 0; }
+
+/* Shared app parts, as the board styles them today. */
+.chip { display:inline-flex; align-items:center; gap:6px; font:500 12px/1 var(--body); padding:4px 8px; border-radius:999px; white-space:nowrap; }
+.chip::before { content:''; width:7px; height:7px; border-radius:50%; background:currentColor; }
+.chip.ok { background:var(--ok-soft); color:var(--ok); } .chip.you { background:var(--you-soft); color:var(--you); }
+.chip.bad { background:var(--bad-soft); color:var(--bad); } .chip.idle { background:var(--idle-soft); color:var(--idle); }
+.chip.live { background:var(--accent-soft); color:var(--accent); }
+.btn { font:500 14px/1 var(--body); color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 14px; cursor:pointer; white-space:nowrap; }
+.btn:hover, .btn.is-hover { background:var(--panel-2); }
+.btn:active, .btn.is-press { transform:translateY(1px); background:var(--line); }
+.btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+:root[data-theme="dark"] .btn.primary { color:#0f121a; }
+.btn.primary:hover, .btn.primary.is-hover { filter:brightness(1.08); }
+.btn.primary:active, .btn.primary.is-press { filter:brightness(.92); }
+.btn.quiet { background:transparent; border-color:transparent; color:var(--muted); }
+.btn.quiet:hover, .btn.quiet.is-hover { background:var(--panel-2); color:var(--fg); }
+.btn.sm { padding:6px 10px; font-size:13px; }
+.mono { font-family:var(--mono); font-size:13px; }
+.muted { color:var(--muted); }
+.switch { display:inline-flex; align-items:center; gap:8px; font:500 13px var(--body); color:var(--fg); background:none; border:0; padding:0; }
+.switch::before { content:''; width:30px; height:18px; border-radius:9px; background:var(--line); box-shadow:inset 0 0 0 2px var(--line); }
+.switch.on::before { background:var(--accent); background-image:radial-gradient(circle at 21px 9px,#fff 6px,transparent 6.5px); }
+.switch:not(.on)::before { background-image:radial-gradient(circle at 9px 9px,var(--panel) 6px,transparent 6.5px); }
+
+/* Fold row: a section that's one click away. */
+.fold { border-top:1px solid var(--line); }
+.fold > summary { list-style:none; display:flex; align-items:center; gap:8px; padding:10px 2px; cursor:pointer; font:500 14px var(--body); }
+.fold > summary::-webkit-details-marker { display:none; }
+.fold > summary::before { content:'▸'; color:var(--muted); width:12px; transition:transform .15s; }
+.fold[open] > summary::before { transform:rotate(90deg); }
+.fold > summary:hover, .fold > summary.is-hover { color:var(--accent); }
+.fold .count { font:500 12px var(--mono); color:var(--muted); }
+.fold-body { padding:0 2px 12px 20px; font-size:14px; }
+
+/* Phone and desktop frames. */
+.phone { width:375px; max-width:100%; margin:0 auto; border:1px solid var(--line); border-radius:18px; overflow:hidden; background:var(--bg); font-size:15px; }
+.phone .scr { padding:12px 12px 16px; }
+.desk-wrap { width:100%; overflow:hidden; border:1px solid var(--line); border-radius:8px; }
+.desk { width:1180px; transform-origin:0 0; background:var(--bg); }
+
+/* App chrome shared by all three. */
+.appbar { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--line); background:var(--panel); }
+.brand { font:700 16px var(--display); }
+.appbar .sp { flex:1; }
+.menu-btn { width:34px; height:34px; display:inline-grid; place-items:center; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--fg); font:700 16px var(--body); }
+.menu-btn:hover, .menu-btn.is-hover { background:var(--panel-2); }
+.menu { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:6px; font-size:14px; width:200px; box-shadow:0 6px 20px rgb(0 0 0 / .12); }
+.menu .mi { padding:8px 10px; border-radius:6px; display:flex; justify-content:space-between; }
+.menu .mi:hover { background:var(--panel-2); }
+.menu .seg { display:flex; gap:4px; padding:6px 8px; }
+.menu .seg span { flex:1; text-align:center; padding:5px 0; border-radius:6px; border:1px solid var(--line); font-size:12px; }
+.menu .seg span.on { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+.runs { display:flex; flex-direction:column; gap:6px; }
+.run { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border-radius:8px; background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--line); font-size:14px; }
+.run.sel { border-color:var(--accent); border-left-color:var(--you); }
+.run b { font-weight:600; }
+.run small { display:block; color:var(--muted); font-size:12px; }
+.addrepo { align-self:flex-start; }
+.title { font:700 20px var(--display); }
+.ttl-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; margin:4px 0 10px; }
+
+/* Next step card. */
+.next { --edge:var(--you); background:var(--panel); border:1px solid var(--line); box-shadow:inset 4px 0 0 var(--edge); border-radius:10px; padding:14px 14px 14px 18px; }
+.next.bad { --edge:var(--bad); } .next.ok { --edge:var(--ok); } .next.idle { --edge:var(--idle); }
+.next .k { font:600 12px var(--body); text-transform:uppercase; letter-spacing:.05em; color:var(--muted); display:flex; align-items:center; gap:8px; }
+.next h3 { font-size:19px; margin:6px 0 4px; }
+.next p { margin:0 0 10px; font-size:14px; color:var(--muted); }
+.next .acts { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.next .more { margin-top:10px; padding-top:8px; border-top:1px dashed var(--line); font-size:13px; color:var(--muted); }
+.next .more a { color:var(--accent); text-decoration:none; }
+.cmd { font:13px var(--mono); background:var(--panel-2); border-radius:6px; padding:6px 8px; display:inline-block; }
+
+/* Pipeline. */
+.pipe { display:flex; flex-direction:column; gap:6px; }
+.step { display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:8px; background:var(--panel); border:1px solid var(--line); font-size:14px; }
+.step .ic { width:18px; text-align:center; }
+.step.done { color:var(--muted); background:transparent; border-style:dashed; }
+.step.done .ic { color:var(--ok); }
+.step.cur { border-color:var(--you); box-shadow:inset 3px 0 0 var(--you); flex-direction:column; align-items:stretch; }
+.step.cur .row { display:flex; align-items:center; gap:8px; }
+.step.cur .sub { font-size:13px; color:var(--muted); padding-left:26px; }
+.step.wait { color:var(--muted); background:transparent; }
+.pipe-h { display:flex; align-items:stretch; gap:6px; }
+.pipe-h .step { flex:1 1 0; min-width:0; justify-content:center; padding:7px 4px; gap:4px; font-size:13px; }
+.dots { display:flex; align-items:center; gap:4px; }
+.dots i { width:22px; height:6px; border-radius:3px; background:var(--line); }
+.dots i.d { background:var(--ok); } .dots i.c { background:var(--you); width:34px; }
+.queue-row { padding:8px 0; border-bottom:1px solid var(--line); font-size:14px; }
+.queue-row:last-child { border-bottom:0; }
+.clamp { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.qh { display:flex; gap:8px; align-items:center; font-size:12px; color:var(--muted); margin-bottom:3px; }
+
+/* Direction B: two columns on desktop, a "now" rail. */
+.b-now { display:flex; flex-direction:column; gap:10px; }
+.b-list { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:4px 12px; }
+.b-list .li { display:flex; gap:8px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-size:14px; }
+.b-list .li:last-child { border-bottom:0; }
+.b-list .li .t { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.b-list .li.top { font-weight:600; }
+
+/* Direction C: tabs under the card. */
+.c-tabs { display:flex; gap:2px; border-bottom:1px solid var(--line); margin-top:14px; }
+.c-tabs span { padding:8px 12px; font-size:14px; color:var(--muted); border-bottom:2px solid transparent; }
+.c-tabs span.on { color:var(--fg); border-bottom-color:var(--accent); font-weight:600; }
+.c-tabs span .count { font:12px var(--mono); }
+
+.palette { display:flex; flex-wrap:wrap; gap:6px; }
+.sw { width:64px; font-size:11px; color:var(--muted); }
+.sw i { display:block; height:34px; border-radius:6px; border:1px solid var(--line); margin-bottom:3px; }
+.stack { display:flex; flex-direction:column; gap:10px; }
+.states { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.lbl { font-size:12px; color:var(--muted); margin:10px 0 4px; }
+.lbl:first-child { margin-top:0; }
+.pick { margin-top:28px; padding:16px; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+.pick ul { margin:8px 0 0; padding-left:20px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="intro">
+    <div>
+      <h1>Calm dashboard: three layouts</h1>
+      <p>Screen 1 with the same colors and fonts as today (plan answer Q3). Each column is one way to arrange it. Every column has a Next step card, the same folds, a "+ repo" button and a bar menu (Q4–Q10). They differ in where things sit. The sample is chess-web · sparring-ladder at wave 3 of 3, with PR #78 waiting for you and 3 queue entries.</p>
+    </div>
+    <div class="theme-pick" role="group" aria-label="Theme">
+      <button class="btn sm" data-t="light">Light</button><button class="btn sm" data-t="dark">Dark</button>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="pick">
+    <h2 style="font-size:18px">How to pick</h2>
+    <ul>
+      <li><b>A · One column:</b> the card on top, then the pipeline, then everything else as fold rows. It's the smallest change from today.</li>
+      <li><b>B · Now and Plan:</b> on desktop, "what needs you" sits in a rail on the left and the plan sits on the right. On a phone it stacks to look like A, but the Waiting list stays open.</li>
+      <li><b>C · Card and tabs:</b> the quietest. Only the card shows, and the pipeline becomes a thin progress strip. Everything else is in tabs under the card, so it's one click away but out of sight.</li>
+    </ul>
+    <p class="muted" style="margin:10px 0 0">Reply with A, B, C or a mix, for example "C, but keep the pipeline open like A".</p>
+  </div>
+</div>
+
+<script>
+const root = document.documentElement;
+document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { root.dataset.theme = b.dataset.t; fit(); });
+
+// ---------- shared pieces ----------
+const bar = (title, extra = '') => `
+  <div class="appbar"><span class="brand">Pod Board</span><span class="chip live">live</span>${extra}<span class="sp"></span>
+  <button class="btn sm addrepo">+ repo</button><button class="menu-btn" aria-label="Menu">⋯</button></div>`;
+const runs = (compact) => `
+  <div class="runs">
+    <div class="run sel"><div><b>chess-web</b><small>sparring-ladder · wave 3/3</small></div><span class="chip you">needs you</span></div>
+    ${compact ? '' : `<div class="run"><div><b>watchless</b><small>friends · wave 1/2</small></div><span class="chip live">running</span></div>`}
+  </div>`;
+const runsPhone = `<div class="runs" style="margin-bottom:10px">
+    <div class="run sel"><div><b>chess-web</b><small>sparring-ladder · wave 3/3</small></div><span class="chip you">needs you</span></div>
+    <div class="run"><div><b>watchless</b><small>friends · wave 1/2</small></div><span class="chip live">running</span></div></div>`;
+const title = (sw = true) => `<div class="ttl-row"><span class="title">sparring-ladder</span><span class="chip you">needs you</span>${sw ? '<button class="switch">auto-continue</button>' : ''}</div>`;
+
+const CARDS = {
+  merge: { cls: '', k: 'Next step', h: 'Merge PR #78, wave 3', p: 'Both slices are pushed and checked. CI passed.', acts: '<button class="btn primary">Merge PR #78</button><button class="btn quiet">Open on GitHub</button>' },
+  blocked: { cls: 'bad', chip: '<span class="chip bad">blocked</span>', k: 'Next step', h: 'Answer: H1 can’t reach the rates file', p: 'engineer → human · the run is stopped until this is answered.', acts: '<button class="btn primary">Answer</button>' },
+  answer: { cls: '', k: 'Next step', h: 'Decide: keep the 2300 and 2500 baselines?', p: 'engineer → human · value in use: keep the default.', acts: '<button class="btn primary">Answer</button><button class="btn quiet">Keep the default</button>' },
+  reply: { cls: 'ok', k: 'Next step', h: 'Send continue to the run', p: 'Wave 2 merged. pod waits for you to reply continue.', acts: '<button class="btn primary">Continue</button><button class="btn quiet">Copy continue</button>' },
+  none: { cls: 'idle', k: 'Nothing to do', h: 'pod is working on wave 3', p: '2 engineers running · last activity 1 min ago.', acts: '' },
+};
+const card = (key, more = true) => {
+  const c = CARDS[key];
+  return `<div class="next ${c.cls}"><div class="k">${c.k}${c.chip ?? ''}</div><h3>${c.h}</h3><p>${c.p}</p>
+    ${c.acts ? `<div class="acts">${c.acts}</div>` : ''}
+    ${more && key !== 'none' ? `<div class="more">and 2 more waiting · <a href="#">show</a></div>` : ''}</div>`;
+};
+const session = `<details class="fold"><summary>Session details</summary><div class="fold-body">
+  <div class="cmd">cd "E:\\Projects\\chess-web"</div> <button class="btn sm">Copy</button></div></details>`;
+const pipeV = `<div class="pipe">
+  <div class="step done"><span class="ic">✓</span>Plan · 1 sprint</div>
+  <div class="step done"><span class="ic">✓</span>Wave 1 · 3 slices · PR #76</div>
+  <div class="step done"><span class="ic">✓</span>Wave 2 · 2 slices · PR #77</div>
+  <div class="step cur"><div class="row"><span class="ic">●</span><b>Wave 3</b><span class="chip you">you merge</span></div><div class="sub">T1 · Tune the step table · pushed · 18 min</div></div>
+  <div class="step wait"><span class="ic">○</span>Final review</div></div>`;
+const pipeH = `<div class="pipe-h">
+  <div class="step done"><span class="ic">✓</span>Plan</div><div class="step done"><span class="ic">✓</span>W1</div><div class="step done"><span class="ic">✓</span>W2</div>
+  <div class="step cur" style="flex-direction:row;align-items:center"><span class="ic">●</span><b>W3</b></div><div class="step wait"><span class="ic">○</span>Final</div></div>`;
+const dots = `<div class="dots" title="Plan, wave 1, wave 2 done · wave 3 now · final review next"><i class="d"></i><i class="d"></i><i class="d"></i><i class="c"></i><i></i></div>`;
+const queue = (n = 3) => {
+  const rows = [
+    ['PENDING', 'engineer → human', 'Needs your decision: recent arenas gave too few players near 2300 (7) and 2500 (1), so rung baseline also reads those players’ opponents within ±150 of the level.'],
+    ['PENDING', 'engineer → human', 'Look: below 768 px the Liem card’s detail reads "2732" instead of "GM·2732", because the GM tag already sits by his name.'],
+    ['PENDING', 'orchestrator → human', 'Look: at 375 px his name reads "Le Quang Li…" on the in-game Liem card (the name box is 136 px).'],
+  ].slice(0, n);
+  return rows.map(r => `<div class="queue-row"><div class="qh"><span class="chip you">${r[0]}</span>${r[1]}</div><div class="clamp">${r[2]}</div></div>`).join('');
+};
+const folds = (items) => items.map(([t, c, body, open]) => `<details class="fold"${open ? ' open' : ''}><summary>${t}${c ? ` <span class="count">${c}</span>` : ''}</summary><div class="fold-body">${body ?? ''}</div></details>`).join('');
+const sliceLog = `<div class="mono muted">T1 · 18 min · 41k tok<br>U1 · 22 min · 57k tok</div>`;
+const actLog = `<div class="mono muted">Oct 26 01:39 · continue · started<br>Oct 26 01:38 · answered · BLOCKED</div>`;
+const other = `<p class="muted" style="font-size:13px;margin:10px 0 0">2 other agents running · <a href="#" style="color:var(--accent)">show</a></p>`;
+
+// ---------- the three directions ----------
+const D = {
+  A: {
+    name: 'A · One column', thesis: 'Today’s order with the noise folded away: the card, then the plan, then quiet fold rows.',
+    detail: 'Done steps turn into dashed outlines, so the open step is the only solid shape in the pipeline.',
+    phone: () => `${bar()}<div class="scr">${runsPhone}${title()}${card('merge')}<div style="margin-top:12px">${pipeV}</div>
+      <div style="margin-top:12px">${folds([['Waiting on you', '3', queue()], ['Slice log', '', sliceLog], ['Action log', '20', actLog]])}</div>${other}</div>`,
+    desk: () => `${bar()}<div style="display:grid;grid-template-columns:280px 1fr;gap:20px;padding:16px">
+      <div>${runs()}</div>
+      <div>${title()}<div style="max-width:720px">${card('merge')}${session}<div style="margin-top:10px">${pipeV}</div>
+      <div style="margin-top:12px">${folds([['Waiting on you', '3', queue()], ['Slice log', '', sliceLog], ['Action log', '20', actLog]])}</div>${other}</div></div></div>`,
+  },
+  B: {
+    name: 'B · Now and Plan', thesis: 'Split by question: the left asks "what do I do?", the right answers "where is the plan?".',
+    detail: 'The Now rail lists everything waiting as one-line rows, with the urgent one on top as the card.',
+    nowList: () => `<div class="b-list">
+      <div class="li"><span class="chip you">PENDING</span><span class="t">Needs your decision: recent arenas gave too few players…</span></div>
+      <div class="li"><span class="chip you">PENDING</span><span class="t">Look: below 768 px the Liem card’s detail reads…</span></div>
+      <div class="li"><span class="chip you">PENDING</span><span class="t">Look: at 375 px his name reads "Le Quang Li…"</span></div></div>`,
+    phone() { return `${bar()}<div class="scr">${runsPhone}${title()}<div class="b-now">${card('merge', false)}${this.nowList()}</div>
+      <div style="margin-top:14px">${pipeH}</div><div style="margin-top:10px">${folds([['Slice log', '', sliceLog], ['Action log', '20', actLog]])}</div>${other}</div>`; },
+    desk() { return `${bar()}<div style="display:grid;grid-template-columns:240px 380px 1fr;gap:20px;padding:16px">
+      <div>${runs()}</div>
+      <div class="b-now"><div class="k" style="font:600 12px var(--body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Now</div>${card('merge', false)}${this.nowList()}${session}</div>
+      <div>${title()}${pipeV}<div style="margin-top:12px">${folds([['Slice log', '', sliceLog], ['Action log', '20', actLog]])}</div>${other}</div></div>`; },
+  },
+  C: {
+    name: 'C · Card and tabs', thesis: 'The quietest: one card on a calm page, and the details one tab away.',
+    detail: 'The pipeline shrinks to a five-segment progress strip beside the title. Open the Plan tab for the full steps.',
+    tabs: (on = 'Plan') => `<div class="c-tabs">${['Plan', 'Waiting <span class="count">3</span>', 'Log'].map(t => `<span class="${t.startsWith(on) ? 'on' : ''}">${t}</span>`).join('')}</div>`,
+    phone() { return `${bar()}<div class="scr">${runsPhone}<div class="ttl-row"><span class="title">sparring-ladder</span>${dots}</div>
+      <div style="margin:-4px 0 10px"><button class="switch">auto-continue</button></div>${card('merge')}${this.tabs()}<div style="margin-top:10px">${pipeV}</div>${other}</div>`; },
+    desk() { return `${bar()}<div style="display:grid;grid-template-columns:280px 1fr;gap:20px;padding:16px">
+      <div>${runs()}</div>
+      <div style="max-width:720px"><div class="ttl-row"><span class="title">sparring-ladder</span>${dots}<span class="chip you">needs you</span><button class="switch">auto-continue</button></div>
+      ${card('merge')}${this.tabs()}<div style="margin-top:10px">${pipeV}</div>${other}</div></div>`; },
+  },
+};
+
+// ---------- rows ----------
+const palette = `<div class="palette">${[['bg', '--bg'], ['panel', '--panel'], ['line', '--line'], ['fg', '--fg'], ['muted', '--muted'], ['accent', '--accent'], ['you', '--you'], ['ok', '--ok'], ['blocked', '--bad']].map(([n, v]) => `<div class="sw"><i style="background:var(${v})"></i>${n}</div>`).join('')}</div>
+  <p class="cell-note">Unchanged from board-read. All three use the same tokens.</p>`;
+const type = `<div class="stack"><span style="font:700 22px var(--display)">sparring-ladder</span><span style="font:700 19px var(--display)">Merge PR #78, wave 3</span>
+  <span style="font:16px var(--body)">Both slices are pushed and checked.</span><span class="mono">claude --resume 5d1c9a2e</span>
+  <span style="font:500 12px var(--body);color:var(--muted)">12 px floor for chips and labels</span></div>`;
+const controls = (d) => `
+  <div class="lbl">Primary · normal / hover / pressed</div><div class="states"><button class="btn primary">Merge PR #78</button><button class="btn primary is-hover">Merge PR #78</button><button class="btn primary is-press">Merge PR #78</button></div>
+  <div class="lbl">+ repo · normal / hover / pressed</div><div class="states"><button class="btn sm">+ repo</button><button class="btn sm is-hover">+ repo</button><button class="btn sm is-press">+ repo</button></div>
+  <div class="lbl">+ repo, open (in place, under the bar)</div><div class="states"><input class="btn" style="font-family:var(--body);min-width:0;flex:1" value="E:\\Projects\\" aria-label="Folder path"><button class="btn primary sm">Add</button><button class="btn quiet sm">Cancel</button></div>
+  <div class="lbl">Bar menu · closed / hover / open</div><div class="states" style="align-items:flex-start"><button class="menu-btn">⋯</button><button class="menu-btn is-hover">⋯</button>
+    <div class="menu"><div class="seg"><span>System</span><span class="on">Light</span><span>Dark</span></div><div class="mi"><span>Ports</span><span class="mono muted">4000</span></div><div class="mi"><span>Action log</span><span class="mono muted">20</span></div></div></div>
+  <div class="lbl">${d === 'C' ? 'Tabs · Plan open' : 'Fold row · closed / hover / open'}</div>
+  ${d === 'C' ? D.C.tabs() : `<details class="fold"><summary>Slice log</summary></details><details class="fold"><summary class="is-hover">Slice log</summary></details><details class="fold" open><summary>Slice log</summary><div class="fold-body">${sliceLog}</div></details>`}
+  <div class="lbl">auto-continue · off / on</div><div class="states"><button class="switch">auto-continue</button><button class="switch on">auto-continue</button></div>`;
+const cardStates = (d) => ['blocked', 'merge', 'answer', 'reply', 'none'].map(k => `<div class="lbl">${{ blocked: 'Blocked (first)', merge: 'PR to merge', answer: 'Entry to answer', reply: 'Reply to send', none: 'Nothing to do' }[k]}</div>${card(k, d !== 'B')}`).join('');
+const pipeStates = (d) => d === 'C' ? `<div class="lbl">Strip beside the title</div>${dots}<div class="lbl">Plan tab, open</div>${pipeV}` : d === 'B' ? `<div class="lbl">Desktop (right side)</div>${pipeV}<div class="lbl">Phone (one row)</div>${pipeH}` : pipeV;
+const waiting = (d) => d === 'B' ? D.B.nowList() + '<p class="cell-note">One line each; click a row to open it in place.</p>' : `<details class="fold" open><summary>Waiting on you <span class="count">3</span></summary><div class="fold-body">${queue(2)}</div></details><p class="cell-note">Two lines each; click to read the rest. ${d === 'C' ? 'Lives in the Waiting tab.' : ''}</p>`;
+
+const ROWS = [
+  ['Whole · 375 px', d => `<p style="margin:0 0 10px;font-size:14px"><b>${D[d].thesis}</b></p><div class="phone">${D[d].phone()}</div>`],
+  ['Palette', () => palette],
+  ['Type scale', () => type],
+  ['Controls', controls],
+  ['Next step card', cardStates],
+  ['Pipeline', pipeStates],
+  ['Waiting on you', waiting],
+  ['Signature detail', d => `<p style="margin:0;font-size:14px">${D[d].detail}</p>`],
+  ['Desktop', d => `<div class="desk-wrap"><div class="desk">${D[d].desk()}</div></div>`],
+];
+
+const grid = document.getElementById('grid');
+grid.innerHTML = `<div class="rowhead corner"></div>` + ['A', 'B', 'C'].map(d => `<div class="colhead"><h2>${D[d].name}</h2><p>${D[d].thesis}</p></div>`).join('')
+  + ROWS.map(([name, f]) => `<div class="rowhead">${name}</div>` + ['A', 'B', 'C'].map(d => `<div>${f(d)}</div>`).join('')).join('');
+
+function fit() {
+  document.querySelectorAll('.desk-wrap').forEach(w => {
+    const d = w.firstElementChild, s = w.clientWidth / d.offsetWidth;
+    d.style.transform = `scale(${s})`; w.style.height = d.offsetHeight * s + 'px';
+  });
+}
+addEventListener('resize', fit); addEventListener('load', fit); fit();
+</script>
+</body>
+</html>

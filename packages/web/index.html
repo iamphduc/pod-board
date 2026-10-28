@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Every pod run across your repos, live." />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f5f8" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f121a" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-    <link rel="preload" href="/fonts/instrument-sans-400.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/geist-400.woff2" as="font" type="font/woff2" crossorigin />
     <title>Pod Board</title>
     <!-- Until the app CSS loads (in dev it comes with the module script), the browser's own canvas
          shows: follow the system, or the stored pick once the script below sets data-theme. -->
@@ -18,13 +18,16 @@
       :root[data-theme="dark"] { color-scheme: dark; }
       :root[data-theme="light"] { color-scheme: light; }
     </style>
-    <!-- Applies a stored Light or Dark pick before the first paint, so Dark never flashes light.
-         Same key and values as src/theme/theme.ts (THEME_KEY); src/theme-boot.test.ts checks it. -->
+    <!-- Applies the theme before the first paint, so Dark never flashes light. A stored Light or
+         Dark pick sets data-theme; System sets nothing, so the media query decides; nothing usable
+         stored (or storage that throws) sets the default, Dark. Same key and rule as
+         src/theme/theme.ts (THEME_KEY, readChoice); src/theme-boot.test.ts checks it. -->
     <script>
+      var choice = null
       try {
-        var choice = window.localStorage.getItem('pod-board-theme')
-        if (choice === 'light' || choice === 'dark') document.documentElement.setAttribute('data-theme', choice)
+        choice = window.localStorage.getItem('pod-board-theme')
       } catch (e) {}
+      if (choice !== 'system') document.documentElement.setAttribute('data-theme', choice === 'light' ? 'light' : 'dark')
     </script>
   </head>
   <body>
