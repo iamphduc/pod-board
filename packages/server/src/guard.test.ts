@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
 import { describe, expect, test } from 'vitest'
-import { actionGuard, ignoresCase, normalizeRepoPath, repoId, requestGuard, sameRepoPath } from './guard.ts'
+import { actionGuard, ignoresCase, normalizeRepoPath, readGuard, repoId, requestGuard, sameRepoPath } from './guard.ts'
 
 function guarded(): Hono {
   const app = new Hono()
@@ -201,6 +201,59 @@ describe('action guard', () => {
     app.post('/api/actions/x', async (c) => c.json(await c.req.json()))
     const res = await act(app, GOOD, 'POST', '{"number":7}')
     expect(await res.json()).toEqual({ number: 7 })
+  })
+})
+
+describe('read guard', () => {
+  /** The read guard alone, in front of a GET handler that counts its calls. */
+  function readGuarded() {
+    let reached = 0
+    const app = new Hono()
+    app.use('*', readGuard({ ports: [3040, 3041], token: TOKEN }))
+    app.get('/api/fs/x', (c) => {
+      reached++
+      return c.json({ ok: true })
+    })
+    return { app, reached: () => reached }
+  }
+  const read = (app: Hono, headers: Record<string, string>, url = 'http://127.0.0.1:3040/api/fs/x') => app.request(url, { headers })
+
+  test('token guard for reads', async () => {
+    const { app, reached } = readGuarded()
+    // No Origin: browsers leave it off same-origin GETs.
+    for (const host of ['127.0.0.1:3040', 'localhost:3041']) {
+      const ok = await read(app, { host, 'x-pod-board-token': TOKEN })
+      expect(ok.status, host).toBe(200)
+      expect(await ok.json()).toEqual({ ok: true })
+      noCors(ok)
+    }
+    expect(reached()).toBe(2)
+
+    const refused: [string, Record<string, string>, string, string][] = [
+      ['no token', { host: '127.0.0.1:3040' }, 'http://127.0.0.1:3040/api/fs/x', 'bad token'],
+      ['empty token', { host: '127.0.0.1:3040', 'x-pod-board-token': '' }, 'http://127.0.0.1:3040/api/fs/x', 'bad token'],
+      ['token in the URL only', { host: '127.0.0.1:3040' }, `http://127.0.0.1:3040/api/fs/x?token=${TOKEN}&x-pod-board-token=${TOKEN}`, 'bad token'],
+      ['foreign host, good token', { host: 'evil.example:3040', 'x-pod-board-token': TOKEN }, 'http://127.0.0.1:3040/api/fs/x', 'forbidden host'],
+      ['foreign host, no token', { host: 'evil.example:3040' }, 'http://127.0.0.1:3040/api/fs/x', 'forbidden host'],
+    ]
+    for (const token of ['k'.repeat(42), 'k'.repeat(44), 'j' + 'k'.repeat(42), 'K'.repeat(43)]) {
+      refused.push([`wrong token ${token.length}`, { host: '127.0.0.1:3040', 'x-pod-board-token': token }, 'http://127.0.0.1:3040/api/fs/x', 'bad token'])
+    }
+    for (const [name, headers, url, error] of refused) {
+      const res = await read(app, headers, url)
+      expect(res.status, name).toBe(403)
+      expect(await res.json(), name).toEqual({ error })
+      noCors(res)
+    }
+    expect(reached()).toBe(2)
+  })
+
+  test('a write through it still needs the Origin', async () => {
+    const { app, reached } = readGuarded()
+    const res = await app.request('http://127.0.0.1:3040/api/fs/x', { method: 'POST', headers: { host: '127.0.0.1:3040', 'x-pod-board-token': TOKEN } })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'forbidden origin' })
+    expect(reached()).toBe(0)
   })
 })
 

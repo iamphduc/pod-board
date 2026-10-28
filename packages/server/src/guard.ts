@@ -65,6 +65,13 @@ export function actionGuard({ ports, token }: { ports: readonly number[]; token:
   }
 }
 
+/** Stub: the tests in guard.test.ts come first. */
+export function readGuard(_opts: { ports: readonly number[]; token: string }): MiddlewareHandler {
+  return async (_c, next) => {
+    await next()
+  }
+}
+
 const pathFor = (platform: NodeJS.Platform) => (platform === 'win32' ? path.win32 : path.posix)
 
 /**

@@ -4,6 +4,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { streamSSE } from 'hono/streaming'
 import { AGENT_ID } from './agent-timeline.ts'
 import { actionGuard, requestGuard } from './guard.ts'
+import type { FolderListError, FolderListing } from './folder-list.ts'
 import type { AddRepoError } from './repos-config.ts'
 
 export const PING_MS = 15_000
@@ -29,6 +30,8 @@ export type AppDeps = {
   token: string
   /** The action routes, mounted at /api/actions behind the action guard. */
   actions?: Hono
+  /** Lists a folder's subfolders, or the roots with no path, for `GET /api/fs/folders`. With none, that route gets 404. */
+  folders?: (dir: string | undefined) => Promise<FolderListing | { error: FolderListError }>
 }
 
 const ADD_REPO_STATUS = { 'not absolute': 400, 'not a local path': 400, 'not a directory': 400, 'already registered': 409, 'config unreadable': 500 } as const
