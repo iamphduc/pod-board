@@ -211,7 +211,7 @@ export function createFolderPicker(deps: PickerDeps, onChange: (s: PickerState) 
     emit()
     void deps.list(dir).then((r) => {
       if (id !== seq) return
-      if (!r.ok && fromStart && r.status === 404) return request(undefined)
+      if (!r.ok && fromStart && r.status === 404) return go(undefined)
       loading = false
       if (r.ok) {
         listing = r.data
