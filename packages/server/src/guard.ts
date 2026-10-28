@@ -45,15 +45,14 @@ function hostAndOrigin(ports: readonly number[]): (c: Context) => Response | und
  */
 export function actionGuard({ ports, token }: { ports: readonly number[]; token: string }): MiddlewareHandler {
   const check = hostAndOrigin(ports)
-  const expected = Buffer.from(token, 'utf8')
+  const tokenOk = tokenCheck(token)
   return async (c, next) => {
     const refused = check(c)
     if (refused) return refused
     if (c.req.method !== 'POST') return c.json({ error: 'method not allowed' }, 405)
     const type = (c.req.header('content-type') ?? '').split(';')[0]!.trim().toLowerCase()
     if (type !== 'application/json') return c.json({ error: 'unsupported media type' }, 415)
-    const given = Buffer.from(c.req.header('x-pod-board-token') ?? '', 'utf8')
-    if (given.length !== expected.length || !timingSafeEqual(given, expected)) return c.json({ error: 'bad token' }, 403)
+    if (!tokenOk(c)) return c.json({ error: 'bad token' }, 403)
     let body: unknown
     try {
       body = JSON.parse(await c.req.text())
@@ -65,10 +64,29 @@ export function actionGuard({ ports, token }: { ports: readonly number[]; token:
   }
 }
 
-/** Stub: the tests in guard.test.ts come first. */
-export function readGuard(_opts: { ports: readonly number[]; token: string }): MiddlewareHandler {
-  return async (_c, next) => {
+/**
+ * Guards reads that need the session token, such as the folder listing under
+ * /api/fs/. After the request guard's checks (Host; Origin too on anything but
+ * GET and HEAD), the `X-Pod-Board-Token` header must match. A token in the URL
+ * doesn't count. Host 403, Origin 403, then token 403.
+ */
+export function readGuard({ ports, token }: { ports: readonly number[]; token: string }): MiddlewareHandler {
+  const check = hostAndOrigin(ports)
+  const tokenOk = tokenCheck(token)
+  return async (c, next) => {
+    const refused = check(c)
+    if (refused) return refused
+    if (!tokenOk(c)) return c.json({ error: 'bad token' }, 403)
     await next()
+  }
+}
+
+/** Whether a request's `X-Pod-Board-Token` header is the session token, compared in constant time. */
+function tokenCheck(token: string): (c: Context) => boolean {
+  const expected = Buffer.from(token, 'utf8')
+  return (c) => {
+    const given = Buffer.from(c.req.header('x-pod-board-token') ?? '', 'utf8')
+    return given.length === expected.length && timingSafeEqual(given, expected)
   }
 }
 
