@@ -102,7 +102,7 @@ function RunItYourself({ view }: { view: ReplyPanelView }) {
   const id = useId()
   return (
     <div className="reply-yourself">
-      <button className="btn quiet sm trail" type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)}>
+      <button className="btn quiet sm trail" type="button" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen((o) => !o)}>
         Run it yourself
         <Icon name={open ? 'chevron-down' : 'chevron-right'} />
       </button>

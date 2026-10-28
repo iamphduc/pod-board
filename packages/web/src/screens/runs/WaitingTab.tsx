@@ -51,74 +51,76 @@ export function WaitingTab({ repo, run, items }: Props) {
       {items.length === 0 && <p className="muted tab-empty">{NOTHING_ELSE}</p>}
       {(items.length > 0 || ghost) && (
         <ul className="wait-list">
-          {items.map((item) => {
-            const e = item.entry
-            const a = item.action
-            const isOpen = shown.has(item.key)
-            return (
-              <li key={item.key} className={`wait-row t-${item.tier}`}>
-                {e ? (
-                  <button className="wait-toggle" type="button" aria-expanded={isOpen} onClick={() => setOpen((o) => toggleOpen(o, item.key, keys))}>
-                    <span className="wait-meta mono">{rowMeta(e)}</span>
-                    <span className={isOpen ? 'wait-body' : 'wait-body clamp'}>{e.body}</span>
-                  </button>
-                ) : (
-                  <div className="wait-head">
-                    <span className="wait-title">{item.title}</span>
-                    {item.detail && <span className="wait-detail muted">{item.detail}</span>}
-                  </div>
-                )}
-                {e?.yourAnswer && (
-                  <p className="wait-answer">
-                    <span>{e.yourAnswer}</span> <span className="note">{e.waiting}</span>
-                  </p>
-                )}
-                {a.kind === 'answer' && answerAt !== item.key && (
-                  <div className="inplace-actions">
-                    <button
-                      ref={(el) => {
-                        if (el) answerButtons.current.set(a.line, el)
-                        else answerButtons.current.delete(a.line)
-                      }}
-                      className="btn sm"
-                      type="button"
-                      disabled={saving}
-                      onClick={() => flow.open({ repoId: a.repoId, line: a.line })}
-                    >
-                      Answer
+          {[
+            ...items.map((item) => {
+              const e = item.entry
+              const a = item.action
+              const isOpen = shown.has(item.key)
+              return (
+                <li key={item.key} className={`wait-row t-${item.tier}`}>
+                  {e ? (
+                    <button className="wait-toggle" type="button" aria-expanded={isOpen} onClick={() => setOpen((o) => toggleOpen(o, item.key, keys))}>
+                      <span className="wait-meta mono">{rowMeta(e)}</span>
+                      <span className={isOpen ? 'wait-body' : 'wait-body clamp'}>{e.body}</span>
                     </button>
-                  </div>
-                )}
-                {a.kind === 'merge' && (
-                  <div className="inplace-actions">
-                    <button
-                      id={mergeButtonId(a.number)}
-                      className="btn sm"
-                      type="button"
-                      aria-expanded={mergeAt === item.key}
-                      disabled={merging}
-                      onClick={() => mergeFlow.open({ repoId: a.repoId, number: a.number })}
-                    >
-                      Merge
-                    </button>
-                  </div>
-                )}
-                {a.kind === 'reply' && <ReplyPanel key="reply-panel" view={a.panel} target={a.panel.target} framed={false} />}
-                {answerAt === item.key && form}
-                {mergeAt === item.key && confirm}
+                  ) : (
+                    <div className="wait-head">
+                      <span className="wait-title">{item.title}</span>
+                      {item.detail && <span className="wait-detail muted">{item.detail}</span>}
+                    </div>
+                  )}
+                  {e?.yourAnswer && (
+                    <p className="wait-answer">
+                      <span>{e.yourAnswer}</span> <span className="note">{e.waiting}</span>
+                    </p>
+                  )}
+                  {a.kind === 'answer' && answerAt !== item.key && (
+                    <div className="inplace-actions">
+                      <button
+                        ref={(el) => {
+                          if (el) answerButtons.current.set(a.line, el)
+                          else answerButtons.current.delete(a.line)
+                        }}
+                        className="btn sm"
+                        type="button"
+                        disabled={saving}
+                        onClick={() => flow.open({ repoId: a.repoId, line: a.line })}
+                      >
+                        Answer
+                      </button>
+                    </div>
+                  )}
+                  {a.kind === 'merge' && (
+                    <div className="inplace-actions">
+                      <button
+                        id={mergeButtonId(a.number)}
+                        className="btn sm"
+                        type="button"
+                        aria-expanded={mergeAt === item.key}
+                        disabled={merging}
+                        onClick={() => mergeFlow.open({ repoId: a.repoId, number: a.number })}
+                      >
+                        Merge
+                      </button>
+                    </div>
+                  )}
+                  {a.kind === 'reply' && <ReplyPanel key="reply-panel" view={a.panel} target={a.panel.target} framed={false} />}
+                  {answerAt === item.key && form}
+                  {mergeAt === item.key && confirm}
+                </li>
+              )
+            }),
+            // One array with the rows: the ghost keeps the reply row's key and slot, so React keeps its panel and the result in it.
+            ghost && (
+              <li key={ghost.key} className="wait-row ghost">
+                {null}
+                {null}
+                {null}
+                {null}
+                <ReplyPanel key="reply-panel" view={undefined} target={ghost.target} framed={false} />
               </li>
-            )
-          })}
-          {ghost && (
-            // Same key and the same slot as the reply row, so React keeps its panel and the result in it.
-            <li key={ghost.key} className="wait-row ghost">
-              {null}
-              {null}
-              {null}
-              {null}
-              <ReplyPanel key="reply-panel" view={undefined} target={ghost.target} framed={false} />
-            </li>
-          )}
+            ),
+          ]}
         </ul>
       )}
       {answerAt === 'end' && form}
