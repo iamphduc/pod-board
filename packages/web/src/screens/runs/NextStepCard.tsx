@@ -43,7 +43,8 @@ export function NextStepCard({ repo, run, card }: Props) {
         <h2 id={titleId} className="next-title">
           {card.title}
         </h2>
-        {card.detail && <p className="next-detail">{card.detail}</p>}
+        {/* A reply's rows each say why, so its detail would only repeat the first one. */}
+        {card.detail && a.kind !== 'reply' && <p className="next-detail">{card.detail}</p>}
         {a.kind === 'answer' && (
           <div className="inplace-actions next-acts">
             <button
