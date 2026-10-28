@@ -29,19 +29,22 @@ function fakeRoot() {
 }
 
 describe('theme', () => {
-  it('readChoice falls back to system', () => {
+  it('readChoice falls back to dark', () => {
     expect(THEME_KEY).toBe('pod-board-theme')
-    expect(readChoice(memoryStorage({ [THEME_KEY]: 'light' }))).toBe('light')
-    expect(readChoice(memoryStorage({ [THEME_KEY]: 'dark' }))).toBe('dark')
-    expect(readChoice(memoryStorage({ [THEME_KEY]: 'system' }))).toBe('system')
-    expect(readChoice(memoryStorage())).toBe('system')
-    expect(readChoice(memoryStorage({ [THEME_KEY]: 'sepia' }))).toBe('system')
-    expect(readChoice(memoryStorage({ [THEME_KEY]: 'Dark' }))).toBe('system')
-    expect(readChoice(memoryStorage({ [THEME_KEY]: '' }))).toBe('system')
-    expect(readChoice(memoryStorage({ 'other-key': 'dark' }))).toBe('system')
-    expect(readChoice(throwing)).toBe('system')
-    expect(readChoice(undefined)).toBe('system')
-    expect(readChoice(null)).toBe('system')
+    // A stored choice round-trips.
+    for (const choice of ['system', 'light', 'dark'] as const) {
+      expect(readChoice(memoryStorage({ [THEME_KEY]: choice })), choice).toBe(choice)
+    }
+    // Nothing stored, an unknown value, or storage that throws: dark.
+    expect(readChoice(memoryStorage())).toBe('dark')
+    expect(readChoice(memoryStorage({ [THEME_KEY]: 'sepia' }))).toBe('dark')
+    expect(readChoice(memoryStorage({ [THEME_KEY]: 'Light' }))).toBe('dark')
+    expect(readChoice(memoryStorage({ [THEME_KEY]: ' light' }))).toBe('dark')
+    expect(readChoice(memoryStorage({ [THEME_KEY]: '' }))).toBe('dark')
+    expect(readChoice(memoryStorage({ 'other-key': 'light' }))).toBe('dark')
+    expect(readChoice(throwing)).toBe('dark')
+    expect(readChoice(undefined)).toBe('dark')
+    expect(readChoice(null)).toBe('dark')
   })
 
   it('applyTheme and saveChoice', () => {

@@ -10,7 +10,7 @@
   grid-template-columns: 260px minmax(0, 1fr);
   min-height: 100vh;
   min-height: 100dvh;
-  background: var(--panel);
+  background: var(--bg);
 }
 
 .sr-only {
@@ -43,8 +43,8 @@
   gap: 18px;
   align-content: start;
   padding: 16px 14px;
-  background: var(--panel-2);
-  border-right: 1px solid var(--line);
+  background: var(--bg);
+  border-right: 1px solid var(--border);
 }
 
 .side-head {
@@ -56,8 +56,8 @@
 }
 
 .brand {
-  font: 700 var(--size-title) / 1.1 var(--display);
-  letter-spacing: -0.01em;
+  font: 600 var(--size-title) / 1.1 var(--font);
+  letter-spacing: -0.02em;
   white-space: nowrap;
 }
 
@@ -89,16 +89,16 @@
 }
 
 .run:hover {
-  border-color: var(--line);
+  background: var(--hover);
 }
 
 .run[aria-current="true"] {
-  background: var(--panel);
-  border-color: var(--line);
+  background: var(--hover);
+  border-color: var(--border);
 }
 
 .run b {
-  font-weight: 600;
+  font-weight: 500;
   font-size: var(--size-dense);
   overflow-wrap: anywhere;
 }
@@ -121,9 +121,12 @@
 /* A quiet kind tag: an outlined chip with no state dot, so it never reads as a state. */
 .chip.tag {
   padding: 2px 7px;
+  border-radius: var(--radius-pill);
   background: transparent;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--size-micro);
 }
 
 .chip.tag::before {
@@ -155,7 +158,6 @@
 
 .add-error {
   font-size: var(--size-small);
-  color: var(--bad-ink);
 }
 
 /* Main view */
@@ -176,48 +178,29 @@
 }
 
 .bar .title {
-  font: 700 var(--size-title) / 1.2 var(--display);
+  font: 600 var(--size-title) / 1.2 var(--font);
+  letter-spacing: -0.02em;
   margin-right: auto;
   overflow-wrap: anywhere;
 }
 
+/* Today's theme control uses the base .seg: a framed group, the picked button filled. */
 .seg {
   display: inline-flex;
-}
-
-.seg .btn {
-  border-radius: 0;
-  margin-left: -1px;
-}
-
-.seg .btn:first-child {
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-  margin-left: 0;
-}
-
-.seg .btn:last-child {
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-}
-
-.seg .btn[aria-pressed="true"] {
-  position: relative;
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent-ink);
 }
 
 .tabs {
   display: flex;
   gap: 4px;
   margin-top: -6px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--border);
 }
 
 .tab {
   padding: 8px 12px;
   margin-bottom: -1px;
   border-bottom: 2px solid transparent;
-  font: 600 var(--size-small) / 1 var(--body);
+  font: 500 var(--size-small) / 1 var(--font);
   color: var(--muted);
   text-decoration: none;
 }
@@ -227,11 +210,11 @@
 }
 
 .tab[aria-current="page"] {
-  color: var(--accent-ink);
-  border-bottom-color: var(--accent);
+  color: var(--fg);
+  border-bottom-color: var(--fg);
 }
 
-/* Banners: what's wrong above the main view. A chip names it; the left edge carries its state. */
+/* Banners: what's wrong above the main view. A chip (dot and word) names it; the frame stays plain. */
 .banners {
   display: grid;
   gap: 8px;
@@ -244,24 +227,15 @@
   gap: 6px 10px;
   margin: 0;
   padding: 9px 12px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--idle);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--panel);
+  background: var(--surface);
   color: var(--fg);
   font-size: var(--size-small);
 }
 
 .banner .chip {
   flex: none;
-}
-
-.banner[data-tone="s-bad"] {
-  border-left-color: var(--bad);
-}
-
-.banner[data-tone="s-you"] {
-  border-left-color: var(--warn);
 }
 
 .banner > span {
@@ -320,9 +294,9 @@
   display: grid;
   gap: 3px;
   padding: 9px 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--panel);
+  background: var(--bg);
 }
 
 .step b {
@@ -330,7 +304,7 @@
   align-items: center;
   gap: 6px;
   font-size: var(--size-dense);
-  font-weight: 600;
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 
@@ -340,70 +314,70 @@
 }
 
 .step b::before {
+  content: "";
   flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot, transparent);
 }
 
-.step.done b::before {
-  content: "✓";
-  color: var(--ok);
+/* The state word beside the dot, so a state never rests on colour alone. */
+.step b .sr-only {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+  font-weight: 400;
+  font-size: var(--size-small);
+  color: var(--muted);
+}
+
+/* The step's dot: done, live, you and blocked take their status colour; waiting and unknown are hollow. */
+.step.done {
+  --dot: var(--ready);
 }
 
 .step.live {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent) inset;
-}
-
-.step.live b::before {
-  content: "●";
-  color: var(--accent);
-  font-size: var(--size-micro);
+  --dot: var(--running);
+  border-color: var(--border-strong);
 }
 
 .step.wait {
   opacity: 0.55;
 }
 
-.step.you {
-  border-color: var(--warn);
+.step.wait b::before,
+.step.unknown b::before {
+  border: 1px solid var(--faint);
 }
 
-.step.you b::before {
-  content: "!";
-  color: var(--warn);
-  font-weight: 700;
+.step.you {
+  --dot: var(--needs-you);
+  border-color: var(--fg);
 }
 
 .step.blocked {
-  border-color: var(--bad);
-  box-shadow: 0 0 0 1px var(--bad) inset;
-}
-
-.step.blocked b::before {
-  content: "×";
-  color: var(--bad);
-  font-weight: 700;
+  --dot: var(--blocked);
+  border-color: var(--fg);
 }
 
 .step.unknown {
   border-style: dashed;
 }
 
-.step.unknown b::before {
-  content: "?";
-  color: var(--muted);
-}
-
 @media (prefers-reduced-motion: no-preference) {
-  .step.live {
-    animation: step-pulse 2.4s ease-in-out infinite;
+  .step.live b::before {
+    animation: step-pulse 1.6s ease-in-out infinite;
   }
 }
 
 @keyframes step-pulse {
   50% {
-    box-shadow:
-      0 0 0 3px var(--accent-soft),
-      0 0 0 1px var(--accent) inset;
+    opacity: 0.35;
   }
 }
 
@@ -417,14 +391,13 @@
 }
 
 .step[data-open="true"] {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent) inset;
+  border-color: var(--fg);
+  background: var(--hover);
 }
 
 .merge-confirm {
   margin-top: 10px;
   max-width: 640px;
-  border-left: 3px solid var(--accent);
 }
 
 .merge-confirm:focus {
@@ -432,7 +405,7 @@
 }
 
 .merge-confirm:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -466,12 +439,28 @@
   overflow-wrap: anywhere;
 }
 
-.merge-why {
-  color: var(--warn-ink);
+/*
+ * A reason or an error is plain text with a dot in its status colour before it,
+ * so the state never rests on text colour.
+ */
+.merge-why::before,
+.merge-error::before,
+.add-error::before,
+.resume-error::before,
+.auto-switch-error::before,
+.answer-error::before {
+  content: "";
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--blocked);
 }
 
-.merge-error {
-  color: var(--bad-ink);
+.merge-why::before {
+  background: var(--needs-you);
 }
 
 /* Slice log */
@@ -486,7 +475,7 @@
 .slice-log th,
 .slice-log td {
   padding: 7px 10px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--border);
   text-align: left;
   vertical-align: middle;
 }
@@ -526,20 +515,20 @@
 .doc-code {
   padding: 1px 4px;
   border-radius: var(--radius-sm);
-  background: var(--panel-2);
+  background: var(--hover);
   font: var(--size-small) / 1 var(--mono);
   overflow-wrap: anywhere;
 }
 
 /* A fix run's agent log: the slice log's table, each engineer a link to its view. */
 .agent-log a {
-  color: var(--accent-ink);
-  font-weight: 600;
+  color: var(--fg);
+  font-weight: 500;
   text-underline-offset: 2px;
 }
 
 .agent-log tr[aria-current="true"] td {
-  background: var(--accent-soft);
+  background: var(--hover);
 }
 
 /* Other activity: agents tied to no run, kept quiet under the main view. */
@@ -547,7 +536,7 @@
   display: grid;
   gap: 8px;
   padding-top: 12px;
-  border-top: 1px dashed var(--line);
+  border-top: 1px dashed var(--border);
   min-width: 0;
 }
 
@@ -572,7 +561,7 @@
   gap: 4px 12px;
   padding: 6px 10px;
   border-radius: var(--radius-sm);
-  background: var(--panel-2);
+  background: var(--surface);
   font-size: var(--size-small);
   color: var(--muted);
   min-width: 0;
@@ -614,10 +603,10 @@
 .reply-word {
   padding: 2px 6px;
   border-radius: var(--radius-sm);
-  background: var(--panel);
-  border: 1px solid var(--line);
+  background: var(--bg);
+  border: 1px solid var(--border);
   font-size: var(--size-small);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .reply-why {
@@ -631,7 +620,7 @@
   display: grid;
   gap: 6px;
   padding-top: 8px;
-  border-top: 1px dashed var(--line);
+  border-top: 1px dashed var(--border);
   min-width: 0;
 }
 
@@ -709,10 +698,6 @@
   overflow-wrap: anywhere;
 }
 
-.resume-error {
-  color: var(--bad-ink);
-}
-
 /* The auto-continue switch beside the run's state chip; a failed save's message beside it. */
 .auto-switch {
   display: inline-flex;
@@ -724,7 +709,6 @@
 }
 
 .auto-switch-error {
-  color: var(--bad-ink);
   font-size: var(--size-small);
   overflow-wrap: anywhere;
 }
@@ -765,7 +749,7 @@
     height: auto;
     overflow: visible;
     border-right: 0;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--border);
   }
 
   .run-list {
@@ -789,7 +773,7 @@
 
   .slice-log tr {
     padding: 7px 0;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid var(--border);
   }
 
   .slice-log tr.grp {
@@ -819,12 +803,12 @@
   }
 }
 
-/* Waiting on you: the queue entries for the selected run, each with its state edge, and the answer form in place. */
+/* Waiting on you: the queue entries for the selected run, each with its state chip, and the answer form in place. */
 .waiting {
   display: grid;
   gap: 8px;
   padding-top: 12px;
-  border-top: 1px dashed var(--line);
+  border-top: 1px dashed var(--border);
   min-width: 0;
   max-width: 760px;
 }
@@ -838,6 +822,10 @@
 }
 
 .waiting-row {
+  /* Compact rows: the base .card's room is for screen 1's Next step card. */
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: var(--radius-md);
   min-width: 0;
 }
 
@@ -860,7 +848,7 @@
 .waiting-answer {
   padding: 6px 8px;
   border-radius: var(--radius-sm);
-  background: var(--panel-2);
+  background: var(--surface);
 }
 
 .answer-form:focus {
@@ -868,7 +856,7 @@
 }
 
 .answer-form:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -888,8 +876,4 @@
   margin: 0;
   font-size: var(--size-small);
   overflow-wrap: anywhere;
-}
-
-.answer-error {
-  color: var(--bad-ink);
 }

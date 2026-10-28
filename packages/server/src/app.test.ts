@@ -1,11 +1,12 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
 import type { AgentTimeline, Board } from '@pod-board/model'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { createApp, type AppDeps, type BoardSource } from './app.ts'
 import { createBoardService } from './board-service.ts'
+import { listFolders, nodeFolderFs, type FolderFs } from './folder-list.ts'
 import { createSessionToken } from './session-token.ts'
 import type { GhReader } from './gh.ts'
 import { normalizeRepoPath } from './guard.ts'
@@ -54,10 +55,11 @@ const TIMELINE: AgentTimeline = {
 type TimelineFn = AppDeps['timeline']
 const noTimeline: TimelineFn = async () => undefined
 
-function fakeApp(opts: { pingMs?: number; source?: BoardSource; timeline?: TimelineFn; actions?: Hono } = {}): Hono {
+function fakeApp(opts: { pingMs?: number; source?: BoardSource; timeline?: TimelineFn; actions?: Hono; folders?: AppDeps['folders'] } = {}): Hono {
   return createApp({
     ports: [API, WEB],
     token: TOKEN,
+    ...(opts.folders === undefined ? {} : { folders: opts.folders }),
     ...(opts.actions === undefined ? {} : { actions: opts.actions }),
     source: opts.source ?? fakeSource().source,
     addRepo: async () => ({ error: 'not a directory' }),
@@ -506,5 +508,105 @@ describe('action routes', () => {
     const res = await app.request('/api/actions/echo', { method: 'POST', headers: noToken, body: '{}' })
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({ error: 'bad token' })
+  })
+})
+
+describe('folder listing route', () => {
+  const READ = { ...HOST, 'x-pod-board-token': TOKEN }
+  let root: string
+  let seen: (string | undefined)[]
+  let app: Hono
+  const url = (dir?: string) => (dir === undefined ? '/api/fs/folders' : `/api/fs/folders?${new URLSearchParams({ path: dir })}`)
+
+  beforeEach(async () => {
+    root = await realpath(await mkdtemp(join(tmpdir(), 'pod-board-folders-')))
+    await mkdir(join(root, 'b-repo', 'pod-docs'), { recursive: true })
+    await mkdir(join(root, 'A plus+space'))
+    await writeFile(join(root, 'f.txt'), 'secret')
+    seen = []
+    app = fakeApp({
+      folders: (dir) => {
+        seen.push(dir)
+        return listFolders(dir, { fs: nodeFolderFs, platform, home: root })
+      },
+    })
+  })
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  test('200 with the subfolders of a real folder', async () => {
+    const res = await app.request(url(root), { headers: READ })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      path: root,
+      parent: dirname(root),
+      locked: false,
+      truncated: false,
+      folders: [
+        { name: 'A plus+space', path: join(root, 'A plus+space'), podDocs: false },
+        { name: 'b-repo', path: join(root, 'b-repo'), podDocs: true },
+      ],
+    })
+    noCorsHeaders(res)
+  })
+
+  test('200 with the roots when no path is given', async () => {
+    const res = await app.request(url(), { headers: READ })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { path: unknown; parent: unknown; folders: { path: string }[] }
+    expect([body.path, body.parent]).toEqual([null, null])
+    expect(body.folders.length).toBeGreaterThan(0)
+    for (const f of body.folders) expect(isAbsolute(f.path), f.path).toBe(true)
+    expect(seen).toEqual([undefined])
+  }, 10_000)
+
+  test('every error code and body', async () => {
+    const cases: [string, Record<string, string>, string, number, string][] = [
+      ['no token', HOST, url(root), 403, 'bad token'],
+      ['wrong token', { ...HOST, 'x-pod-board-token': 'k'.repeat(43) }, url(root), 403, 'bad token'],
+      ['token in the URL', HOST, `${url(root)}&token=${TOKEN}`, 403, 'bad token'],
+      ['foreign host', { ...READ, host: `evil.example:${API}` }, url(root), 403, 'forbidden host'],
+      ['relative', READ, url('some/folder'), 400, 'not absolute'],
+      ['empty', READ, url(''), 400, 'not absolute'],
+      ['NUL', READ, url(`${root}\0x`), 400, 'bad request'],
+      ['missing', READ, url(join(root, 'nope')), 404, 'not a directory'],
+      ['a file', READ, url(join(root, 'f.txt')), 404, 'not a directory'],
+    ]
+    for (const [name, headers, target, status, error] of cases) {
+      const res = await app.request(target, { headers })
+      expect(res.status, name).toBe(status)
+      expect(await res.json(), name).toEqual({ error })
+      noCorsHeaders(res)
+    }
+    // The guard's refusals never reached the listing.
+    expect(seen).toEqual(['some/folder', '', `${root}\0x`, join(root, 'nope'), join(root, 'f.txt')])
+  })
+
+  test('a network path is refused before any file system call', async () => {
+    const calls: string[] = []
+    const record = (op: string) => async (p: string) => {
+      calls.push(`${op} ${p}`)
+      throw new Error('no file system in this test')
+    }
+    const fs: FolderFs = { readdir: record('readdir'), stat: record('stat'), lstat: record('lstat'), readlink: record('readlink') }
+    const win = fakeApp({ folders: (dir) => listFolders(dir, { fs, platform: 'win32', home: 'C:\\Users\\u' }) })
+    for (const dir of ['\\\\host\\share', '//host/share', '\\\\?\\C:\\x', '\\\\.\\C:']) {
+      const res = await win.request(url(dir), { headers: READ })
+      expect(res.status, dir).toBe(400)
+      expect(await res.json()).toEqual({ error: 'not a local path' })
+    }
+    const res = await win.request(url('C:x'), { headers: READ })
+    expect([res.status, await res.json()]).toEqual([400, { error: 'not absolute' }])
+    expect(calls).toEqual([])
+  })
+
+  test('only GET answers, and with no listing the route gets 404 behind the guard', async () => {
+    expect((await app.request(url(root), { method: 'POST', headers: { ...ACTION_HEADERS }, body: '{}' })).status).toBe(404)
+    const bare = fakeApp()
+    expect((await bare.request(url(root), { headers: READ })).status).toBe(404)
+    const refused = await bare.request(url(root), { headers: HOST })
+    expect(refused.status).toBe(403)
+    expect(await refused.json()).toEqual({ error: 'bad token' })
   })
 })
