@@ -122,6 +122,8 @@ describe('runs.css sidebar', () => {
     const runs = stylesAt(1280).get('.runs')
     expect(runs?.['overflow-y']).toBe('auto')
     expect(runs?.['min-height']).toBe('0')
+    // The list clips its corners (overflow: hidden), so an auto row would squash it instead of scrolling.
+    expect(runs?.['grid-auto-rows']).toBe('max-content')
   })
 
   it('stacks above the main column on phones, as before', () => {
