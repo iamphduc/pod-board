@@ -170,3 +170,7 @@ Consequences: in that window, Merge on the board races autopilot to the same mer
 Context: the calm-dashboard plan's Look (draft `pod-docs/design-drafts/calm-dashboard-look-3.html`) replaces the board-read look: black and white, Geist fonts, no colored card edges or fills, dark first (sprint calm-screen, slice L1).
 Decision: every state is a dot in its status color plus a word in `--fg` or `--muted`; status colors and `--faint` are never a text color (`tokens.test.ts` checks every CSS file under `packages/web/src`). This makes the 2026-10-19 "light chip text: darker ink tokens" decision obsolete. Nothing stored for the theme reads as Dark.
 Consequences: an error or a merge reason is plain text with a colored dot before it. The `--*-ink` and `--*-soft` tokens, and the other board-read names, are gone; screens use only the new tokens.
+
+## 2026-10-28 — app manifest colors follow the Dark default
+
+The installed app's `manifest.webmanifest` uses `#000000` for `background_color` and `theme_color`, matching the new Dark default (plan `calm-dashboard`), so no white splash or browser bar shows before a dark page. `pwa.test.ts` checks them against the dark `--bg`. Chosen by the human at gate 1 of the calm-screen sprint.

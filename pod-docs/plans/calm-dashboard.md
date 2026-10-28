@@ -4,7 +4,7 @@ _Generated: 2026-10-27 · Status: active · Grilled-with: pod_
 
 Port base: 3000
 
-<!-- autopilot-run: started=2026-10-28T08:11:52Z sprints=0 waves=0 -->
+<!-- autopilot-run: started=2026-10-28T08:11:52Z sprints=1 waves=3 -->
 
 ## Goal
 Make screen 1 (Runs) calm. When you open it, you see in a couple of seconds what pod needs from you, if anything, and how to do it, and everything else is one click away. At the same time, the whole board moves to a dark-first, black-and-white look in the style of Vercel, and "+ Repo" picks a folder from a folder browser instead of a typed path.
@@ -118,7 +118,7 @@ sequenceDiagram
 
 | Sprint | Goal | Status | Depends on |
 |--------|------|--------|------------|
-| calm-screen | New look, the calm screen 1 and the folder picker | active | — |
+| calm-screen | New look, the calm screen 1 and the folder picker | done | — |
 
 Status: `planned` / `active` / `done`. `Depends on` is the only dependency between sprints.
 

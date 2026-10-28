@@ -1,20 +1,20 @@
 # Sprint: Calm screen
 
-_From plan: pod-docs/plans/calm-dashboard.md · Slug: calm-screen · Status: active · Generated: 2026-10-28_
+_From plan: pod-docs/plans/calm-dashboard.md · Slug: calm-screen · Status: archived · Generated: 2026-10-28_
 
-<!-- autopilot-run: started=2026-10-28T08:11:52Z sprints=0 waves=1 -->
+<!-- autopilot-run: started=2026-10-28T08:11:52Z sprints=0 waves=3 -->
 
 ## Status board
 
 | Wave | Slice | Title | Branch | PR | Status | Confidence | Depends on |
 |------|-------|-------|--------|----|--------|------------|------------|
-| 1 | L1 | Look: Geist tokens, fonts, controls, dark default | calm-screen-L1 | — | pending | — | — |
-| 1 | F1 | Folder listing API | calm-screen-F1 | — | pending | — | — |
-| 1 | N1 | Next step, header and tab-memory views (pure) | calm-screen-N1 | — | pending | — | — |
-| 2 | M1 | Bar ⋯ menu | calm-screen-M1 | — | pending | — | L1 |
-| 2 | P1 | Folder picker panel | calm-screen-P1 | — | pending | — | L1, F1 |
-| 2 | T1 | Waiting, Plan and Log tab panels | calm-screen-T1 | — | pending | — | L1, N1 |
-| 3 | S1 | Screen 1 layout: bar, header, Next step card, tabs | calm-screen-S1 | — | pending | — | L1, N1, M1, P1, T1 |
+| 1 | L1 | Look: Geist tokens, fonts, controls, dark default | calm-screen-L1 | merged | done | medium | — |
+| 1 | F1 | Folder listing API | calm-screen-F1 | merged | done | medium | — |
+| 1 | N1 | Next step, header and tab-memory views (pure) | calm-screen-N1 | merged | done | medium | — |
+| 2 | M1 | Bar ⋯ menu | calm-screen-M1 | merged | done | medium | L1 |
+| 2 | P1 | Folder picker panel | calm-screen-P1 | merged | done | medium | L1, F1 |
+| 2 | T1 | Waiting, Plan and Log tab panels | calm-screen-T1 | merged | done | medium | L1, N1 |
+| 3 | S1 | Screen 1 layout: bar, header, Next step card, tabs | calm-screen-S1 | merged | done | medium | L1, N1, M1, P1, T1 |
 
 ## Shared contract
 
@@ -309,3 +309,19 @@ In **Files owned**, a bare file name sits in the same folder as the path before 
 - **Depends on:** L1, N1, M1, P1, T1
 - **One-way door:** none
 - **Model:** opus
+
+## Sprint summary
+
+- **Synced with merge-target:** up to date (`pod-staging` had `main` merged in at preflight; nothing new since)
+- **Slices shipped:** L1, F1, N1, M1, P1, T1, S1
+- **Queue entries:** resolved 1 (gate 1, manifest colors: human chose dark), deferred 5 — N1 card wording, N1 halt-vs-PR card rule, T1 no-session note behind "Run it yourself", P1 partial-name Add, P1 1000-folder prefix limit (all in [handoff-queue.md](../../handoff-queue.md), sorted at plan complete)
+- **Slice log:**
+  - L1: opus · medium · test-first yes · runtime dark/light boot, 44 px controls at 375, board and engineer view · 6 NOTEs · time lost: one gate 1 halt (manifest test outside its files)
+  - F1: opus · medium · test-first yes · runtime real API on Windows (roots, listing, links to shares skipped, token and Host refusals) · 6 NOTEs · time lost ~5 min on backslash escaping
+  - N1: opus · medium · test-first yes · runtime n/a (pure modules, fixture tests) · 3 NOTEs · time lost none
+  - M1: sonnet · medium · test-first yes · runtime menu mounted temporarily (theme, switch, Escape, 375 px) · 5 NOTEs · time lost none
+  - P1: opus · medium · test-first yes · runtime picker logic against the live API (no browser: agent-browser hung twice from Git Bash) · 2 NOTEs · time lost ~4.5 min on browser hangs
+  - T1: opus · medium · test-first yes · runtime Reply panel and Answer on the old screen · 4 NOTEs · time lost one browser hang (120 s)
+  - S1: opus · medium · test-first partly — two reds were missing-export errors, one scenario changed after the red commit · runtime full screen 1 with stub gh and fake claude · 9 NOTEs · time lost ~5 min on a stdin `cat` and browser wrapper hangs
+  - Wave fixes: none. Stalls: none. Orchestrator wave checks: wave 2 mounted the unmounted parts temporarily (reverted) to drive them.
+- **Agent context at hand-back:** 1,442,029 tokens (sprint planner 216,845; L1 238,023; F1 153,991; N1 173,849; M1 86,339; P1 149,750; T1 170,658; S1 252,574) — *each agent's final context size, not tokens billed*
