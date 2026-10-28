@@ -184,33 +184,9 @@
   overflow-wrap: anywhere;
 }
 
-/* Today's theme control: joined .btn buttons, without the base .seg frame. */
+/* Today's theme control uses the base .seg: a framed group, the picked button filled. */
 .seg {
   display: inline-flex;
-  gap: 0;
-  padding: 0;
-  border: 0;
-}
-
-.seg .btn {
-  border-radius: 0;
-  margin-left: -1px;
-}
-
-.seg .btn:first-child {
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-  margin-left: 0;
-}
-
-.seg .btn:last-child {
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-}
-
-.seg .btn[aria-pressed="true"] {
-  position: relative;
-  background: var(--hover);
-  border-color: var(--fg);
-  color: var(--fg);
 }
 
 .tabs {
@@ -846,6 +822,10 @@
 }
 
 .waiting-row {
+  /* Compact rows: the base .card's room is for screen 1's Next step card. */
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: var(--radius-md);
   min-width: 0;
 }
 
