@@ -43,3 +43,8 @@
   flex-direction: column;
   align-items: flex-start;
 }
+
+.bar-menu-panel .seg {
+  width: 100%;
+  box-sizing: border-box;
+}
