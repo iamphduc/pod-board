@@ -28,7 +28,7 @@ describe('menu contents', () => {
   it('is a group, not role="menu"', () => {
     const html = render({})
     expect(html).not.toContain('role="menu"')
-    expect(html).toMatch(/class="menu"[^>]*role="group"|role="group"[^>]*class="menu"/)
+    expect(html).toMatch(/class="menu[ "][^>]*role="group"/)
   })
 
   it('has the auto-continue switch only with autoContinue', () => {
