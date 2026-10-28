@@ -10,6 +10,7 @@ import { createApp } from './app.ts'
 import { createAutoContinue } from './auto-continue.ts'
 import { createAutoContinueStore } from './auto-continue-store.ts'
 import { createBoardService } from './board-service.ts'
+import { listFolders, nodeFolderFs } from './folder-list.ts'
 import { portsDir } from './claims.ts'
 import { claudeBin, createClaudeRunner } from './claude-runner.ts'
 import { configPath, listenConfig, portFromEnv } from './config.ts'
@@ -82,6 +83,7 @@ const app = createApp({
   token,
   source: watcher,
   addRepo: (p) => addRepo(configFile, p, platform),
+  folders: (dir) => listFolders(dir, { fs: nodeFolderFs, platform, home: homedir() }),
   timeline: createTimelineSource({ board: () => watcher.board(), ...settings, now: Date.now }).timeline,
   actions: new Hono()
     .use('*', work.track)
