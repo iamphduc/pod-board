@@ -118,7 +118,7 @@ sequenceDiagram
 
 | Sprint | Goal | Status | Depends on |
 |--------|------|--------|------------|
-| calm-screen | New look, the calm screen 1 and the folder picker | planned | — |
+| calm-screen | New look, the calm screen 1 and the folder picker | active | — |
 
 Status: `planned` / `active` / `done`. `Depends on` is the only dependency between sprints.
 
