@@ -1,57 +1,41 @@
-/* Self-hosted fonts (latin subset, from Fontsource). Licenses: public/fonts/*-OFL.txt. */
+/* Self-hosted fonts (latin subset, copied from Fontsource @fontsource/geist and @fontsource/geist-mono 5.3.0). Licenses: public/fonts/*-OFL.txt. */
 
 @font-face {
-  font-family: "Bricolage Grotesque";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('/fonts/bricolage-grotesque-600.woff2') format("woff2");
-}
-
-@font-face {
-  font-family: "Bricolage Grotesque";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/fonts/bricolage-grotesque-700.woff2') format("woff2");
-}
-
-@font-face {
-  font-family: "Instrument Sans";
+  font-family: "Geist";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/fonts/instrument-sans-400.woff2') format("woff2");
+  src: url('/fonts/geist-400.woff2') format("woff2");
 }
 
 @font-face {
-  font-family: "Instrument Sans";
+  font-family: "Geist";
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('/fonts/instrument-sans-500.woff2') format("woff2");
+  src: url('/fonts/geist-500.woff2') format("woff2");
 }
 
 @font-face {
-  font-family: "Instrument Sans";
+  font-family: "Geist";
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('/fonts/instrument-sans-600.woff2') format("woff2");
+  src: url('/fonts/geist-600.woff2') format("woff2");
 }
 
 @font-face {
-  font-family: "JetBrains Mono";
+  font-family: "Geist Mono";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/fonts/jetbrains-mono-400.woff2') format("woff2");
+  src: url('/fonts/geist-mono-400.woff2') format("woff2");
 }
 
 @font-face {
-  font-family: "JetBrains Mono";
+  font-family: "Geist Mono";
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('/fonts/jetbrains-mono-500.woff2') format("woff2");
+  src: url('/fonts/geist-mono-500.woff2') format("woff2");
 }

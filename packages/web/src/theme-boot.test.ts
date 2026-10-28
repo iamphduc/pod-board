@@ -46,29 +46,35 @@ describe('theme boot', () => {
     // It reads THEME_KEY, by that exact name.
     expect(inline[0]!.body).toMatch(new RegExp(`['"]${THEME_KEY}['"]`))
 
+    // A stored Light or Dark pick is applied as is.
     expect(boot(store({ [THEME_KEY]: 'dark' }))).toEqual([['set', 'data-theme', 'dark']])
     expect(boot(store({ [THEME_KEY]: 'light' }))).toEqual([['set', 'data-theme', 'light']])
 
-    // Missing, unknown, or under another key: nothing.
-    expect(boot(store({}))).toEqual([])
+    // System sets nothing, so the media query decides.
     expect(boot(store({ [THEME_KEY]: 'system' }))).toEqual([])
-    expect(boot(store({ [THEME_KEY]: 'blue' }))).toEqual([])
-    expect(boot(store({ theme: 'dark' }))).toEqual([])
-    expect(boot(() => null)).toEqual([])
 
-    // Storage that throws, on access or on read: nothing, and no error.
+    // Nothing usable stored: dark, the default.
+    const dark = [['set', 'data-theme', 'dark']]
+    expect(boot(store({}))).toEqual(dark)
+    expect(boot(store({ [THEME_KEY]: 'blue' }))).toEqual(dark)
+    expect(boot(store({ [THEME_KEY]: 'Light' }))).toEqual(dark)
+    expect(boot(store({ [THEME_KEY]: '' }))).toEqual(dark)
+    expect(boot(store({ theme: 'light' }))).toEqual(dark)
+    expect(boot(() => null)).toEqual(dark)
+
+    // Storage that throws, on access or on read: dark, and no error.
     expect(
       boot(() => {
         throw new Error('blocked')
       }),
-    ).toEqual([])
+    ).toEqual(dark)
     expect(
       boot(() => ({
         getItem: () => {
           throw new Error('denied')
         },
       })),
-    ).toEqual([])
+    ).toEqual(dark)
   })
 
   it('paints the stored theme before the app CSS loads', () => {
@@ -81,5 +87,10 @@ describe('theme boot', () => {
     expect(style).toMatch(/:root\[data-theme="light"\]\s*\{\s*color-scheme:\s*light;?\s*\}/)
     // No colours outside the theme files.
     expect(style).not.toMatch(/#[0-9a-f]{3,8}\b|rgb|hsl/i)
+    // The browser's own bar matches the page: black in dark, white in light.
+    expect(head).toMatch(/<meta name="theme-color" media="\(prefers-color-scheme: dark\)" content="#000000"/)
+    expect(head).toMatch(/<meta name="theme-color" media="\(prefers-color-scheme: light\)" content="#ffffff"/)
+    // The body face is fetched early, and from the app.
+    expect(head).toMatch(/<link rel="preload" href="\/fonts\/geist-400\.woff2" as="font" type="font\/woff2" crossorigin \/>/)
   })
 })

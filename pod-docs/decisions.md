@@ -30,6 +30,8 @@ Decision: keep it private until the human checks the fixtures, then make it publ
 Consequences: fixtures must still be scrubbed as if public.
 
 ## 2026-10-19 — light chip text: darker ink tokens
+_Obsolete: the calm-dashboard Look (2026-10-28) draws a state as a dot plus a word in `--fg` or `--muted`, with no fill, so chip text no longer takes a state color and the `--*-ink` and `--*-soft` tokens are gone. See the 2026-10-28 entry below._
+
 Context: the approved light theme's chip text fails 4.5:1 on its soft fills (queue entry from sprint server-runs, slice L1; draft `pod-docs/design-drafts/chip-contrast.html`).
 Decision: keep option A as built: light chip text uses the `--*-ink` tokens (the same hue, darkened only enough to pass); dots, card edges, and fills keep the Look's colors. Dark is unchanged.
 Consequences: light chip text is slightly darker than the preview; `tokens.test.ts` keeps the 4.5:1 check.
@@ -163,3 +165,8 @@ Consequences: a wait over 15 minutes that doesn't end in a tool result (a backgr
 Context: pod writes the `autopilot-run` marker only in sprint docs, so once a plan's last sprint is archived the board can't tell it ran on autopilot, and its final PR reads `PR #N · you merge` with Merge. The options were to read the marker from the archived sprint docs, or to ask claude-pod to keep it in the plan doc.
 Decision: keep `you merge` on the final PR. It is right at gate 2 (review still failing) and at gate 7 (the staging PR), where the human merges; it is wrong only while autopilot is about to merge a final PR that passed review.
 Consequences: in that window, Merge on the board races autopilot to the same merge. Revisit if pod writes the marker in the plan doc.
+
+## 2026-10-28 — states are dots plus words; the ink tokens go
+Context: the calm-dashboard plan's Look (draft `pod-docs/design-drafts/calm-dashboard-look-3.html`) replaces the board-read look: black and white, Geist fonts, no colored card edges or fills, dark first (sprint calm-screen, slice L1).
+Decision: every state is a dot in its status color plus a word in `--fg` or `--muted`; status colors and `--faint` are never a text color (`tokens.test.ts` checks every CSS file under `packages/web/src`). This makes the 2026-10-19 "light chip text: darker ink tokens" decision obsolete. Nothing stored for the theme reads as Dark.
+Consequences: an error or a merge reason is plain text with a colored dot before it. The `--*-ink` and `--*-soft` tokens, and the other board-read names, are gone; screens use only the new tokens.

@@ -1,8 +1,9 @@
 /*
  * Screen 2: the wave board (preview "Screen 2"). Tokens and L1's classes only;
  * no colour literals (pwa.test.ts checks). One column per wave, one card per
- * slice; dependency lines under the cards, the critical path in the accent
- * (the plan's Look; the preview drew it in --warn). The board keeps its column
+ * slice; dependency lines under the cards in --border-strong, the critical
+ * path in --fg. Cards are plain (calm-dashboard Look): a card's state is its
+ * chip's dot and word, never a coloured edge. The board keeps its column
  * widths and scrolls sideways inside its own frame on narrow screens.
  */
 
@@ -23,22 +24,27 @@
   gap: 6px;
 }
 
-/* Filter chips are buttons that keep the chip's look. */
+/* Filter chips are buttons that keep the chip's dot and word, in an outline. */
 .wb-filter {
   appearance: none;
   -webkit-appearance: none;
   margin: 0;
-  border: 1px solid transparent;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: transparent;
   cursor: pointer;
 }
 
 .wb-filter:hover {
-  border-color: var(--chip-dot, var(--line));
+  border-color: var(--border-strong);
+  color: var(--fg);
 }
 
 .wb-filter[aria-pressed="true"] {
-  border-color: var(--chip-dot, var(--fg));
-  box-shadow: 0 0 0 1px var(--chip-dot, var(--fg)) inset;
+  border-color: var(--fg);
+  background: var(--hover);
+  color: var(--fg);
 }
 
 .wb-filter .mono {
@@ -69,12 +75,12 @@
 
 .wb-lines path {
   fill: none;
-  stroke: var(--line);
+  stroke: var(--border-strong);
   stroke-width: 1.6;
 }
 
 .wb-lines path.crit {
-  stroke: var(--accent);
+  stroke: var(--fg);
   stroke-width: 2.4;
 }
 
@@ -98,38 +104,33 @@
 }
 
 .wb-card {
+  /* Compact board cards: the base .card's room is for screen 1's card. */
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
   cursor: pointer;
   min-width: 0;
 }
 
-.wb-card:hover,
-.wb-card:focus-visible {
-  /* The left edge keeps the state's colour. */
-  border-top-color: var(--accent);
-  border-right-color: var(--accent);
-  border-bottom-color: var(--accent);
-  outline: none;
+.wb-card:hover {
+  border-color: var(--border-strong);
 }
 
 .wb-card:focus-visible {
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
+/* On the critical path: a stronger frame, matching its --fg line. */
 .wb-card.crit {
-  box-shadow: 0 0 0 1px var(--accent) inset;
+  border-color: var(--muted);
 }
 
-.wb-card.crit:focus-visible {
-  box-shadow:
-    0 0 0 1px var(--accent) inset,
-    0 0 0 2px var(--accent-soft);
-}
-
+/* The open slice. */
 .wb-card.on {
-  border-top-color: var(--accent);
-  border-right-color: var(--accent);
-  border-bottom-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--fg);
+  background: var(--hover);
 }
 
 .wb-card.dim {
