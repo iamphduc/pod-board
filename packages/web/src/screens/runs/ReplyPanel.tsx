@@ -131,3 +131,7 @@ export function ReplyPanel({ view, target }: { view: ReplyPanelView | undefined;
     </section>
   )
 }
+
+export function ReplyChat(_props: { view: ReplyPanelView }) {
+  return null
+}
