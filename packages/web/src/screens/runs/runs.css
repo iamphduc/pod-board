@@ -1,8 +1,9 @@
 /*
- * Screen 1: the bar across the top, then the runs list beside a narrow main
- * column (about 720 px): the run header, the Next step card, and the tabs.
+ * Screen 1: a full-height sidebar on the left (the title, the runs list, and
+ * Add repo at the bottom) beside a narrow main column (about 720 px): the run
+ * header with the ⋯ menu, the Next step card, and the tabs.
  * Tokens and L1's classes only; no colour literals (pwa.test.ts checks).
- * At 820px and below the runs list stacks above the main column.
+ * At 820px and below the sidebar stacks above the main column.
  */
 
 .screen {
@@ -28,15 +29,37 @@
   color: var(--muted);
 }
 
-/* Bar: the logo and name, the connection status while lost, + Repo, and the ⋯ menu. */
+.screen-body {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  align-items: start;
+  padding: 0;
+}
 
-.bar {
+/* Sidebar: the title and the connection status while lost, the runs, then Add repo at the bottom. */
+
+.side {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 24px;
+  min-width: 0;
+  padding: 20px 16px;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+}
+
+.side-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  min-height: 64px;
-  padding: 0 48px;
-  border-bottom: 1px solid var(--border);
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
 }
 
 .logo {
@@ -56,26 +79,35 @@
   clip-path: polygon(50% 8%, 96% 90%, 4% 90%);
 }
 
-.bar-gap {
-  flex: 1;
+.side-foot {
+  display: flex;
+  min-width: 0;
 }
 
-.bar > .btn {
-  flex: none;
+/* The Add repo dialog: a sizing box; the picker inside keeps its own frame. */
+.add-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  overflow: auto;
 }
 
-/* The picker and the banners sit under the bar, as wide as the main column. */
-.picker-slot,
+.add-dialog::backdrop {
+  background: var(--bg);
+  opacity: 0.72;
+}
+
+.add-dialog .picker {
+  max-width: none;
+}
+
 .banners {
-  padding: 16px 48px 0;
-}
-
-.screen-body {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 64px;
-  align-items: start;
-  padding: 48px 48px 64px;
+  margin-bottom: 24px;
 }
 
 /* Runs list */
@@ -150,6 +182,8 @@
   align-content: start;
   min-width: 0;
   max-width: 720px;
+  padding: 48px 48px 64px;
+  box-sizing: content-box;
 }
 
 /* The wave board takes the whole main width. */
@@ -159,6 +193,19 @@
 
 .run-header {
   margin-bottom: 24px;
+  min-width: 0;
+}
+
+/* The crumb and the name on the left, the ⋯ menu at the right end. */
+.run-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.run-title {
   min-width: 0;
 }
 
@@ -659,29 +706,38 @@
 /* Narrow: the runs list stacks above the main column, with less room around everything. */
 
 @media (max-width: 820px) {
-  .bar {
-    padding: 0 20px;
-  }
-
-  .picker-slot,
-  .banners {
-    padding: 16px 20px 0;
-  }
-
   .screen-body {
     grid-template-columns: minmax(0, 1fr);
-    gap: 32px;
+  }
+
+  .side {
+    position: static;
+    height: auto;
+    overflow: visible;
+    gap: 16px;
+    padding: 16px 20px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .main {
     padding: 24px 20px 40px;
   }
 }
 
 @media (max-width: 480px) {
-  .bar {
-    gap: 8px;
+  .side {
+    gap: 12px;
+    padding: 12px 16px;
   }
 
-  .screen-body {
-    gap: 24px;
+  .main {
+    padding: 20px 16px 40px;
+  }
+
+  .add-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
   }
 
   .runs-head {

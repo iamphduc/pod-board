@@ -1,6 +1,6 @@
-// The "+ Repo" folder picker: a panel in place, not a modal. The logic is in
+// The Add repo folder picker, shown inside AddRepoDialog. The logic is in
 // folder-picker.ts; this file only wires it to React. The opener (screen 1's
-// bar) owns the trigger and puts focus back on it after `onClose`.
+// sidebar) owns the trigger and puts focus back on it after `onClose`.
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { postRepo } from '../../add-repo.ts'
 import { Icon } from '../../theme/icons.tsx'
@@ -32,7 +32,9 @@ export function PickerPanel({ state, on }: { state: PickerState; on: PickerHandl
   return (
     <section className="picker" aria-label="Add a repo" onKeyDown={onKey}>
       <div className="picker-head">
-        <h2 className="picker-title">Add a repo</h2>
+        <h2 id="add-dialog-title" className="picker-title">
+          Add a repo
+        </h2>
         <button className="btn sm icon quiet" type="button" aria-label="Close" onClick={on.close}>
           <Icon name="close" />
         </button>
