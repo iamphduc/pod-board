@@ -15,7 +15,8 @@ function chess(edit: (files: Record<string, string>) => void = () => {}, extra: 
 }
 /** The same run started with /pod:code: no autopilot line, so the pipeline has a Go step. */
 const manual = (files: Record<string, string>) => {
-  files[LADDER] = files[LADDER]!.replace(/^<!-- autopilot-run.*-->\r?\n/m, '')
+  // The plan doc and the sprint doc both carry pod's autopilot line.
+  for (const doc of [PLAN, LADDER]) files[doc] = files[doc]!.replace(/^<!-- autopilot-run.*-->\r?\n/m, '')
 }
 /** Sets the ladder sprint's row in the plan's Sprint sequence to `status`, and adds `extra` rows after it. */
 const ladderStatus = (files: Record<string, string>, status: string, extra = '') => {

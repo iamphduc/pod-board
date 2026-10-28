@@ -43,9 +43,9 @@ const addQueue = (...lines: string[]): Edit => (f) => {
 const onlyQueue = (...lines: string[]): Edit => (f) => {
   f[QUEUE] = ['# Handoff Queue', '', ...lines, ''].join('\n')
 }
-/** Started with /pod:code: no autopilot line. */
+/** Started with /pod:code: no autopilot line in the plan doc or the sprint doc. */
 const manual: Edit = (f) => {
-  f[LADDER] = f[LADDER]!.replace(/^<!-- autopilot-run.*-->\r?\n/m, '')
+  for (const doc of ['pod-docs/plans/sparring-ladder.md', LADDER]) f[doc] = f[doc]!.replace(/^<!-- autopilot-run.*-->\r?\n/m, '')
 }
 /** T1 handed back on PR #78. */
 const t1Pushed: Edit = (f) => {
@@ -76,12 +76,12 @@ function chess(edits: Edit[] = [], extra: Partial<BoardRepo> = {}): BoardRepo {
   return { id: 'chess', name: 'chess-web', path: '/c', source: 'registered', model: buildRepoModel(files), agents: [], prs: [], claims: [], ...extra }
 }
 const runs = (repo: BoardRepo) => listRuns({ generatedAt: NOW, gh: 'ok', repos: [repo] }, NOW)
-const runOf = (repo: BoardRepo, plan: string | undefined = PLAN): RunSummary => {
+const runOf = (repo: BoardRepo, plan = PLAN): RunSummary => {
   const r = runs(repo).find((x) => x.plan === plan)
   if (!r) throw new Error(`no run ${plan}`)
   return r
 }
-const steps = (repo: BoardRepo, plan: string | undefined = PLAN): NextSteps => defined(nextSteps(runOf(repo, plan), repo, NOW))
+const steps = (repo: BoardRepo, plan = PLAN): NextSteps => defined(nextSteps(runOf(repo, plan), repo, NOW))
 function defined<T>(x: T | undefined): T {
   expect(x).toBeDefined()
   return x!
@@ -158,20 +158,25 @@ describe('next step', () => {
   })
 
   it('only entries routed to you take the card', () => {
-    // A BLOCKED between agents and an answered entry wait on you (listed) but aren't yours to act on.
-    const repo = chess([onlyQueue(TO_ORCHESTRATOR, ANSWERED)])
-    const s = steps(repo)
-    expect(s.card).toMatchObject({ tier: 'nothing', title: 'Nothing to do', action: { kind: 'none' } })
+    // A BLOCKED between agents waits on you (listed) but is pod's to resolve: info, never the card.
+    const alone = steps(chess([onlyQueue(TO_ORCHESTRATOR)]))
+    expect(alone.card).toMatchObject({ tier: 'nothing', title: 'Nothing to do', action: { kind: 'none' } })
+    const toOrchestrator: NextItem = {
+      key: entryKey(TO_ORCHESTRATOR),
+      tier: 'info',
+      status: 'blocked',
+      title: 'Tool missing.',
+      detail: 'engineer → orchestrator',
+      entry: expect.objectContaining({ line: TO_ORCHESTRATOR, answerable: false }),
+      action: { kind: 'none' },
+    }
+    expect(alone.rest).toEqual([toOrchestrator])
+
+    // An answered entry is info too. The model's answered reply (continue) takes the card instead.
+    const s = steps(chess([onlyQueue(TO_ORCHESTRATOR, ANSWERED)]))
+    expect(s.card).toMatchObject({ tier: 'reply', title: 'Send continue', detail: 'You answered 1 entry: reply continue so pod reads it.' })
     expect(s.rest).toEqual<NextItem[]>([
-      {
-        key: entryKey(TO_ORCHESTRATOR),
-        tier: 'info',
-        status: 'blocked',
-        title: 'Tool missing.',
-        detail: 'engineer → orchestrator',
-        entry: expect.objectContaining({ line: TO_ORCHESTRATOR, answerable: false }),
-        action: { kind: 'none' },
-      },
+      toOrchestrator,
       {
         key: entryKey(ANSWERED),
         tier: 'info',
@@ -183,9 +188,10 @@ describe('next step', () => {
       },
     ])
 
-    // Listed first, they still lose the card to a PENDING → human, and follow it in rest.
+    // Listed first, they still follow a PENDING → human, which follows the reply.
     const withAsk = chess([onlyQueue(TO_ORCHESTRATOR, ANSWERED, H1)])
-    expect(order(steps(withAsk))).toEqual([`pending ${entryKey(H1)}`, `info ${entryKey(TO_ORCHESTRATOR)}`, `info ${entryKey(ANSWERED)}`])
+    expect(order(steps(withAsk))).toEqual([`reply reply:${PLAN}`, `pending ${entryKey(H1)}`, `info ${entryKey(TO_ORCHESTRATOR)}`, `info ${entryKey(ANSWERED)}`])
+    expect(order(steps(chess([onlyQueue(TO_ORCHESTRATOR, H1)])))).toEqual([`pending ${entryKey(H1)}`, `info ${entryKey(TO_ORCHESTRATOR)}`])
   })
 
   it('nothing to do', () => {
@@ -205,11 +211,12 @@ describe('next step', () => {
     expect(steps(blocked).card).toMatchObject({ tier: 'nothing', status: 'blocked' })
 
     // A needs-you run with only info entries: not running or blocked, so idle.
-    expect(steps(chess([onlyQueue(ANSWERED)])).card).toMatchObject({ tier: 'nothing', status: 'idle' })
+    expect(runOf(chess([onlyQueue(TO_ORCHESTRATOR)])).state).toBe('needs-you')
+    expect(steps(chess([onlyQueue(TO_ORCHESTRATOR)])).card).toMatchObject({ tier: 'nothing', status: 'idle' })
 
     // An error, unsupported, or plan-less run: the empty message as the detail.
     const broken = chess([], { error: 'folder not found' })
-    const brokenRun = runOf(broken, undefined)
+    const brokenRun = runs(broken)[0]!
     expect(brokenRun.state).toBe('error')
     expect(nextSteps(brokenRun, broken, NOW)?.card).toEqual({
       key: 'nothing',
@@ -220,7 +227,7 @@ describe('next step', () => {
       action: { kind: 'none' },
     })
     const old: BoardRepo = { ...chess(), model: buildRepoModel(loadFixture('speak-out')) }
-    const oldRun = runOf(old, undefined)
+    const oldRun = runs(old)[0]!
     expect(oldRun.state).toBe('unsupported')
     expect(nextSteps(oldRun, old, NOW)?.card.detail).toBe(emptyMessage(oldRun, old))
     const row: RunSummary = { repoId: 'chess', repo: 'chess-web', where: 'no active plan', state: 'idle' }
