@@ -118,6 +118,12 @@ describe('runs.css sidebar', () => {
     expect(stylesAt(1280).get('.screen-body')?.['padding'] ?? '0').toMatch(/^0(px)?$/)
   })
 
+  it('scrolls a long runs list inside its row, so Add repo stays in view', () => {
+    const runs = stylesAt(1280).get('.runs')
+    expect(runs?.['overflow-y']).toBe('auto')
+    expect(runs?.['min-height']).toBe('0')
+  })
+
   it('stacks above the main column on phones, as before', () => {
     for (const width of [820, 480, 375]) {
       const side = stylesAt(width).get('.side')
