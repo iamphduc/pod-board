@@ -106,3 +106,29 @@ describe('runs.css layout', () => {
     expect(stylesAt(1280).get('.screen-body')?.['grid-template-columns']).not.toMatch(/^(1fr|minmax\(0,\s*1fr\))$/)
   })
 })
+
+describe('runs.css sidebar', () => {
+  it('is a full-height left column with a right border on desktop', () => {
+    const side = stylesAt(1280).get('.side')
+    expect(side?.['position']).toBe('sticky')
+    expect(side?.['height']).toBe('100dvh')
+    expect(side?.['border-right']).toMatch(/1px solid var\(--border\)/)
+    // Title on top, the list in the middle, Add repo pinned to the bottom.
+    expect(side?.['grid-template-rows']).toMatch(/1fr/)
+    expect(stylesAt(1280).get('.screen-body')?.['padding'] ?? '0').toMatch(/^0(px)?$/)
+  })
+
+  it('stacks above the main column on phones, as before', () => {
+    for (const width of [820, 480, 375]) {
+      const side = stylesAt(width).get('.side')
+      expect(side?.['position'], `.side at ${width} px`).toBe('static')
+      expect(side?.['height'], `.side at ${width} px`).toBe('auto')
+      expect(side?.['border-right'], `.side at ${width} px`).toBe('0')
+      expect(side?.['border-bottom'], `.side at ${width} px`).toMatch(/1px solid var\(--border\)/)
+    }
+  })
+
+  it('has no top bar rules left', () => {
+    expect(runsRules().some((r) => r.selectors.includes('.bar'))).toBe(false)
+  })
+})
