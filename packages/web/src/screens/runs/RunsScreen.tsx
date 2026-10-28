@@ -1,22 +1,23 @@
-import { activeRuns, buildFixPipeline, buildPipeline, otherActivity, type Board, type RunSummary } from '@pod-board/model'
+import { useRef, useState } from 'react'
+import { activeRuns, buildFixPipeline, buildPipeline, type Board, type RunSummary } from '@pod-board/model'
 import type { StreamState } from '../../board-stream.ts'
 import { hashFor, type View } from '../../selection.ts'
+import { Icon } from '../../theme/icons.tsx'
 import { BoardScreen } from '../board/BoardScreen.tsx'
-import { ActionLog } from './ActionLog.tsx'
-import { AutoContinueSwitch } from './AutoContinueSwitch.tsx'
-import { AddRepoForm } from './AddRepoForm.tsx'
+import { BarMenu } from './BarMenu.tsx'
 import { Chip } from './Chip.tsx'
-import { FixRun } from './FixRun.tsx'
-import { OtherActivity } from './OtherActivity.tsx'
-import { Pipeline } from './Pipeline.tsx'
-import { ReplyPanel } from './ReplyPanel.tsx'
-import { replyPanel } from './reply-view.ts'
+import { FolderPicker } from './FolderPicker.tsx'
+import { LogTab } from './LogTab.tsx'
+import { NextStepCard } from './NextStepCard.tsx'
+import { nextSteps } from './next-step.ts'
+import { PlanTab } from './PlanTab.tsx'
+import { runHeader } from './plan-view.ts'
 import { switchView } from './resume-flow.ts'
+import { RunHeader } from './RunHeader.tsx'
 import { RunsList } from './RunsList.tsx'
-import { SliceLog } from './SliceLog.tsx'
-import { ThemeControl } from './ThemeControl.tsx'
-import { WaitingOnYou } from './WaitingOnYou.tsx'
-import { banners, barTitle, emptyMessage, runChip, streamChip } from './view.ts'
+import { readTab, saveTab, shownTab, type Tab, type TabStorage } from './tab-memory.ts'
+import { WaitingTab } from './WaitingTab.tsx'
+import { banners, connectionStatus, tabPress } from './view.ts'
 import './runs.css'
 
 type Props = {
@@ -29,89 +30,144 @@ type Props = {
   /** The open agent of a fix run. */
   agent?: string | undefined
   now: number
+  /** Where the open tab is remembered; the page's local storage when not given. */
+  storage?: TabStorage | undefined
 }
 
-const VIEWS: { view: View; label: string }[] = [
-  { view: 'pipeline', label: 'Pipeline' },
-  { view: 'board', label: 'Wave board' },
-]
+/** The page's local storage, or nothing where there is none or it throws. */
+function pageStorage(): TabStorage | undefined {
+  try {
+    return typeof window === 'undefined' ? undefined : window.localStorage
+  } catch {
+    return undefined
+  }
+}
 
-export function RunsScreen({ board, stream, runs, selected, view, slice, agent, now }: Props) {
+const TAB_LABELS: Record<Tab, string> = { waiting: 'Waiting', plan: 'Plan', log: 'Log' }
+
+export function RunsScreen({ board, stream, runs, selected, view, slice, agent, now, storage }: Props) {
+  const store = useRef(storage ?? pageStorage())
+  const [stored, setStored] = useState<Tab | undefined>(() => readTab(store.current))
+  const [picking, setPicking] = useState(false)
+  const repoButton = useRef<HTMLButtonElement>(null)
+
   const repo = selected && board?.repos.find((r) => r.id === selected.repoId)
   const isFix = selected?.fix !== undefined
   const fixPipeline = repo && isFix && selected?.plan !== undefined ? buildFixPipeline(repo, selected.plan, now) : undefined
   const pipeline = repo && !isFix && selected?.plan !== undefined ? buildPipeline(repo, selected.plan, now) : undefined
-  // A fix run has no wave board, so no tabs.
-  const tabs = selected?.plan !== undefined && pipeline !== undefined
-  const others = repo ? otherActivity(repo, now) : []
+  const header = runHeader(selected, repo, now)
+  const steps = nextSteps(selected, repo, now)
+  const hasPlan = selected?.plan !== undefined
+  const shown = shownTab(stored, { view, hasPlan })
   const notices = banners(board, stream)
-  const reply = replyPanel(selected, repo, now)
+  const lost = connectionStatus(stream)
   const autoSwitch = switchView(selected, board)
+  const runKey = selected ? hashFor(selected) : 'none'
+  const stages = fixPipeline?.stages ?? pipeline?.stages ?? []
+
+  const press = (t: Tab) => {
+    const next = tabPress(shown, t, view)
+    saveTab(store.current, next.save)
+    setStored(next.save)
+    if (next.leave && selected) window.location.hash = hashFor(selected)
+  }
+  const closePicker = () => {
+    setPicking(false)
+    repoButton.current?.focus()
+  }
+  const tabs: Tab[] = hasPlan ? ['waiting', 'plan', 'log'] : ['waiting', 'log']
+
   return (
     <div className="screen">
-      <aside className="side">
-        <div className="side-head">
-          <span className="brand">Pod Board</span>
-          <Chip chip={streamChip(stream)} />
-        </div>
-        <RunsList runs={runs} active={activeRuns(runs)} selected={selected} />
-        <AddRepoForm />
-      </aside>
-      <main className="main">
-        <div className="bar">
-          <h1 className="title">{selected ? barTitle(selected) : 'Pod Board'}</h1>
-          {selected && <Chip chip={runChip(selected.state)} />}
-          {selected?.plan !== undefined && autoSwitch && (
-            <AutoContinueSwitch key={`${selected.repoId}/${selected.plan}`} target={{ repoId: selected.repoId, run: selected.plan }} on={autoSwitch.on} />
-          )}
-          {selected?.portBase !== undefined && <span className="mono note">ports {selected.portBase}</span>}
-          <ThemeControl />
-        </div>
-        {tabs && selected && (
-          <nav className="tabs" aria-label="Views">
-            {VIEWS.map((v) => (
-              <a key={v.view} className="tab" href={hashFor(selected, v.view)} aria-current={view === v.view ? 'page' : undefined}>
-                {v.label}
-              </a>
-            ))}
-          </nav>
+      <header className="bar">
+        <span className="logo">
+          <i aria-hidden="true" />
+          Pod Board
+        </span>
+        {lost && (
+          <span className={`status ${lost.cls}`} role="status">
+            {lost.label}
+          </span>
         )}
-        {notices.length > 0 && (
-          <div className="banners">
-            {notices.map((b) => (
-              <p key={b.chip.label} className="banner" data-tone={b.chip.cls} role="status">
-                <Chip chip={b.chip} />
-                <span>{b.text}</span>
+        <span className="bar-gap" />
+        <button ref={repoButton} className="btn sm lead" type="button" aria-label="Add repo" aria-expanded={picking} onClick={() => setPicking((p) => !p)}>
+          <Icon name="plus" />
+          Repo
+        </button>
+        <BarMenu
+          key={runKey}
+          autoContinue={selected?.plan !== undefined && autoSwitch ? { target: { repoId: selected.repoId, run: selected.plan }, on: autoSwitch.on } : undefined}
+          portBase={selected?.portBase}
+        />
+      </header>
+      {picking && (
+        <div className="picker-slot">
+          <FolderPicker repoPaths={board?.repos.map((r) => r.path) ?? []} onClose={closePicker} />
+        </div>
+      )}
+      {notices.length > 0 && (
+        <div className="banners">
+          {notices.map((b) => (
+            <p key={b.chip.label} className="banner" data-tone={b.chip.cls} role="status">
+              <Chip chip={b.chip} />
+              <span>{b.text}</span>
+            </p>
+          ))}
+        </div>
+      )}
+      <div className="screen-body">
+        <aside className="side">
+          <RunsList runs={runs} active={activeRuns(runs)} selected={selected} />
+        </aside>
+        <main className={view === 'board' ? 'main wide' : 'main'}>
+          {!board ? (
+            <p className="muted">{stream === 'lost' ? 'Waiting for the server…' : 'Connecting to the server…'}</p>
+          ) : !selected || !repo ? (
+            <div className="empty">
+              <h1 className="run-name">No repos yet</h1>
+              <p className="muted">Press Repo in the bar and pick a repo's folder to see its pod runs.</p>
+            </div>
+          ) : view === 'board' && pipeline && selected.plan !== undefined ? (
+            <>
+              {header && <RunHeader header={header} />}
+              <p className="back">
+                <a href={hashFor(selected)}>Back to the run</a>
               </p>
-            ))}
-          </div>
-        )}
-        {repo && selected?.plan !== undefined && (
-          <ReplyPanel key={`reply:${repo.id}/${selected.plan}`} view={reply} target={{ repoId: repo.id, run: selected.plan }} />
-        )}
-        {!board ? (
-          <p className="muted">{stream === 'lost' ? 'Waiting for the server…' : 'Connecting to the server…'}</p>
-        ) : !selected ? (
-          <div className="empty">
-            <h2>No repos yet</h2>
-            <p className="muted">Add a repo's folder with the Add a repo form to see its pod runs.</p>
-          </div>
-        ) : fixPipeline && repo ? (
-          <FixRun key={`fix:${repo.id}/${selected.plan}`} repo={repo} run={selected} pipeline={fixPipeline} agent={view === 'agent' ? agent : undefined} now={now} />
-        ) : pipeline && repo && view === 'board' && selected.plan !== undefined ? (
-          <BoardScreen repo={repo} plan={selected.plan} {...(slice === undefined ? {} : { slice })} now={now} />
-        ) : pipeline && repo ? (
-          <>
-            <Pipeline key={`pipeline:${repo.id}/${selected.plan}`} pipeline={pipeline} repoId={repo.id} />
-            <SliceLog log={pipeline.log} />
-          </>
-        ) : (
-          <p className="muted">{emptyMessage(selected, repo)}</p>
-        )}
-        {board && selected && repo && <WaitingOnYou key={`waiting:${repo.id}/${selected.plan}`} repo={repo} run={selected} />}
-        {board && selected && <OtherActivity list={others} />}
-        {board && <ActionLog entries={board.actions} now={now} />}
-      </main>
+              <BoardScreen repo={repo} plan={selected.plan} {...(slice === undefined ? {} : { slice })} now={now} />
+            </>
+          ) : (
+            <>
+              {header && <RunHeader header={header} />}
+              {steps && <NextStepCard key={runKey} repo={repo} run={selected} card={steps.card} />}
+              <div className="tabs" role="group" aria-label="More about this run">
+                {tabs.map((t) => (
+                  <button key={t} className="tab" type="button" aria-expanded={shown === t} aria-controls={shown === t ? `tab-${t}` : undefined} onClick={() => press(t)}>
+                    {TAB_LABELS[t]}
+                    {t === 'waiting' && <span className="n">{steps?.rest.length ?? 0}</span>}
+                  </button>
+                ))}
+              </div>
+              {shown && (
+                <div id={`tab-${shown}`} className="tab-slot">
+                  {shown === 'waiting' && <WaitingTab key={runKey} repo={repo} run={selected} items={steps?.rest ?? []} />}
+                  {shown === 'plan' && <PlanTab stages={stages} {...(pipeline ? { boardHref: hashFor(selected, 'board') } : {})} />}
+                  {shown === 'log' && (
+                    <LogTab
+                      repo={repo}
+                      run={selected}
+                      {...(pipeline ? { pipeline } : {})}
+                      {...(fixPipeline ? { fixPipeline } : {})}
+                      {...(view === 'agent' && agent !== undefined ? { agent } : {})}
+                      now={now}
+                      actions={board.actions ?? []}
+                    />
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </main>
+      </div>
     </div>
   )
 }

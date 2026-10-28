@@ -1,0 +1,84 @@
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import type { BoardRepo, RunSummary } from '@pod-board/model'
+import { AnswerForm } from './AnswerForm.tsx'
+import { INITIAL, createAnswerFlow, type AnswerState } from './answer-flow.ts'
+import { MergeConfirm, mergeButtonId, useMergeFlow } from './MergeConfirm.tsx'
+import type { NextItem } from './next-step.ts'
+import { answerNote } from './queue-view.ts'
+import { ReplyPanel } from './ReplyPanel.tsx'
+import { nextStatus } from './view.ts'
+
+type Props = { repo: BoardRepo; run: RunSummary; card: NextItem }
+
+/**
+ * The Next step card: its label, status, title, detail and one action. Answer and Merge open their
+ * panel in place under the card, with the card's own flows, so a result stays after the Board moves
+ * the item on. The reply slot is always mounted for a run with a plan, so a Continue or Go result
+ * stays when the Board drops the reply. Key it per run.
+ */
+export function NextStepCard({ repo, run, card }: Props) {
+  const [answer, setAnswer] = useState<AnswerState>(INITIAL)
+  const answerFlow = useMemo(() => createAnswerFlow(setAnswer), [])
+  const [merge, mergeFlow] = useMergeFlow()
+  const answerButton = useRef<HTMLButtonElement>(null)
+  const titleId = useId()
+
+  const answerLine = answer.kind === 'idle' ? undefined : answer.target.line
+  // Focus goes back to the card's Answer button when the form closes, if it's still there.
+  useEffect(() => {
+    if (answerLine === undefined) return
+    return () => answerButton.current?.focus()
+  }, [answerLine])
+
+  const a = card.action
+  const status = nextStatus(card.status)
+  const calm = card.tier === 'nothing'
+  return (
+    <>
+      <section className={calm ? 'card calm next-step' : 'card next-step'} aria-labelledby={titleId}>
+        <div className="next-top">
+          <span className="eyebrow">Next step</span>
+          <span className={`status ${status.cls}`}>{status.label}</span>
+        </div>
+        <h2 id={titleId} className="next-title">
+          {card.title}
+        </h2>
+        {/* A reply's rows each say why, so its detail would only repeat the first one. */}
+        {card.detail && a.kind !== 'reply' && <p className="next-detail">{card.detail}</p>}
+        {a.kind === 'answer' && (
+          <div className="inplace-actions next-acts">
+            <button
+              ref={answerButton}
+              className="btn primary"
+              type="button"
+              aria-expanded={answerLine === a.line}
+              disabled={answer.kind === 'saving'}
+              onClick={() => answerFlow.open({ repoId: a.repoId, line: a.line })}
+            >
+              Answer
+            </button>
+          </div>
+        )}
+        {a.kind === 'merge' && (
+          <div className="inplace-actions next-acts">
+            <button
+              id={mergeButtonId(a.number)}
+              className="btn primary"
+              type="button"
+              aria-expanded={merge.kind !== 'idle' && merge.target.number === a.number}
+              disabled={merge.kind === 'merging'}
+              onClick={() => mergeFlow.open({ repoId: a.repoId, number: a.number })}
+            >
+              Merge
+            </button>
+          </div>
+        )}
+        {run.plan !== undefined && (
+          <ReplyPanel key="reply-panel" view={a.kind === 'reply' ? a.panel : undefined} target={{ repoId: repo.id, run: run.plan }} framed={false} />
+        )}
+      </section>
+      {answer.kind !== 'idle' && <AnswerForm state={answer} flow={answerFlow} note={answerNote(run)} />}
+      {merge.kind !== 'idle' && <MergeConfirm state={merge} flow={mergeFlow} label={`PR #${merge.target.number}`} />}
+    </>
+  )
+}

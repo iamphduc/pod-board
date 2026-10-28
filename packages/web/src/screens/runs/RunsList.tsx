@@ -1,27 +1,27 @@
 import type { RunSummary } from '@pod-board/model'
 import { hashFor } from '../../selection.ts'
-import { Chip } from './Chip.tsx'
-import { runChip, runLine } from './view.ts'
+import { runChip, runLabel } from './view.ts'
 
 type Props = { runs: RunSummary[]; active: number; selected: RunSummary | undefined }
 
+/** The runs: one row each with its label, the `fix` tag, and its state as a dot and a word. */
 export function RunsList({ runs, active, selected }: Props) {
   return (
     <nav className="runs" aria-label="Runs">
-      <span className="eyebrow">Runs · {active} active</span>
+      <span className="eyebrow runs-head">Runs · {active} active</span>
       {runs.length > 0 && (
         <ul className="run-list">
           {runs.map((r) => {
             const key = hashFor(r)
+            const state = runChip(r.state)
             return (
               <li key={key}>
                 <a className="run" href={key} aria-current={r === selected ? 'true' : undefined}>
                   <span className="run-head">
-                    <b>{r.repo}</b>
+                    <b>{runLabel(r, runs)}</b>
                     {r.fix !== undefined && <span className="chip tag">fix</span>}
                   </span>
-                  <span className="mono">{runLine(r)}</span>
-                  <Chip chip={runChip(r.state)} />
+                  <span className={`status ${state.cls}`}>{state.label}</span>
                 </a>
               </li>
             )
