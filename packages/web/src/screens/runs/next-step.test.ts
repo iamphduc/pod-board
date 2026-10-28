@@ -254,6 +254,11 @@ describe('next step', () => {
     expect(s.card).toMatchObject({ key: entryKey(HALT), tier: 'blocked', status: 'blocked', action: { kind: 'answer', repoId: 'chess', line: HALT } })
     expect(order(s).slice(1)).toEqual(['merge pr:78', `pending ${entryKey(H1)}`, `pending ${entryKey(U1)}`, `pending ${entryKey(WAVE2)}`])
 
+    // Stopped by a PENDING gate (gate 6 withholds a PR for you): the plan's order puts the PR first, the halt after.
+    const GATE6 = entry('PENDING', 'orchestrator → human', `plan: ${PLAN}`, 'Gate 6: PR #78 is yours to merge.')
+    const gate = chess([t1Pushed, onlyQueue(GATE6)], { prs: [gh(78, 'open')] })
+    expect(order(steps(gate))).toEqual(['merge pr:78', `pending ${entryKey(GATE6)}`])
+
     // The halt answered: only the answered reply (a halted plan hides the rest), sendable once a session is safe.
     const answered = chess([t1Pushed, onlyQueue(`${HALT} **Answer (human):** rerun it`)], { prs: [gh(78, 'open')], agents: [engineer()] })
     expect(order(steps(answered))).toEqual(['merge pr:78', `reply reply:${PLAN}`, `info ${entryKey(`${HALT} **Answer (human):** rerun it`)}`])
