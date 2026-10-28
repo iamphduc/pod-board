@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { COPIED, COPIED_MS, COPY_FAILED, copyText, type CopyResult } from '../../copy.ts'
+import { Icon } from '../../theme/icons.tsx'
 import { Chip } from './Chip.tsx'
 import type { ReplyPanelView } from './reply-view.ts'
 import { RESUME_INITIAL, createResumeFlow, resumeView, type ResumeFlow, type ResumeState, type ResumeView, type RunTarget } from './resume-flow.ts'
@@ -71,23 +72,67 @@ function ResumeOutcome({ view, flow }: { view: ResumeView; flow: ResumeFlow }) {
   )
 }
 
+/** The chat to paste a reply in: the session line, `cd` and `claude --resume`, each with Copy; or the no-session note. */
+export function ReplyChat({ view }: { view: ReplyPanelView }) {
+  const s = view.session
+  if (!s) return <p className="note reply-chat">{view.noSession}</p>
+  return (
+    <div className="reply-chat">
+      <p className="note reply-session">
+        Paste it in <span className="mono">{s.line}</span>
+        {s.time && <span> · {s.time}</span>}
+      </p>
+      <div className="reply-cmd">
+        <code className="mono">{s.cd}</code>
+        <CopyButton text={s.cd} what="cd command" />
+      </div>
+      {s.resume && (
+        <div className="reply-cmd">
+          <code className="mono">{s.resume}</code>
+          <CopyButton text={s.resume} what="resume command" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** `Run it yourself`: a closed disclosure over the chat to paste the reply in. */
+function RunItYourself({ view }: { view: ReplyPanelView }) {
+  const [open, setOpen] = useState(false)
+  const id = useId()
+  return (
+    <div className="reply-yourself">
+      <button className="btn quiet sm trail" type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)}>
+        Run it yourself
+        <Icon name={open ? 'chevron-down' : 'chevron-right'} />
+      </button>
+      {open && (
+        <div id={id}>
+          <ReplyChat view={view} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * The reply pod waits for on the selected run, and the chat to paste it in. A row the board may
  * send, on a run with a session the runner accepts, gets Continue or Go beside its Copy; it sends
  * only on a press. Every row keeps Copy. The last send's result stays
- * after the Board drops the reply, until you close it.
+ * after the Board drops the reply, until you close it. The chat to paste it in sits behind
+ * `Run it yourself`. `framed={false}` drops the frame and the heading, for use inside a card.
  */
-export function ReplyPanel({ view, target }: { view: ReplyPanelView | undefined; target: RunTarget }) {
+export function ReplyPanel({ view, target, framed = true }: { view: ReplyPanelView | undefined; target: RunTarget; framed?: boolean }) {
   const [state, setState] = useState<ResumeState>(RESUME_INITIAL)
   const flow = useMemo(() => createResumeFlow(target, setState), [target.repoId, target.run])
   const resume = resumeView(state, view?.session?.resume)
   const outcome = <ResumeOutcome view={resume} flow={flow} />
-  if (!view) return resume.word ? <section className="inplace reply-panel" aria-label="Reply pod waits for">{outcome}</section> : null
-  const s = view.session
+  const cls = framed ? 'inplace reply-panel' : 'reply-panel bare'
+  if (!view) return resume.word ? <section className={cls} aria-label="Reply pod waits for">{outcome}</section> : null
   const shownUnderRow = view.rows.some((r) => r.send !== undefined && r.send === resume.word)
   return (
-    <section className="inplace reply-panel" aria-label="Reply pod waits for">
-      <span className="eyebrow">Reply pod waits for</span>
+    <section className={cls} aria-label="Reply pod waits for">
+      {framed && <span className="eyebrow">Reply pod waits for</span>}
       <ul className="reply-list">
         {view.rows.map((r) => (
           <li key={r.key} className="reply-item">
@@ -108,30 +153,8 @@ export function ReplyPanel({ view, target }: { view: ReplyPanelView | undefined;
         ))}
       </ul>
       {!shownUnderRow && outcome}
-      {s ? (
-        <div className="reply-chat">
-          <p className="note reply-session">
-            Paste it in <span className="mono">{s.line}</span>
-            {s.time && <span> · {s.time}</span>}
-          </p>
-          <div className="reply-cmd">
-            <code className="mono">{s.cd}</code>
-            <CopyButton text={s.cd} what="cd command" />
-          </div>
-          {s.resume && (
-            <div className="reply-cmd">
-              <code className="mono">{s.resume}</code>
-              <CopyButton text={s.resume} what="resume command" />
-            </div>
-          )}
-        </div>
-      ) : (
-        <p className="note">{view.noSession}</p>
-      )}
+      <RunItYourself view={view} />
     </section>
   )
 }
 
-export function ReplyChat(_props: { view: ReplyPanelView }) {
-  return null
-}

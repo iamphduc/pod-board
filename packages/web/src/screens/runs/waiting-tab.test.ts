@@ -3,7 +3,7 @@ import type { AnswerState } from './answer-flow.ts'
 import type { MergeState } from './merge-flow.ts'
 import type { NextItem } from './next-step.ts'
 import type { WaitingRow } from './queue-view.ts'
-import { answerAnchor, keepOpen, mergeAnchor, rowMeta, toggleOpen } from './waiting-tab.ts'
+import { answerAnchor, keepOpen, mergeAnchor, replyGhost, replySeen, rowMeta, toggleOpen } from './waiting-tab.ts'
 
 const row = (line: string, over: Partial<WaitingRow> = {}): WaitingRow => ({
   key: `0:${line}`,
@@ -85,5 +85,16 @@ describe('waiting tab', () => {
     expect(mergeAnchor(loading(8), items, 'r')).toBe('pr:8')
     expect(mergeAnchor(loading(8, 'other'), items, 'r')).toBeUndefined()
     expect(mergeAnchor(loading(9), items, 'r')).toBe('end')
+  })
+
+  it('a sent reply keeps its row until you close its result', () => {
+    const target = { repoId: 'r', run: 'alpha' }
+    const reply: NextItem = { key: 'reply:alpha', tier: 'reply', status: 'ready', title: 'Send continue', action: { kind: 'reply', panel: { target, rows: [] } } }
+    expect(replySeen([pr(7), reply])).toEqual({ key: 'reply:alpha', target })
+    expect(replySeen([pr(7)])).toBeUndefined()
+    // While listed, the row is the item itself; once it left, the last one seen stays as a ghost row.
+    expect(replyGhost([pr(7), reply], { key: 'reply:alpha', target })).toBeUndefined()
+    expect(replyGhost([pr(7)], { key: 'reply:alpha', target })).toEqual({ key: 'reply:alpha', target })
+    expect(replyGhost([pr(7)], undefined)).toBeUndefined()
   })
 })
