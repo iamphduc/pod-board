@@ -174,3 +174,19 @@ Consequences: an error or a merge reason is plain text with a colored dot before
 ## 2026-10-28 — app manifest colors follow the Dark default
 
 The installed app's `manifest.webmanifest` uses `#000000` for `background_color` and `theme_color`, matching the new Dark default (plan `calm-dashboard`), so no white splash or browser bar shows before a dark page. `pwa.test.ts` checks them against the dark `--bg`. Chosen by the human at gate 1 of the calm-screen sprint.
+
+## 2026-10-28 — Next step card wording (agent default — override anytime)
+
+Plan `calm-dashboard`. Answer items: the title is the entry body cut to 80 characters; the detail is "The run is stopped until you answer." (`BLOCKED`) or "pod goes on with the value in use until you answer." (`PENDING`). PR items: `Merge PR #N` with "Wave W of <sprint> is handed back to you.", "The plan's final PR is reviewed and waits for you." or "The fix PR is reviewed and waits for you." Reply items: `Send <word>` with the reply row's reason. Change it in `packages/web/src/screens/runs/next-step.ts`.
+
+## 2026-10-28 — an autopilot halt and a waiting PR on the Next step card (agent default — override anytime)
+
+Plan `calm-dashboard`. A `BLOCKED` autopilot halt takes the card. A `PENDING` gate stop (for example gate 6, a PR held back for you to merge) lets the PR take the card, and the halt is listed in the Waiting tab. Pinned by `next-step.test.ts › autopilot`.
+
+## 2026-10-28 — the no-session note sits behind "Run it yourself" (agent default — override anytime)
+
+Plan `calm-dashboard`. On a reply, the card shows only `Copy continue` (or Continue / Go) and `Run it yourself`; the "No pod session found for this run…" note sits behind `Run it yourself` with the session line and the `cd` / `claude --resume` commands. Change it in `packages/web/src/screens/runs/ReplyPanel.tsx`.
+
+## 2026-10-28 — folder picker Add with a partly typed name (agent default — override anytime)
+
+Plan `calm-dashboard`. Add posts a folder only when the typed text ends in a separator, or its last part is a listed folder's whole name (any case); otherwise Add is disabled, and the footer shows the exact path Add will post. Posting the open folder instead would silently add the parent of what you typed. Change it in `packages/web/src/screens/runs/folder-picker.ts`.

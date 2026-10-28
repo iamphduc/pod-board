@@ -1,6 +1,6 @@
 # Plan: Calm dashboard
 
-_Generated: 2026-10-27 · Status: active · Grilled-with: pod_
+_Generated: 2026-10-27 · Status: archived · Grilled-with: pod_
 
 Port base: 3000
 
