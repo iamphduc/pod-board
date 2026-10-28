@@ -10,6 +10,7 @@ type Props = { repoPaths: string[]; onClose: () => void }
 export function AddRepoDialog({ repoPaths, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null)
   const downOnDialog = useRef(false)
+  const upOnDialog = useRef(false)
 
   // Before the picker's own effect focuses its path box: a closed dialog can't take focus.
   useLayoutEffect(() => {
@@ -38,8 +39,11 @@ export function AddRepoDialog({ repoPaths, onClose }: Props) {
       onPointerDown={(e) => {
         downOnDialog.current = e.target === e.currentTarget
       }}
+      onPointerUp={(e) => {
+        upOnDialog.current = e.target === e.currentTarget
+      }}
       onClick={(e) => {
-        if (backdropClose(downOnDialog.current, e.target === e.currentTarget)) close()
+        if (backdropClose(downOnDialog.current, e.target === e.currentTarget, upOnDialog.current)) close()
       }}
     >
       <FolderPicker repoPaths={repoPaths} onClose={close} />
