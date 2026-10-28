@@ -36,7 +36,7 @@ The frame around every screen: the web app at `http://127.0.0.1:<web>/`, the bar
 - The look to build to is `pod-docs/plans/calm-dashboard.md` `## Look` and its draft `pod-docs/design-drafts/calm-dashboard-look-3.html`, not `docs/design/preview.html`. The wave board's critical path line is `--fg`; the other lines are `--border-strong`.
 - `tokens.test.ts` keeps the 4.5:1 check for `--fg` and `--muted` on `--bg`, `--surface`, and `--hover`, and for `--primary-fg` on `--primary-bg`. It also fails on any CSS file under `packages/web/src` that sets `color` to `--faint` or a status token (a rule that targets an `svg`, such as a done step's check icon, may), or that uses an old token name (`--panel`, `--line`, `--accent`, `--ok`, `--warn`, `--bad`, `--*-soft`, `--*-ink`, `--display`, `--body`).
 - The boot script and the app share `THEME_KEY` and the dark default; change both or neither.
-- `public/manifest.webmanifest` must use the light `--bg` for `background_color` and a light token for `theme_color` (`pwa.test.ts`).
+- `public/manifest.webmanifest` uses the dark (default) `--bg`, `#000000`, for `background_color` and `theme_color` (`pwa.test.ts`); the human chose dark on 2026-10-28.
 - "Chrome reports installable" wasn't run in any of the five review rounds; S1 saw the install offer only in headless Chrome.
 - `tokens.test.ts` and `controls.test.ts` find rules by selector text. Write a new rule's selector exactly (`textarea.input {`, not `textarea.input{`), and keep `textarea.input` after `.input` so the older tests read the right block.
 - `base.css` takes colors from tokens only; `controls.test.ts` fails on any hex, `rgb()`, `hsl()`, or named color. `transparent` and `currentColor` are allowed.
