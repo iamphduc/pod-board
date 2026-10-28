@@ -124,6 +124,8 @@
   /* A long list scrolls in its own row, so Add repo stays at the bottom in view. */
   min-height: 0;
   overflow-y: auto;
+  /* The list clips its corners, so an auto row would squash it rather than scroll. */
+  grid-auto-rows: max-content;
 }
 
 .run-list {
