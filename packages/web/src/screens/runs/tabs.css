@@ -1,0 +1,210 @@
+/*
+ * The tab panels under the Next step card: Waiting, Plan and Log.
+ * Plain rows split by hairlines, no fills or coloured edges. Text is --fg or --muted;
+ * the only status colour is the dot (.status) and the done check's svg.
+ */
+
+.tab-panel {
+  display: grid;
+  gap: 24px;
+  padding-top: 16px;
+  min-width: 0;
+}
+
+.tab-empty {
+  margin: 0;
+  font-size: var(--size-dense);
+}
+
+/* Waiting */
+
+.wait-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.wait-row {
+  display: grid;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+  font-size: var(--size-dense);
+}
+
+.wait-row:last-child {
+  border-bottom: 0;
+}
+
+/* A sent reply's row, kept only to show its last result; empty once that closes. */
+.wait-row.ghost:empty {
+  display: none;
+}
+
+/* The whole entry is the toggle: route · date, then the body, clamped to 2 lines until opened. */
+.wait-toggle {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wait-toggle:hover .wait-body {
+  color: var(--fg);
+}
+
+.wait-meta {
+  font-size: var(--size-micro);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.wait-body {
+  color: var(--fg);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.wait-body.clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.wait-head {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wait-title {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.wait-detail {
+  overflow-wrap: anywhere;
+}
+
+.wait-answer {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The reply panel inside a row or the card: no frame of its own. */
+.reply-panel.bare {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.reply-yourself {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  min-width: 0;
+}
+
+.reply-yourself > div {
+  justify-self: stretch;
+  min-width: 0;
+}
+
+/* Plan */
+
+.plan-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.plan-line {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--size-dense);
+  color: var(--fg);
+}
+
+.plan-line:last-child {
+  border-bottom: 0;
+}
+
+.plan-line.done {
+  color: var(--muted);
+}
+
+.plan-line.current {
+  font-weight: 500;
+}
+
+.plan-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.plan-line.done svg {
+  color: var(--ready);
+}
+
+/* A hollow ring for steps to come; the current step's is filled. Drawn, never typed. */
+.plan-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--faint);
+}
+
+.plan-line.current .plan-dot {
+  background: var(--fg);
+  border-color: var(--fg);
+}
+
+.plan-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.plan-detail {
+  grid-column: 2 / -1;
+  font-size: var(--size-small);
+  font-weight: 400;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.plan-board {
+  margin: 0;
+  font-size: var(--size-dense);
+}
+
+/* Phone: the status word drops under the label so long labels keep their room. */
+@media (max-width: 480px) {
+  .plan-line {
+    grid-template-columns: 16px minmax(0, 1fr);
+  }
+
+  .plan-line > .status {
+    grid-column: 2;
+  }
+}

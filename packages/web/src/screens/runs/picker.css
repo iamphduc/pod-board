@@ -1,0 +1,143 @@
+/*
+ * The "+ Repo" folder picker: a panel in place under the bar. Tokens only.
+ * The list scrolls down, never sideways: long names cut off with an ellipsis.
+ */
+.picker {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+  max-width: 720px;
+}
+
+.picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.picker-title {
+  font-size: var(--size-body);
+}
+
+.picker-bar {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.picker-path {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: var(--size-small);
+}
+
+.picker-message,
+.picker-notice {
+  font-size: var(--size-dense);
+  color: var(--muted);
+}
+
+.picker-message {
+  color: var(--fg);
+}
+
+.picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: min(360px, 50vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.picker-row {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  font: 400 var(--size-dense) / 1.3 var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+
+.picker-row:hover {
+  background: var(--hover);
+}
+
+.picker-row > svg {
+  flex: none;
+  color: var(--faint);
+}
+
+.picker-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: var(--size-small);
+}
+
+.picker-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 500 var(--size-micro) / 1 var(--mono);
+  color: var(--muted);
+}
+
+.picker-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.picker-target {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--size-small);
+  color: var(--muted);
+}
+
+.picker-foot .btn {
+  flex: none;
+}
+
+@media (max-width: 480px) {
+  .picker {
+    padding: 16px;
+    border-radius: var(--radius-md);
+  }
+
+  .picker-row {
+    min-height: 44px;
+  }
+
+  .picker-foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

@@ -1,0 +1,50 @@
+/* The bar's ⋯ menu: opens under its trigger, right edges aligned, inside the viewport. */
+.bar-menu {
+  position: relative;
+  flex: none;
+}
+
+.bar-menu-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  box-sizing: border-box;
+  width: 248px;
+  max-width: calc(100vw - 16px);
+}
+
+.bar-menu-panel hr {
+  margin: 6px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.mi {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+}
+
+.mi-block {
+  display: block;
+}
+
+.mi-note {
+  color: var(--muted);
+  font-size: var(--size-small);
+}
+
+/* The switch's failed-save message sits under its label, inside the menu. */
+.bar-menu-panel .auto-switch {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.bar-menu-panel .seg {
+  width: 100%;
+  box-sizing: border-box;
+}
