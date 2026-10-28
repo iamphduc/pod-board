@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildRepoModel, type Board, type BoardRepo, type RunSummary } from '@pod-board/model'
-import { agentChip, agentLogRows, banners, connectionStatus, emptyMessage, groupChip, nextStatus, otherRows, rowFigures, runChip, runLabel, titleParts } from './view.ts'
+import { agentChip, agentLogRows, banners, connectionStatus, emptyMessage, groupChip, nextStatus, otherRows, rowFigures, runChip, runLabel, tabPress, titleParts } from './view.ts'
 
 const run = (over: Partial<RunSummary>): RunSummary => ({ repoId: 'r', repo: 'chess-web', where: 'x', state: 'idle', ...over })
 
@@ -38,6 +38,15 @@ describe('screen 1 view helpers', () => {
     // Runs of another repo with the same name don't count: the id joins them.
     const twin = run({ repoId: 'c2', plan: 'other' })
     expect(runLabel(plan, [plan, twin])).toBe('chess-web')
+  })
+
+  it('tab press: toggles, and leaves the engineer view', () => {
+    expect(tabPress(undefined, 'plan', 'pipeline')).toEqual({ save: 'plan', leave: false })
+    expect(tabPress('plan', 'plan', 'pipeline')).toEqual({ save: undefined, leave: false })
+    expect(tabPress('plan', 'log', 'board')).toEqual({ save: 'log', leave: false })
+    // The engineer view shows Log: pressing Log closes it and goes back to the run; another tab opens there.
+    expect(tabPress('log', 'log', 'agent')).toEqual({ save: undefined, leave: true })
+    expect(tabPress('log', 'waiting', 'agent')).toEqual({ save: 'waiting', leave: true })
   })
 
   it('next step status: a dot class and a word', () => {

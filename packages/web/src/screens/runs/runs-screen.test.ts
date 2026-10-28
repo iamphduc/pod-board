@@ -18,7 +18,8 @@ type Files = Record<string, string>
 type Edit = (files: Files) => void
 
 const entry = (type: string, route: string, fields: string, body: string) => `- \`[2026-10-19 · ${type} · ${route}${fields ? ` · ${fields}` : ''}]\` ${body} **Resolution:** pending`
-const T1_BLOCKED = entry('BLOCKED', 'engineer → human', 'sprint: ladder · slice: T1', "T1 can't reach the rates file.")
+// An autopilot halt: the run stops, so its wave PR waits on you, and the halted plan shows no reply.
+const HALT = entry('BLOCKED', 'orchestrator → human', `plan: ${PLAN}`, 'Gate 1: T1 is blocked, the rates file is missing.')
 
 const onlyQueue = (...lines: string[]): Edit => (f) => {
   f[QUEUE] = ['# Handoff Queue', '', ...lines, ''].join('\n')
@@ -117,11 +118,12 @@ describe('runs screen', () => {
   })
 
   it('blocked first, rest counted', () => {
-    const { html } = render({ repo: chess([onlyQueue(T1_BLOCKED), manual, t1Pushed], { prs: [gh(78, 'open')] }) })
+    const { html } = render({ repo: chess([onlyQueue(HALT), t1Pushed], { prs: [gh(78, 'open')] }) })
     const card = cardOf(html)
     expect(card).toMatch(/<button[^>]*class="btn primary"[^>]*>Answer<\/button>/)
     expect(card).not.toMatch(/>Merge</)
     expect(text(card)).toMatch(/Blocked/)
+    // The PR is the one other item.
     expect(tabsOf(html)[0]!.label).toBe('Waiting 1')
   })
 

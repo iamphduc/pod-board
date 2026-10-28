@@ -1,4 +1,5 @@
-// What screen 1 shows for each state: chip classes and labels, the slice log's
+// What screen 1 shows for each state: chip classes and labels, the bar's connection
+// status, the runs list's labels, the Next step card's status, the slice log's
 // figures, a fix run's agent log, the Other activity strip, and the message for a
 // run with no pipeline. Components only render these.
 
@@ -14,7 +15,9 @@ import {
   type RunSummary,
 } from '@pod-board/model'
 import type { StreamState } from '../../board-stream.ts'
-import { hashFor } from '../../selection.ts'
+import { hashFor, type View } from '../../selection.ts'
+import type { NextStatus } from './next-step.ts'
+import { toggleTab, type Tab } from './tab-memory.ts'
 
 export type ChipClass = 's-run' | 's-ok' | 's-you' | 's-bad' | 's-idle'
 export type Chip = { cls: ChipClass; label: string }
@@ -30,13 +33,32 @@ const RUN_CHIPS: Record<RunState, Chip> = {
 
 export const runChip = (s: RunState): Chip => RUN_CHIPS[s]
 
-const STREAM_CHIPS: Record<StreamState, Chip> = {
-  live: { cls: 's-ok', label: 'live' },
-  connecting: { cls: 's-idle', label: 'connecting' },
-  lost: { cls: 's-bad', label: 'lost · retrying' },
+const LOST: Chip = { cls: 's-bad', label: 'lost · retrying' }
+
+/** The bar's connection status: only while the stream is lost; nothing while live or connecting. */
+export const connectionStatus = (s: StreamState): Chip | undefined => (s === 'lost' ? LOST : undefined)
+
+/**
+ * A runs list row's label: the repo name, plus ` · <plan>` or ` · fix · <slug>` only when its repo
+ * (by id) has more than one run in the list. A plan-less repo row keeps the name alone.
+ */
+export function runLabel(r: RunSummary, runs: RunSummary[]): string {
+  const shared = runs.filter((x) => x.repoId === r.repoId).length > 1
+  if (!shared) return r.repo
+  if (r.fix !== undefined) return `${r.repo} · fix · ${r.fix}`
+  return r.plan === undefined ? r.repo : `${r.repo} · ${r.plan}`
 }
 
-export const streamChip = (s: StreamState): Chip => STREAM_CHIPS[s]
+const NEXT_STATUS: Record<NextStatus, Chip> = {
+  blocked: { cls: 's-bad', label: 'Blocked' },
+  'needs-you': { cls: 's-you', label: 'Needs you' },
+  ready: { cls: 's-ok', label: 'Ready' },
+  running: { cls: 's-run', label: 'Running' },
+  idle: { cls: 's-idle', label: 'Idle' },
+}
+
+/** The Next step card's status: its dot class and word. */
+export const nextStatus = (s: NextStatus): Chip => NEXT_STATUS[s]
 
 /** A slice log group's status (`merged PR #N`, `PR #N open`, `running`, `blocked`, `planned`). */
 export function groupChip(status: string): Chip {
@@ -60,9 +82,6 @@ export function rowFigures(row: LogRow): string {
   if (row.tokens) parts.push(`${formatTokens(row.tokens)} tok`)
   return parts.join(' · ')
 }
-
-export const barTitle = (r: RunSummary) =>
-  r.fix !== undefined ? `${r.repo} · fix · ${r.fix}` : r.plan === undefined ? r.repo : `${r.repo} · ${r.plan}`
 
 /** Why a run has no pipeline, and what to do about it. `repo` gives an unsupported repo's docs version. */
 export function emptyMessage(r: RunSummary, repo?: BoardRepo): string {
@@ -97,7 +116,7 @@ const clock = (ms: number) => {
 /** What's wrong above the main view, in order: the lost stream, the config error, then gh. Each has a chip. */
 export function banners(board: Board | undefined, stream: StreamState): Banner[] {
   const out: Banner[] = []
-  if (stream === 'lost') out.push({ chip: streamChip('lost'), text: 'Lost the connection to the server. Showing the last board; retrying.' })
+  if (stream === 'lost') out.push({ chip: LOST, text: 'Lost the connection to the server. Showing the last board; retrying.' })
   if (!board) return out
   if (board.configError !== undefined) {
     out.push({
@@ -147,12 +166,6 @@ export function titleParts(text: string): TitlePart[] {
 
 // ---- Fix runs and other activity ----
 
-/** The runs list's second line: `fix · <slug> · <where>`, `<plan> · <where>`, or the where alone. */
-export function runLine(r: RunSummary): string {
-  if (r.fix !== undefined) return `fix · ${r.fix} · ${r.where}`
-  return r.plan === undefined ? r.where : `${r.plan} · ${r.where}`
-}
-
 const AGENT_CHIPS: Record<AgentState, Chip> = {
   running: { cls: 's-run', label: 'running' },
   ended: { cls: 's-ok', label: 'ended' },
@@ -187,4 +200,9 @@ export function otherRows(list: OtherAgent[]): OtherView[] {
     time: x.lastAt === undefined ? '—' : clock(x.lastAt),
     chip: agentChip(x.state),
   }))
+}
+
+/** A tab press: the tab to store, and whether to leave the engineer's view (it lives in Log, so any press leaves it). */
+export function tabPress(shown: Tab | undefined, clicked: Tab, view: View): { save: Tab | undefined; leave: boolean } {
+  return { save: toggleTab(shown, clicked), leave: view === 'agent' }
 }
