@@ -99,6 +99,11 @@ button.picker-crumb:hover {
 }
 
 .picker-crumb[aria-current="location"] {
+  /* Never shares the shrink (any share cuts a pixel off the name). The cap
+     leaves the root, the fold, a few letters of the parent and the arrows
+     about 13rem; a longer name ends in an ellipsis. */
+  flex-shrink: 0;
+  max-width: calc(100% - 13rem);
   color: var(--fg);
   font-weight: 500;
 }
