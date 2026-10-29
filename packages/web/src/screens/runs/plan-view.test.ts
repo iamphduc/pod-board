@@ -88,10 +88,10 @@ describe('plan view', () => {
   it('run header', () => {
     // The crumb and the name only: the flow under it shows the steps and waves.
     const auto = chess()
-    expect(runHeader(runOf(auto, 'sparring-ladder'), auto, NOW)).toEqual({ crumb: 'chess-web', name: 'sparring-ladder' })
+    expect(runHeader(runOf(auto, 'sparring-ladder'), auto)).toEqual({ crumb: 'chess-web', name: 'sparring-ladder' })
     const code = chess(manual)
-    expect(runHeader(runOf(code, 'sparring-ladder'), code, NOW)).toEqual({ crumb: 'chess-web', name: 'sparring-ladder' })
-    expect(runHeader(ladderRun, chess(), NOW)).toEqual({ crumb: 'chess-web', name: 'sparring-ladder' })
+    expect(runHeader(runOf(code, 'sparring-ladder'), code)).toEqual({ crumb: 'chess-web', name: 'sparring-ladder' })
+    expect(runHeader(ladderRun, chess())).toEqual({ crumb: 'chess-web', name: 'sparring-ladder' })
   })
 
   it('run header for a fix run, a repo row, and no run', () => {
@@ -99,16 +99,16 @@ describe('plan view', () => {
     const claim: Claim = { portBase: 3100, repoPath: '/c', plan: name }
     const repo = chess(() => {}, { claims: [claim] })
     const fix = { repoId: 'chess', repo: 'chess-web', plan: name, fix: 'scroll', where: 'working', state: 'running' } satisfies RunSummary
-    expect(runHeader(fix, repo, NOW)).toEqual({ crumb: 'chess-web', name: 'fix · scroll' })
+    expect(runHeader(fix, repo)).toEqual({ crumb: 'chess-web', name: 'fix · scroll' })
 
     const row = { repoId: 'chess', repo: 'chess-web', where: 'no active plan', state: 'idle' } satisfies RunSummary
-    expect(runHeader(row, repo, NOW)).toEqual({ crumb: 'chess-web', name: 'chess-web' })
+    expect(runHeader(row, repo)).toEqual({ crumb: 'chess-web', name: 'chess-web' })
     // A plan the repo doesn't have: its name.
-    expect(runHeader({ ...row, plan: 'gone' }, repo, NOW)).toEqual({ crumb: 'chess-web', name: 'gone' })
+    expect(runHeader({ ...row, plan: 'gone' }, repo)).toEqual({ crumb: 'chess-web', name: 'gone' })
 
-    expect(runHeader(undefined, repo, NOW)).toBeUndefined()
-    expect(runHeader(row, undefined, NOW)).toBeUndefined()
+    expect(runHeader(undefined, repo)).toBeUndefined()
+    expect(runHeader(row, undefined)).toBeUndefined()
     // Another repo's run never reads as this repo's.
-    expect(runHeader({ ...row, repoId: 'other' }, repo, NOW)).toBeUndefined()
+    expect(runHeader({ ...row, repoId: 'other' }, repo)).toBeUndefined()
   })
 })

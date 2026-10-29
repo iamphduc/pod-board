@@ -1,7 +1,7 @@
 /*
- * The tab panels under the Next step card: Waiting, Plan and Log.
+ * The tab panels under the Next step card: Waiting and Log.
  * Plain rows split by hairlines, no fills or coloured edges. Text is --fg or --muted;
- * the only status colour is the dot (.status) and the done check's svg.
+ * the only status colour is the dot (.status).
  */
 
 .tab-panel {
@@ -121,90 +121,4 @@
 .reply-yourself > div {
   justify-self: stretch;
   min-width: 0;
-}
-
-/* Plan */
-
-.plan-lines {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-}
-
-.plan-line {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 4px 12px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: var(--size-dense);
-  color: var(--fg);
-}
-
-.plan-line:last-child {
-  border-bottom: 0;
-}
-
-.plan-line.done {
-  color: var(--muted);
-}
-
-.plan-line.current {
-  font-weight: 500;
-}
-
-.plan-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-}
-
-.plan-line.done svg {
-  color: var(--ready);
-}
-
-/* A hollow ring for steps to come; the current step's is filled. Drawn, never typed. */
-.plan-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1.5px solid var(--faint);
-}
-
-.plan-line.current .plan-dot {
-  background: var(--fg);
-  border-color: var(--fg);
-}
-
-.plan-label {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.plan-detail {
-  grid-column: 2 / -1;
-  font-size: var(--size-small);
-  font-weight: 400;
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-
-.plan-board {
-  margin: 0;
-  font-size: var(--size-dense);
-}
-
-/* Phone: the status word drops under the label so long labels keep their room. */
-@media (max-width: 480px) {
-  .plan-line {
-    grid-template-columns: 16px minmax(0, 1fr);
-  }
-
-  .plan-line > .status {
-    grid-column: 2;
-  }
 }

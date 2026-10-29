@@ -1,7 +1,8 @@
 /*
  * Screen 1: a full-height sidebar on the left (the title, the runs list, and
  * Add repo at the bottom) beside a narrow main column (about 720 px): the run
- * header with the ⋯ menu, the Next step card, and the tabs.
+ * header with the ⋯ menu, the run's flow (wider, up to 1200 px), the Next step
+ * card, and the tabs.
  * Tokens and L1's classes only; no colour literals (pwa.test.ts checks).
  * At 820px and below the sidebar stacks above the main column.
  */
@@ -198,13 +199,25 @@
   display: grid;
   align-content: start;
   min-width: 0;
-  max-width: 720px;
+  /* The flow's cap; every other part of the column stays 720 px (below). */
+  max-width: 1200px;
   padding: 48px 48px 64px;
   box-sizing: content-box;
   /* Centred in the space beside the sidebar. Auto margins turn off the grid's
      stretch, so the width is set: the cell less the side padding. */
   width: calc(100% - 96px);
   margin-inline: auto;
+}
+
+/* Each part of the column is 720 px at most, centred; the flow, a wide data view, takes the main box's width. */
+.main:not(.wide) > * {
+  width: 100%;
+  max-width: 720px;
+  justify-self: center;
+}
+
+.main:not(.wide) > .flow-frame {
+  max-width: 1200px;
 }
 
 /* The wave board takes the whole main width. */
@@ -243,39 +256,156 @@
   overflow-wrap: anywhere;
 }
 
-.run-meta {
+/*
+ * The run's flow: a column of step cards per stage, arrows between columns.
+ * Cards keep a plain border; the status colour is on the mark, and on the border
+ * only of a highlighted card (running, needs you, blocked). Waiting cards are dim
+ * by colour, not opacity, so their text stays readable. Below its columns' minimum
+ * width the flow scrolls inside its own box.
+ */
+.flow-frame {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  overflow-x: auto;
+  margin-bottom: 32px;
+  /* Room for the highlighted border and the focus ring inside the scroll box. */
+  padding: 2px;
+}
+
+.flow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
-  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.flow-col {
+  flex: 1 1 0;
+  min-width: 152px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.flow-arrow {
+  flex: none;
+  align-self: center;
+  display: flex;
+}
+
+.flow-arrow svg {
+  color: var(--faint);
+}
+
+.flow-cap {
+  margin: 0;
+  font: 500 var(--size-micro) / 16px var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.flow-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.flow-step {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 2px 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.flow-mark {
+  display: flex;
   align-items: center;
-  gap: 8px 16px;
-  margin-top: 10px;
+  height: 20px;
+  color: var(--muted);
 }
 
-.run-wave {
-  font-size: var(--size-small);
+.flow-label {
+  min-width: 0;
+  font-size: var(--size-dense);
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--fg);
+  overflow-wrap: anywhere;
 }
 
-/* The progress strip: done steps white, the current one dimmed, the rest grey. */
-.strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+.flow-detail {
+  grid-column: 2;
+  min-width: 0;
+  font: var(--size-micro) / 1.4 var(--mono);
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
-.strip i {
-  width: 20px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border-strong);
+.flow-step.done .flow-mark svg {
+  color: var(--ready);
 }
 
-.strip i.done {
-  background: var(--fg);
+.flow-step.live .flow-mark svg {
+  color: var(--running);
 }
 
-.strip i.current {
-  background: var(--fg);
-  opacity: 0.45;
+.flow-step.you .flow-mark svg {
+  color: var(--needs-you);
+}
+
+.flow-step.blocked .flow-mark svg {
+  color: var(--blocked);
+}
+
+.flow-step.dim .flow-mark svg {
+  color: var(--faint);
+}
+
+.flow-step.dim .flow-label {
+  color: var(--muted);
+}
+
+.flow-step.hi.live {
+  border-color: var(--running);
+}
+
+.flow-step.hi.you {
+  border-color: var(--needs-you);
+}
+
+.flow-step.hi.blocked {
+  border-color: var(--blocked);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .flow-step.live .flow-mark {
+    animation: flow-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes flow-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* The wave board link stays at the left edge while the flow scrolls. */
+.flow-board {
+  position: sticky;
+  left: 0;
+  margin: 0;
+  font-size: var(--size-dense);
 }
 
 /* Next step card: the base .card, plain; the dot carries the state. */
