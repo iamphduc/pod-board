@@ -4,7 +4,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import { postRepo } from '../../add-repo.ts'
 import { Icon } from '../../theme/icons.tsx'
-import { createFolderPicker, crumbsFor, foldCrumbs, foldMenuPlace, getFolders, startFolder, type Crumb, type PickerState } from './folder-picker.ts'
+import { createFolderPicker, crumbsFor, foldCrumbs, foldMenuMoved, foldMenuPlace, getFolders, startFolder, type Crumb, type PickerState } from './folder-picker.ts'
 import { reduceMenu, type MenuEvent } from './menu-view.ts'
 import './picker.css'
 
@@ -66,8 +66,22 @@ function CrumbFold({ hidden, onPick }: { hidden: Crumb[]; onPick: (c: Crumb) => 
       const t = e.target as Node
       if (!menuRef.current?.contains(t) && !triggerRef.current?.contains(t)) send('outside')
     }
+    // The menu is fixed to the window: when the dialog scrolls or the window resizes, close it.
+    const onMove = (e: Event) => {
+      const inside = e.target instanceof Node && !!menuRef.current?.contains(e.target)
+      if (!foldMenuMoved(e.type === 'resize' ? 'resize' : 'scroll', inside)) return
+      const hadFocus = !!menuRef.current?.contains(document.activeElement)
+      setOpen(false)
+      if (hadFocus) triggerRef.current?.focus({ preventScroll: true })
+    }
     document.addEventListener('pointerdown', onPress)
-    return () => document.removeEventListener('pointerdown', onPress)
+    document.addEventListener('scroll', onMove, true)
+    window.addEventListener('resize', onMove)
+    return () => {
+      document.removeEventListener('pointerdown', onPress)
+      document.removeEventListener('scroll', onMove, true)
+      window.removeEventListener('resize', onMove)
+    }
   }, [open])
   return (
     <span

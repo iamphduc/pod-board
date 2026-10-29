@@ -363,6 +363,8 @@ export function createFolderPicker(deps: PickerDeps, onChange: (s: PickerState) 
 }
 
 const FOLD_MENU_WIDTH = 320
+/** Two 44 px rows: never a negative or useless height near the window's bottom. */
+export const FOLD_MENU_MIN_HEIGHT = 88
 const EDGE = 16
 
 /**
@@ -374,13 +376,14 @@ const EDGE = 16
 export function foldMenuPlace(trigger: { left: number; bottom: number }, view: { width: number; height: number }): { top: number; left: number; maxHeight: number } {
   const top = trigger.bottom + 4
   const left = Math.max(EDGE, Math.min(trigger.left, view.width - FOLD_MENU_WIDTH - EDGE))
-  return { top, left, maxHeight: view.height - top - EDGE }
+  return { top, left, maxHeight: Math.max(FOLD_MENU_MIN_HEIGHT, view.height - top - EDGE) }
 }
 
-/** Stub. */
-export const FOLD_MENU_MIN_HEIGHT = 0
-
-/** Stub. */
-export function foldMenuMoved(_kind: 'scroll' | 'resize', _insideMenu: boolean): boolean {
-  return false
+/**
+ * Whether the page moved under an open fold menu, so it closes: a window
+ * resize, or a scroll anywhere but the menu's own list (the menu is fixed to
+ * the window, so it would part from its `…` button).
+ */
+export function foldMenuMoved(kind: 'scroll' | 'resize', insideMenu: boolean): boolean {
+  return kind === 'resize' || !insideMenu
 }
