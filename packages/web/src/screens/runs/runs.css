@@ -216,8 +216,10 @@
   justify-self: center;
 }
 
+/* The flow is as wide as its columns need, up to 1200 px and never past the main box, centred. */
 .main:not(.wide) > .flow-frame {
-  max-width: 1200px;
+  width: fit-content;
+  max-width: min(100%, 1200px);
 }
 
 /* The wave board takes the whole main width. */
@@ -264,6 +266,8 @@
  * width the flow scrolls inside its own box.
  */
 .flow-frame {
+  /* Holds the cards' absolutely placed screen-reader words, so they scroll with it instead of widening the page. */
+  position: relative;
   display: grid;
   gap: 12px;
   min-width: 0;
@@ -280,10 +284,15 @@
   display: flex;
   align-items: stretch;
   gap: 8px;
+  /* Lets the columns shrink to fit before the box scrolls; past their minimum they overflow into the scroll. */
+  min-width: 0;
 }
 
+/* Columns 208 px, shrinking to 152 px before the flow scrolls, so the cards stay dense on a wide screen.
+   A set width (not a flex basis) is what the box's fit-content width counts. */
 .flow-col {
-  flex: 1 1 0;
+  flex: 0 1 auto;
+  width: 208px;
   min-width: 152px;
   display: grid;
   align-content: start;
@@ -402,6 +411,8 @@
 
 /* The wave board link stays at the left edge while the flow scrolls. */
 .flow-board {
+  /* As wide as its text: a box as wide as the flow has no room to stick. */
+  justify-self: start;
   position: sticky;
   left: 0;
   margin: 0;

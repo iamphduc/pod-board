@@ -160,7 +160,12 @@ describe('runs.css main column and run cards', () => {
     const styles = stylesAt(1280)
     const px = (v: string | undefined) => Number(/^(\d+)px$/.exec(v ?? '')?.[1] ?? NaN)
     const mainCap = px(styles.get('.main')?.['max-width'])
-    const flowCap = px(styles.get('.main:not(.wide) > .flow-frame')?.['max-width'])
+    const flow = styles.get('.main:not(.wide) > .flow-frame')
+    // As wide as its columns need, never past the main box (or the page would scroll sideways), up to its own cap.
+    expect(flow?.['width']).toBe('fit-content')
+    const cap = /^min\(100%,\s*(\d+)px\)$/.exec(flow?.['max-width'] ?? '')
+    expect(cap, flow?.['max-width']).not.toBeNull()
+    const flowCap = Number(cap![1])
     expect(flowCap).toBeGreaterThan(720)
     expect(mainCap).toBeGreaterThanOrEqual(flowCap)
     const frame = styles.get('.flow-frame')
@@ -168,6 +173,8 @@ describe('runs.css main column and run cards', () => {
     expect(frame?.['min-width']).toBe('0')
     // On a phone it still scrolls inside its box.
     expect(stylesAt(375).get('.flow-frame')?.['overflow-x']).toBe('auto')
+    // The cards' screen-reader words are absolutely placed: the box must hold them, or they widen the page.
+    expect(frame?.['position']).toBe('relative')
   })
 
   const STATUS = /var\(--(blocked|needs-you|running|ready|idle)\)/
