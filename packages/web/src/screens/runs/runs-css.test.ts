@@ -140,3 +140,28 @@ describe('runs.css sidebar', () => {
     expect(runsRules().some((r) => r.selectors.includes('.bar'))).toBe(false)
   })
 })
+
+describe('runs.css main column and run cards', () => {
+  it('centres the 720 px column beside the sidebar', () => {
+    const main = stylesAt(1280).get('.main')
+    expect(main?.['max-width']).toBe('720px')
+    expect(main?.['margin-inline']).toBe('auto')
+    expect(main?.['box-sizing']).toBe('content-box')
+    // The wave board keeps the full width.
+    expect(stylesAt(1280).get('.main.wide')?.['max-width']).toBe('none')
+  })
+
+  it('shows each run as its own card with a gap, not one box with dividers', () => {
+    const styles = stylesAt(1280)
+    const list = styles.get('.run-list')
+    expect(list?.['border'] ?? 'none').toMatch(/^(0|none)$/)
+    expect(list?.['gap']).toMatch(/^\d+px$/)
+    expect(runsRules().some((r) => r.selectors.includes('.run-list li + li'))).toBe(false)
+    const run = styles.get('.run')
+    expect(run?.['border']).toMatch(/1px solid/)
+    expect(run?.['border-radius']).toMatch(/var\(--radius-/)
+    const picked = styles.get('.run[aria-current="true"]')
+    expect(picked?.['background']).toBe('var(--hover)')
+    expect(picked?.['border-color']).toBe('var(--border-strong)')
+  })
+})
