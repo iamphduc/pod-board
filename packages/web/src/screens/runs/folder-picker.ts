@@ -376,3 +376,11 @@ export function foldMenuPlace(trigger: { left: number; bottom: number }, view: {
   const left = Math.max(EDGE, Math.min(trigger.left, view.width - FOLD_MENU_WIDTH - EDGE))
   return { top, left, maxHeight: view.height - top - EDGE }
 }
+
+/** Stub. */
+export const FOLD_MENU_MIN_HEIGHT = 0
+
+/** Stub. */
+export function foldMenuMoved(_kind: 'scroll' | 'resize', _insideMenu: boolean): boolean {
+  return false
+}

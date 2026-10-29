@@ -8,6 +8,8 @@ import {
   createFolderPicker,
   crumbsFor,
   foldCrumbs,
+  FOLD_MENU_MIN_HEIGHT,
+  foldMenuMoved,
   foldMenuPlace,
   FULL_PATH,
   getFolders,
@@ -589,5 +591,25 @@ describe('fold menu placement', () => {
 
   it('never starts left of the window', () => {
     expect(foldMenuPlace({ left: 4, bottom: 100 }, { width: 300, height: 600 }).left).toBe(16)
+  })
+})
+
+describe('fold menu while the page moves', () => {
+  it('keeps a usable height near the bottom of the window', () => {
+    // 260 px window, button bottom at 240: 4 px under it would leave a negative height.
+    expect(foldMenuPlace({ left: 380, bottom: 240 }, { width: 1280, height: 260 }).maxHeight).toBe(FOLD_MENU_MIN_HEIGHT)
+    expect(FOLD_MENU_MIN_HEIGHT).toBeGreaterThanOrEqual(88)
+  })
+
+  it('closes on a window resize', () => {
+    expect(foldMenuMoved('resize', false)).toBe(true)
+  })
+
+  it('closes when the dialog or page scrolls under it', () => {
+    expect(foldMenuMoved('scroll', false)).toBe(true)
+  })
+
+  it('stays open while its own list scrolls', () => {
+    expect(foldMenuMoved('scroll', true)).toBe(false)
   })
 })
