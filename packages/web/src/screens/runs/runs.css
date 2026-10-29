@@ -124,9 +124,9 @@
   /* A long list scrolls in its own row, so Add repo stays at the bottom in view. */
   min-height: 0;
   overflow-y: auto;
-  /* Room for the focus ring, which the scroll box would clip. */
-  margin: -3px;
-  padding: 3px;
+  /* Room for the whole focus ring (2px outline + 2px offset in base.css), which the scroll box would clip. */
+  margin: -4px;
+  padding: 4px;
   /* The list clips its corners, so an auto row would squash it rather than scroll. */
   grid-auto-rows: max-content;
 }
