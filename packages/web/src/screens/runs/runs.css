@@ -124,6 +124,9 @@
   /* A long list scrolls in its own row, so Add repo stays at the bottom in view. */
   min-height: 0;
   overflow-y: auto;
+  /* Room for the focus ring, which the scroll box would clip. */
+  margin: -3px;
+  padding: 3px;
   /* The list clips its corners, so an auto row would squash it rather than scroll. */
   grid-auto-rows: max-content;
 }
@@ -132,21 +135,19 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+  display: grid;
+  gap: 6px;
 }
 
-.run-list li + li {
-  border-top: 1px solid var(--border);
-}
-
+/* Each run is its own card, as in the sidebar before plan calm-dashboard. */
 .run {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   color: var(--fg);
   font-size: var(--size-dense);
   text-decoration: none;
@@ -160,6 +161,7 @@
 
 .run[aria-current="true"] {
   background: var(--hover);
+  border-color: var(--border-strong);
 }
 
 .run b {
@@ -189,6 +191,10 @@
   max-width: 720px;
   padding: 48px 48px 64px;
   box-sizing: content-box;
+  /* Centred in the space beside the sidebar. Auto margins turn off the grid's
+     stretch, so the width is set: the cell less the side padding. */
+  width: calc(100% - 96px);
+  margin-inline: auto;
 }
 
 /* The wave board takes the whole main width. */
@@ -730,6 +736,7 @@
   }
 
   .main {
+    width: calc(100% - 40px);
     padding: 24px 20px 40px;
   }
 }
@@ -741,6 +748,7 @@
   }
 
   .main {
+    width: calc(100% - 32px);
     padding: 20px 16px 40px;
   }
 
