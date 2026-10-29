@@ -201,8 +201,10 @@ describe('runs.css run cards and Add repo', () => {
     expect(add?.['width']).toBe('100%')
     expect(add?.['justify-content']).toBe('center')
     // Even sides, so the centred label isn't pushed by the lead padding.
-    expect(add?.['padding-left']).toBe(add?.['padding-right'])
-    expect(add?.['padding-left']).toBeDefined()
+    // Centred on its ink: the plus has about 2 px of empty space on its left, so the
+    // left padding is that much smaller than the right.
+    const px = (v: string | undefined) => Number(/^(\d+(?:\.\d+)?)px$/.exec(v ?? '')?.[1] ?? NaN)
+    expect(px(add?.['padding-right']) - px(add?.['padding-left'])).toBe(2)
   })
 })
 
@@ -230,7 +232,10 @@ describe('picker.css crumbs', () => {
     expect(shrink(at('.picker-crumb[aria-current="location"]'))).toBe(0)
     expect(at('.picker-crumb[aria-current="location"]')['max-width']).toMatch(/^calc\(100% - \d+(\.\d+)?rem\)$/)
     expect(shrink(at('button.picker-crumb'))).toBeGreaterThan(0)
-    expect(at('button.picker-crumb')['min-width']).toMatch(/em$/)
+    // Crumbs size to their text: no min-width box around a short name such as E:.
+    expect(at('button.picker-crumb')['min-width'] ?? '0').toBe('0')
+    expect(at('.picker-crumb')['padding']).toBe('2px 6px')
+    expect(at('.picker-crumbs')['gap']).toBe('4px')
   })
 
   it('crumbs are muted 14 px Geist, the text colour on hover', () => {
@@ -243,6 +248,9 @@ describe('picker.css crumbs', () => {
 
   it('keeps the crumbs 44 px tall to touch on phones', () => {
     expect(at('button.picker-crumb', /max-width:\s*480px/)['min-height']).toBe('44px')
+    // Taller to touch, never wider: the gaps around the arrows stay even.
+    expect(at('button.picker-crumb', /max-width:\s*480px/)['min-width']).toBeUndefined()
+    expect(at('button.picker-crumb', /max-width:\s*480px/)['padding']).toBeUndefined()
     expect(at('.picker-fold', /max-width:\s*480px/)['min-height']).toBe('44px')
     expect(at('.picker-fold', /max-width:\s*480px/)['min-width']).toBe('44px')
     expect(at('.picker-fold-item', /max-width:\s*480px/)['min-height']).toBe('44px')

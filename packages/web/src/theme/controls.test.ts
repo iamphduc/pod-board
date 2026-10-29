@@ -376,3 +376,12 @@ describe('controls', () => {
     expect(knobOn['background'], 'on knob').toBe('var(--bg)')
   })
 })
+
+describe('icon and label buttons', () => {
+  const at = (sel: string) => Object.assign({}, ...baseRules().filter((r) => !r.media && r.selectors.includes(sel)).map((r) => decls(r.body)))
+
+  it('draw the icon with a stroke close to the label stem, 6 px from the label', () => {
+    for (const sel of ['.btn.lead', '.btn.trail']) expect(at(sel)['gap'], `${sel} gap`).toBe('6px')
+    for (const sel of ['.btn.lead svg', '.btn.trail svg']) expect(at(sel)['stroke-width'], `${sel} stroke`).toBe('1.75')
+  })
+})
