@@ -179,3 +179,55 @@ describe('runs.css focus ring room', () => {
     expect(runs['margin'], 'the padding is given back so the cards keep their place').toBe(`-${pad}px`)
   })
 })
+
+describe('runs.css run cards and Add repo', () => {
+  it('spaces the run cards 12 px apart', () => {
+    expect(stylesAt(1280).get('.run-list')?.['gap']).toBe('12px')
+  })
+
+  it('puts the status in the top-right corner, on the name line, with the fix tag under the name', () => {
+    const run = stylesAt(1280).get('.run')
+    expect(run?.['align-items']).toBe('baseline')
+    expect(run?.['justify-content']).toBe('space-between')
+    const head = stylesAt(1280).get('.run-head')
+    expect(head?.['flex-direction']).toBe('column')
+    expect(head?.['align-items']).toBe('flex-start')
+    // One padding for every card, so one- and two-line cards line up.
+    expect(runsRules().filter((r) => r.selectors.some((s) => s.startsWith('.run') && !s.startsWith('.run-') && !s.startsWith('.runs')) && 'padding' in decls(r.body))).toHaveLength(1)
+  })
+
+  it('makes Add repo as wide as the run cards, its icon and label centred', () => {
+    const add = stylesAt(1280).get('.side-foot .add-repo')
+    expect(add?.['width']).toBe('100%')
+    expect(add?.['justify-content']).toBe('center')
+    // Even sides, so the centred label isn't pushed by the lead padding.
+    expect(add?.['padding-left']).toBe(add?.['padding-right'])
+    expect(add?.['padding-left']).toBeDefined()
+  })
+})
+
+describe('picker.css crumbs', () => {
+  const pickerRules = () => rules(stripComments(readFileSync(join(here, 'picker.css'), 'utf8')))
+  const at = (sel: string, media?: RegExp) =>
+    Object.assign({}, ...pickerRules().filter((r) => (media ? !!r.media && media.test(r.media) : !r.media) && r.selectors.includes(sel)).map((r) => decls(r.body)))
+
+  it('wraps a long path rather than scrolling sideways', () => {
+    const row = at('.picker-crumbs')
+    expect(row['display']).toBe('flex')
+    expect(row['flex-wrap']).toBe('wrap')
+    expect(row['min-width']).toBe('0')
+    expect(at('.picker-crumb')['overflow-wrap']).toBe('anywhere')
+  })
+
+  it('crumbs are muted 14 px Geist, the text colour on hover', () => {
+    const crumb = at('.picker-crumb')
+    expect(crumb['color']).toBe('var(--muted)')
+    expect(crumb['font']).toMatch(/var\(--size-dense\)[\s\S]*var\(--font\)/)
+    expect(at('button.picker-crumb:hover')['color']).toBe('var(--fg)')
+    expect(at('.picker-crumb[aria-current="location"]')['color']).toBe('var(--fg)')
+  })
+
+  it('keeps the crumbs 44 px tall to touch on phones', () => {
+    expect(at('button.picker-crumb', /max-width:\s*480px/)['min-height']).toBe('44px')
+  })
+})

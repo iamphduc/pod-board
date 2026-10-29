@@ -6,6 +6,7 @@ import type { AddResult } from '../../add-repo.ts'
 import { PickerPanel } from './FolderPicker.tsx'
 import {
   createFolderPicker,
+  crumbsFor,
   FULL_PATH,
   getFolders,
   LOCKED,
@@ -382,13 +383,13 @@ describe('folder picker', () => {
     const fs = fakeFs({ 'C:\\Users\\ann\\Projects': PROJECTS })
     const { p } = picker({ list: fs.list })
     const html = () => renderToStaticMarkup(createElement(PickerPanel, { state: p.state(), on: handlers }))
-    const handlers = { type() {}, complete: () => false, open() {}, up() {}, add() {}, close() {} }
+    const handlers = { type() {}, complete: () => false, open() {}, roots() {}, up() {}, add() {}, close() {} }
 
     p.start(null)
     await flush()
     // At the roots: Add and Up are disabled.
     expect(html()).toMatch(/<button[^>]*disabled=""[^>]*>Add this folder<\/button>/)
-    expect(html()).toMatch(/<button[^>]*aria-label="Up"[^>]*disabled=""/)
+    expect(html()).toMatch(/<button[^>]*aria-label="Up one folder"[^>]*disabled=""/)
     p.open('C:\\Users\\ann\\Projects')
     await flush()
     const markup = html()
@@ -435,5 +436,93 @@ describe('folder picker', () => {
     expect(p.state().notice).toBe('No folder here starts with “zz”.')
     p.type('C:\\Big\\a')
     expect(p.state().notice).toBe(TRUNCATED)
+  })
+})
+
+describe('folder picker crumbs', () => {
+  it('splits a Windows path into This PC, the drive, and each folder', () => {
+    expect(crumbsFor(listing('E:\\Projects\\pod', []))).toEqual([
+      { label: 'This PC', path: null, current: false },
+      { label: 'E:', path: 'E:\\', current: false },
+      { label: 'Projects', path: 'E:\\Projects', current: false },
+      { label: 'pod', path: 'E:\\Projects\\pod', current: true },
+    ])
+  })
+
+  it('reads forward slashes in a Windows path the same way', () => {
+    expect(crumbsFor(listing('E:/Projects', [])).map((c) => [c.label, c.path])).toEqual([
+      ['This PC', null],
+      ['E:', 'E:\\'],
+      ['Projects', 'E:\\Projects'],
+    ])
+  })
+
+  it('ends at the drive for a drive root', () => {
+    expect(crumbsFor(listing('C:\\', []))).toEqual([
+      { label: 'This PC', path: null, current: false },
+      { label: 'C:', path: 'C:\\', current: true },
+    ])
+  })
+
+  it('splits a POSIX path into /, then each folder', () => {
+    expect(crumbsFor(listing('/home/ann', []))).toEqual([
+      { label: '/', path: null, current: false },
+      { label: 'home', path: '/home', current: false },
+      { label: 'ann', path: '/home/ann', current: true },
+    ])
+  })
+
+  it('shows one current crumb at the roots, named by what they hold', () => {
+    expect(crumbsFor(ROOTS)).toEqual([{ label: 'This PC', path: null, current: true }])
+    const posix = listing(null, [entry('/'), entry('/home/ann')])
+    expect(crumbsFor(posix)).toEqual([{ label: '/', path: null, current: true }])
+  })
+
+  it('has none before the first listing', () => {
+    expect(crumbsFor(undefined)).toEqual([])
+  })
+
+  it('the root crumb lists the roots', async () => {
+    vi.useFakeTimers()
+    const fs = fakeFs({ 'C:\\Users\\ann\\Projects': PROJECTS })
+    const { p } = picker({ list: fs.list })
+    p.start('C:\\Users\\ann\\Projects')
+    await flush()
+    p.roots()
+    await flush()
+    expect(fs.asked.at(-1)).toBeUndefined()
+    expect(fs.asked).toHaveLength(2)
+    expect(p.state().atRoots).toBe(true)
+    expect(p.state().input).toBe('')
+    vi.useRealTimers()
+  })
+
+  it('renders the crumbs row: a ghost Up, a button per part, the current part marked', async () => {
+    vi.useFakeTimers()
+    const fs = fakeFs({ 'C:\\Users\\ann\\Projects': PROJECTS })
+    const { p } = picker({ list: fs.list })
+    p.start('C:\\Users\\ann\\Projects')
+    await flush()
+    const handlers = { type() {}, complete: () => false, open() {}, roots() {}, up() {}, add() {}, close() {} }
+    const html = renderToStaticMarkup(createElement(PickerPanel, { state: p.state(), on: handlers }))
+    vi.useRealTimers()
+    // The path box has the bar to itself.
+    const bar = /<div class="picker-bar">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? ''
+    expect(bar).toMatch(/id="picker-path"/)
+    expect(bar).not.toMatch(/<button/)
+    // The crumbs sit between the path box and the list.
+    const crumbs = /<nav class="picker-crumbs"[^>]*aria-label="Folder path parts"[^>]*>([\s\S]*?)<\/nav>/.exec(html)
+    expect(crumbs).not.toBeNull()
+    expect(html.indexOf('picker-crumbs')).toBeGreaterThan(html.indexOf('id="picker-path"'))
+    expect(html.indexOf('picker-crumbs')).toBeLessThan(html.indexOf('picker-list'))
+    const row = crumbs![1]!
+    // A ghost Up first: small, icon only, no frame.
+    expect(row).toMatch(/^<button[^>]*class="btn sm icon quiet picker-up"[^>]*aria-label="Up one folder"[^>]*><svg/)
+    expect(row).not.toMatch(/aria-label="Up one folder"[^>]*disabled/)
+    // Each part but the last is a button; the last is the current folder.
+    const parts = [...row.matchAll(/<button[^>]*class="picker-crumb"[^>]*>([^<]*)<\/button>/g)].map((m) => m[1])
+    expect(parts).toEqual(['This PC', 'C:', 'Users', 'ann'])
+    expect(row).toMatch(/<span[^>]*class="picker-crumb"[^>]*aria-current="location"[^>]*>Projects<\/span>/)
+    expect(row).not.toMatch(/>[›>]</)
   })
 })

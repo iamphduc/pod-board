@@ -119,6 +119,13 @@ export function startFolder(repoPaths: string[]): string | null {
   return parents.find((x) => x !== null && counts.get(x.key) === most)?.parent ?? null
 }
 
+export type Crumb = { label: string; path: string | null; current: boolean }
+
+/** The path crumbs for a listing. Stub. */
+export function crumbsFor(_listing: FolderListing | undefined): Crumb[] {
+  return []
+}
+
 type Parsed = { kind: 'roots' } | { kind: 'relative' } | { kind: 'list'; dir: string; prefix: string }
 
 function parse(text: string): Parsed {
@@ -272,6 +279,8 @@ export function createFolderPicker(deps: PickerDeps, onChange: (s: PickerState) 
     open(path: string) {
       go(path)
     },
+    /** The roots listing. Stub. */
+    roots() {},
     /** To the parent; from a root, to the roots. Nothing at the roots. */
     up() {
       if (!listing || listing.path === null) return
