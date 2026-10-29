@@ -2,7 +2,7 @@
 
 ## What it is
 
-Screen 2, at `#/<repoId>/<plan>/board`, opened from the Plan tab's `Open the wave board`: the run header and `Back to the run` above one column per wave of the shown sprint, one card per slice with a status dot and word, grey dependency lines with the critical path in `--fg`, and filter chips with counts. `#/…/board/<code>` opens a slice and adds the engineer view below ([engineer-view.md](engineer-view.md)). Logic lives in `packages/web/src/screens/board/board-view.ts`, line placement in `geometry.ts`, routes in `selection.ts`.
+Screen 2, at `#/<repoId>/<plan>/board`, opened from `Open the wave board` under the run's flow: the run header and `Back to the run` above one column per wave of the shown sprint, one card per slice with a status dot and word, grey dependency lines with the critical path in `--fg`, and filter chips with counts. `#/…/board/<code>` opens a slice and adds the engineer view below ([engineer-view.md](engineer-view.md)). Logic lives in `packages/web/src/screens/board/board-view.ts`, line placement in `geometry.ts`, routes in `selection.ts`.
 
 ## How it works
 
