@@ -156,6 +156,11 @@ export function crumbsFor(listing: FolderListing | undefined): Crumb[] {
   return out
 }
 
+/** Stub. */
+export function foldCrumbs(crumbs: Crumb[]): { head: Crumb[]; hidden: Crumb[]; tail: Crumb[] } {
+  return { head: crumbs, hidden: [], tail: [] }
+}
+
 type Parsed = { kind: 'roots' } | { kind: 'relative' } | { kind: 'list'; dir: string; prefix: string }
 
 function parse(text: string): Parsed {

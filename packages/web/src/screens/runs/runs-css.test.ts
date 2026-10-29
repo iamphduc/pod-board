@@ -211,12 +211,18 @@ describe('picker.css crumbs', () => {
   const at = (sel: string, media?: RegExp) =>
     Object.assign({}, ...pickerRules().filter((r) => (media ? !!r.media && media.test(r.media) : !r.media) && r.selectors.includes(sel)).map((r) => decls(r.body)))
 
-  it('wraps a long path rather than scrolling sideways', () => {
+  it('stays on one line; a long name ends in an ellipsis rather than scrolling sideways', () => {
     const row = at('.picker-crumbs')
     expect(row['display']).toBe('flex')
-    expect(row['flex-wrap']).toBe('wrap')
+    expect(row['flex-wrap']).toBe('nowrap')
     expect(row['min-width']).toBe('0')
-    expect(at('.picker-crumb')['overflow-wrap']).toBe('anywhere')
+    const crumb = at('.picker-crumb')
+    expect(crumb['min-width']).toBe('0')
+    expect(crumb['overflow']).toBe('hidden')
+    expect(crumb['text-overflow']).toBe('ellipsis')
+    expect(crumb['white-space']).toBe('nowrap')
+    // The root and the fold never shrink; the folder names do.
+    expect(at('.picker-fold')['flex']).toMatch(/^none$|^0 0/)
   })
 
   it('crumbs are muted 14 px Geist, the text colour on hover', () => {
@@ -229,5 +235,17 @@ describe('picker.css crumbs', () => {
 
   it('keeps the crumbs 44 px tall to touch on phones', () => {
     expect(at('button.picker-crumb', /max-width:\s*480px/)['min-height']).toBe('44px')
+    expect(at('.picker-fold', /max-width:\s*480px/)['min-height']).toBe('44px')
+    expect(at('.picker-fold', /max-width:\s*480px/)['min-width']).toBe('44px')
+    expect(at('.picker-fold-item', /max-width:\s*480px/)['min-height']).toBe('44px')
+  })
+})
+
+describe('runs.css Add repo size', () => {
+  it('is the regular size, not small', () => {
+    // .btn is 40 px; .btn.sm would make it 32 px.
+    const add = stylesAt(1280).get('.side-foot .add-repo')
+    expect(add?.['height']).toBeUndefined()
+    expect(add?.['width']).toBe('100%')
   })
 })

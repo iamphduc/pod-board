@@ -3,10 +3,11 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NEED_RELOAD, RESTARTED, UNREACHABLE } from '../../actions-client.ts'
 import type { AddResult } from '../../add-repo.ts'
-import { PickerPanel } from './FolderPicker.tsx'
+import { CrumbFoldView, PickerPanel } from './FolderPicker.tsx'
 import {
   createFolderPicker,
   crumbsFor,
+  foldCrumbs,
   FULL_PATH,
   getFolders,
   LOCKED,
@@ -387,9 +388,9 @@ describe('folder picker', () => {
 
     p.start(null)
     await flush()
-    // At the roots: Add and Up are disabled.
+    // At the roots: Add is disabled, and there is no Up button.
     expect(html()).toMatch(/<button[^>]*disabled=""[^>]*>Add this folder<\/button>/)
-    expect(html()).toMatch(/<button[^>]*aria-label="Up one folder"[^>]*disabled=""/)
+    expect(html()).not.toMatch(/aria-label="Up/)
     p.open('C:\\Users\\ann\\Projects')
     await flush()
     const markup = html()
@@ -497,7 +498,7 @@ describe('folder picker crumbs', () => {
     vi.useRealTimers()
   })
 
-  it('renders the crumbs row: a ghost Up, a button per part, the current part marked', async () => {
+  it('renders the crumbs row: plain crumbs, the middle folded, the current part marked', async () => {
     vi.useFakeTimers()
     const fs = fakeFs({ 'C:\\Users\\ann\\Projects': PROJECTS })
     const { p } = picker({ list: fs.list })
@@ -516,13 +517,60 @@ describe('folder picker crumbs', () => {
     expect(html.indexOf('picker-crumbs')).toBeGreaterThan(html.indexOf('id="picker-path"'))
     expect(html.indexOf('picker-crumbs')).toBeLessThan(html.indexOf('picker-list'))
     const row = crumbs![1]!
-    // A ghost Up first: small, icon only, no frame.
-    expect(row).toMatch(/^<button[^>]*class="btn sm icon quiet picker-up"[^>]*aria-label="Up one folder"[^>]*><svg/)
-    expect(row).not.toMatch(/aria-label="Up one folder"[^>]*disabled/)
-    // Each part but the last is a button; the last is the current folder.
+    // Plain crumbs: no Up button or other control.
+    expect(row).not.toMatch(/picker-up|aria-label="Up/)
+    // This PC › C: › Users › ann › Projects: the root and the last two stay, C: and Users fold into one button.
     const parts = [...row.matchAll(/<button[^>]*class="picker-crumb"[^>]*>([^<]*)<\/button>/g)].map((m) => m[1])
-    expect(parts).toEqual(['This PC', 'C:', 'Users', 'ann'])
-    expect(row).toMatch(/<span[^>]*class="picker-crumb"[^>]*aria-current="location"[^>]*>Projects<\/span>/)
-    expect(row).not.toMatch(/>[›>]</)
+    expect(parts).toEqual(['This PC', 'ann'])
+    const fold = /<button[^>]*class="picker-fold"[^>]*>/.exec(row)?.[0] ?? ''
+    expect(fold).toMatch(/aria-label="Show hidden folders"/)
+    expect(fold).toMatch(/aria-expanded="false"/)
+    expect(row.indexOf('picker-fold')).toBeGreaterThan(row.indexOf('This PC'))
+    expect(row.indexOf('picker-fold')).toBeLessThan(row.indexOf('>ann<'))
+    // The menu stays closed until the fold is pressed.
+    expect(row).not.toMatch(/>Users</)
+    // The current folder: not a button, its full name in a title.
+    expect(row).toMatch(/<span[^>]*class="picker-crumb"[^>]*aria-current="location"[^>]*title="Projects"[^>]*>Projects<\/span>/)
+    expect(row).not.toMatch(/>[›>…]</)
+  })
+
+  it('shows every crumb when there is nothing to fold', async () => {
+    vi.useFakeTimers()
+    const fs = fakeFs({ 'C:\\Users': USERS })
+    const { p } = picker({ list: fs.list })
+    p.start('C:\\Users')
+    await flush()
+    const handlers = { type() {}, complete: () => false, open() {}, roots() {}, add() {}, close() {} }
+    const html = renderToStaticMarkup(createElement(PickerPanel, { state: p.state(), on: handlers }))
+    vi.useRealTimers()
+    expect(html).not.toMatch(/picker-fold/)
+    const parts = [...html.matchAll(/<button[^>]*class="picker-crumb"[^>]*>([^<]*)<\/button>/g)].map((m) => m[1])
+    expect(parts).toEqual(['This PC', 'C:'])
+  })
+})
+
+describe('folding crumbs', () => {
+  const chain = (n: number) => Array.from({ length: n }, (_, i) => ({ label: `c${i}`, path: i === 0 ? null : `/c${i}`, current: i === n - 1 }))
+
+  it('keeps up to three crumbs as they are', () => {
+    for (const n of [0, 1, 2, 3]) expect(foldCrumbs(chain(n))).toEqual({ head: chain(n), hidden: [], tail: [] })
+  })
+
+  it('folds everything between the root and the last two', () => {
+    const c = chain(4)
+    expect(foldCrumbs(c)).toEqual({ head: [c[0]], hidden: [c[1]], tail: [c[2], c[3]] })
+    const deep = chain(8)
+    expect(foldCrumbs(deep)).toEqual({ head: [deep[0]], hidden: deep.slice(1, 6), tail: deep.slice(6) })
+  })
+
+  it('the fold menu lists the hidden folders in order, each a button', () => {
+    const hidden = chain(5).slice(1, 3)
+    const closed = renderToStaticMarkup(createElement(CrumbFoldView, { hidden, open: false, onToggle() {}, onPick() {} }))
+    expect(closed).toMatch(/<button[^>]*class="picker-fold"[^>]*aria-label="Show hidden folders"[^>]*aria-expanded="false"[^>]*><svg/)
+    expect(closed).not.toMatch(/c1/)
+    const open = renderToStaticMarkup(createElement(CrumbFoldView, { hidden, open: true, onToggle() {}, onPick() {} }))
+    expect(open).toMatch(/aria-expanded="true"/)
+    expect(open).toMatch(/class="menu picker-fold-menu"/)
+    expect([...open.matchAll(/<button[^>]*class="picker-fold-item"[^>]*>([^<]*)<\/button>/g)].map((m) => m[1])).toEqual(['c1', 'c2'])
   })
 })

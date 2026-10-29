@@ -4,7 +4,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { postRepo } from '../../add-repo.ts'
 import { Icon } from '../../theme/icons.tsx'
-import { createFolderPicker, crumbsFor, getFolders, startFolder, type PickerState } from './folder-picker.ts'
+import { createFolderPicker, crumbsFor, getFolders, startFolder, type Crumb, type PickerState } from './folder-picker.ts'
 import './picker.css'
 
 export type PickerHandlers = {
@@ -17,6 +17,13 @@ export type PickerHandlers = {
   up: () => void
   add: () => void
   close: () => void
+}
+
+export type CrumbFoldProps = { hidden: Crumb[]; open: boolean; onToggle: () => void; onPick: (c: Crumb) => void }
+
+/** Stub. */
+export function CrumbFoldView(_props: CrumbFoldProps) {
+  return null
 }
 
 /** The panel's markup for a state; FolderPicker feeds it. */

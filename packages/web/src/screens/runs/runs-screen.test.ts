@@ -180,7 +180,7 @@ function sideOf(html: string): string {
 const headerOf = (html: string) => /<header class="run-header"[\s\S]*?<\/header>/.exec(html)?.[0] ?? ''
 
 describe('sidebar', () => {
-  const ADD = /<button[^>]*class="btn sm lead add-repo"[^>]*>[\s\S]*?<svg[\s\S]*?<\/svg>Add repo<\/button>/
+  const ADD = /<button[^>]*class="btn lead add-repo"[^>]*>[\s\S]*?<svg[\s\S]*?<\/svg>Add repo<\/button>/
 
   it('runs top to bottom: title, runs head, runs list, Add repo', () => {
     const { html } = render({ repo: chess([onlyQueue()]) })
