@@ -1,5 +1,6 @@
 /**
- * The app's icons: 16 px SVGs drawn in currentColor, 1.5 px strokes, hidden from
+ * The app's icons: 16 px SVGs drawn in currentColor, 1.5 px strokes (1.75 beside a
+ * label, set in base.css), hidden from
  * assistive tech (the button's label or aria-label names the action). Use these,
  * never a text glyph such as `+`, `⋯`, `✓`, `→` or `↑`.
  */
@@ -9,7 +10,7 @@ export type IconName = 'plus' | 'more' | 'check' | 'chevron-right' | 'chevron-do
 
 /** Stroked shapes, drawn on a 16 × 16 grid. */
 const STROKED: Record<Exclude<IconName, 'more'>, ReactNode> = {
-  plus: <path d="M8 3.5v9M3.5 8h9" />,
+  plus: <path d="M8 3v10M3 8h10" />,
   check: <path d="M3.5 8.5l3 3 6-7" />,
   'chevron-right': <path d="M6 3.5L10.5 8 6 12.5" />,
   'chevron-down': <path d="M3.5 6L8 10.5 12.5 6" />,

@@ -68,13 +68,12 @@
   display: block;
   flex: 0 1 auto;
   min-width: 0;
-  min-height: 32px;
-  padding: 0 4px;
+  padding: 2px 6px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
-  font: 400 var(--size-dense) / 32px var(--font);
+  font: 400 var(--size-dense) / 20px var(--font);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -86,10 +85,10 @@
   flex: none;
 }
 
-/* Folder crumbs give way first, down to a few letters, so the current folder keeps its name longest. */
+/* Folder crumbs give way first, so the current folder keeps its name longest.
+   They size to their text: no min-width, so every gap around the arrows is even. */
 button.picker-crumb {
   flex-shrink: 1000;
-  min-width: 3em;
   cursor: pointer;
 }
 
@@ -270,9 +269,10 @@ button.picker-crumb:hover {
     min-height: 44px;
   }
 
+  /* Taller to touch, never wider: the same side padding keeps the gaps even. */
   button.picker-crumb {
     min-height: 44px;
-    line-height: 44px;
+    line-height: 40px;
   }
 
   .picker-fold {

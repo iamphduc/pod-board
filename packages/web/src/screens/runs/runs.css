@@ -88,8 +88,9 @@
 .side-foot .add-repo {
   width: 100%;
   justify-content: center;
-  padding-left: 16px;
-  padding-right: 16px;
+  /* Centred on the ink: the plus has about 2 px of empty space on its left. */
+  padding-left: 15px;
+  padding-right: 17px;
 }
 
 /* The Add repo dialog: a sizing box; the picker inside keeps its own frame. */
