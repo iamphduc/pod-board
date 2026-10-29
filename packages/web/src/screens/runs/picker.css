@@ -86,7 +86,10 @@
   flex: none;
 }
 
+/* Folder crumbs give way first, down to a few letters, so the current folder keeps its name longest. */
 button.picker-crumb {
+  flex-shrink: 1000;
+  min-width: 3em;
   cursor: pointer;
 }
 

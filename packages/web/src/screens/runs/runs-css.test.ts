@@ -225,7 +225,11 @@ describe('picker.css crumbs', () => {
     expect(at('.picker-fold')['flex']).toMatch(/^none$|^0 0/)
     // The parent gives way before the current folder, but keeps a few letters.
     const shrink = (d: Record<string, string>) => Number(d['flex-shrink'] ?? /^\S+\s+(\S+)/.exec(d['flex'] ?? '')?.[1] ?? 1)
-    expect(shrink(at('button.picker-crumb'))).toBeGreaterThan(shrink(at('.picker-crumb[aria-current="location"]')) * 10)
+    // Any shrink share at all would cut the current name by a fraction of a pixel, so it doesn't shrink;
+    // a cap leaves the other crumbs their room, and only a longer name ends in an ellipsis.
+    expect(shrink(at('.picker-crumb[aria-current="location"]'))).toBe(0)
+    expect(at('.picker-crumb[aria-current="location"]')['max-width']).toMatch(/^calc\(100% - \d+(\.\d+)?rem\)$/)
+    expect(shrink(at('button.picker-crumb'))).toBeGreaterThan(0)
     expect(at('button.picker-crumb')['min-width']).toMatch(/em$/)
   })
 
