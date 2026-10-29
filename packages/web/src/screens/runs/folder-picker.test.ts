@@ -8,6 +8,7 @@ import {
   createFolderPicker,
   crumbsFor,
   foldCrumbs,
+  foldMenuPlace,
   FULL_PATH,
   getFolders,
   LOCKED,
@@ -572,5 +573,21 @@ describe('folding crumbs', () => {
     expect(open).toMatch(/aria-expanded="true"/)
     expect(open).toMatch(/class="menu picker-fold-menu"/)
     expect([...open.matchAll(/<button[^>]*class="picker-fold-item"[^>]*>([^<]*)<\/button>/g)].map((m) => m[1])).toEqual(['c1', 'c2'])
+  })
+})
+
+describe('fold menu placement', () => {
+  it('opens under the … button, inside the window, and scrolls past the bottom edge', () => {
+    // A short dialog would clip a menu placed inside it, so the menu is placed against the window.
+    expect(foldMenuPlace({ left: 380, bottom: 418 }, { width: 1280, height: 800 })).toEqual({ top: 422, left: 380, maxHeight: 362 })
+  })
+
+  it('moves left to stay on a narrow screen', () => {
+    // 320 px wide at most, 16 px from the edge.
+    expect(foldMenuPlace({ left: 200, bottom: 300 }, { width: 375, height: 667 })).toEqual({ top: 304, left: 39, maxHeight: 347 })
+  })
+
+  it('never starts left of the window', () => {
+    expect(foldMenuPlace({ left: 4, bottom: 100 }, { width: 300, height: 600 }).left).toBe(16)
   })
 })

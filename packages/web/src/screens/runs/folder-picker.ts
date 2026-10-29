@@ -361,3 +361,8 @@ export function createFolderPicker(deps: PickerDeps, onChange: (s: PickerState) 
     },
   }
 }
+
+/** Stub. */
+export function foldMenuPlace(_trigger: { left: number; bottom: number }, _view: { width: number; height: number }): { top: number; left: number; maxHeight: number } {
+  return { top: 0, left: 0, maxHeight: 0 }
+}
