@@ -4,7 +4,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import { postRepo } from '../../add-repo.ts'
 import { Icon } from '../../theme/icons.tsx'
-import { createFolderPicker, crumbsFor, foldCrumbs, getFolders, startFolder, type Crumb, type PickerState } from './folder-picker.ts'
+import { createFolderPicker, crumbsFor, foldCrumbs, foldMenuPlace, getFolders, startFolder, type Crumb, type PickerState } from './folder-picker.ts'
 import { reduceMenu, type MenuEvent } from './menu-view.ts'
 import './picker.css'
 
@@ -22,14 +22,14 @@ export type PickerHandlers = {
 export type CrumbFoldProps = { hidden: Crumb[]; open: boolean; onToggle: () => void; onPick: (c: Crumb) => void }
 
 /** The `…` crumb and, when open, the menu of the folders it hides, in order. */
-export function CrumbFoldView({ hidden, open, onToggle, onPick, triggerRef, menuRef }: CrumbFoldProps & FoldRefs) {
+export function CrumbFoldView({ hidden, open, onToggle, onPick, triggerRef, menuRef, place }: CrumbFoldProps & FoldRefs) {
   return (
     <span className="picker-fold-wrap">
       <button ref={triggerRef} className="picker-fold" type="button" aria-label="Show hidden folders" aria-expanded={open} onClick={onToggle}>
         <Icon name="more" />
       </button>
       {open && (
-        <div ref={menuRef} className="menu picker-fold-menu" role="group" aria-label="Hidden folders">
+        <div ref={menuRef} className="menu picker-fold-menu" role="group" aria-label="Hidden folders" style={place}>
           {hidden.map((c) => (
             <button key={c.path ?? 'roots'} className="picker-fold-item" type="button" onClick={() => onPick(c)}>
               {c.label}
@@ -41,15 +41,22 @@ export function CrumbFoldView({ hidden, open, onToggle, onPick, triggerRef, menu
   )
 }
 
-type FoldRefs = { triggerRef?: RefObject<HTMLButtonElement | null>; menuRef?: RefObject<HTMLDivElement | null> }
+type FoldRefs = {
+  triggerRef?: RefObject<HTMLButtonElement | null>
+  menuRef?: RefObject<HTMLDivElement | null>
+  place?: { top: number; left: number; maxHeight: number } | undefined
+}
 
 /** The `…` crumb with its open state: Escape or an outside press closes the menu and puts focus back on `…`. */
 function CrumbFold({ hidden, onPick }: { hidden: Crumb[]; onPick: (c: Crumb) => void }) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const [place, setPlace] = useState<ReturnType<typeof foldMenuPlace>>()
   const send = (event: MenuEvent) => {
     const next = reduceMenu(open, event)
+    const r = triggerRef.current?.getBoundingClientRect()
+    if (next.open && r) setPlace(foldMenuPlace(r, { width: window.innerWidth, height: window.innerHeight }))
     setOpen(next.open)
     if (next.focusTrigger) triggerRef.current?.focus()
   }
@@ -83,6 +90,7 @@ function CrumbFold({ hidden, onPick }: { hidden: Crumb[]; onPick: (c: Crumb) => 
         }}
         triggerRef={triggerRef}
         menuRef={menuRef}
+        place={place}
       />
     </span>
   )

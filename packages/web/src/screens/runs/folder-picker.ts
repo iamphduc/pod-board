@@ -362,7 +362,17 @@ export function createFolderPicker(deps: PickerDeps, onChange: (s: PickerState) 
   }
 }
 
-/** Stub. */
-export function foldMenuPlace(_trigger: { left: number; bottom: number }, _view: { width: number; height: number }): { top: number; left: number; maxHeight: number } {
-  return { top: 0, left: 0, maxHeight: 0 }
+const FOLD_MENU_WIDTH = 320
+const EDGE = 16
+
+/**
+ * Where the fold menu opens, in window pixels (it is `position: fixed`, so the
+ * dialog's own scroll box can't clip it): 4 px under the `…` button, moved left
+ * to keep its widest (320 px) 16 px inside the window, and never left of 16 px.
+ * Its height stops 16 px above the window's bottom; longer lists scroll.
+ */
+export function foldMenuPlace(trigger: { left: number; bottom: number }, view: { width: number; height: number }): { top: number; left: number; maxHeight: number } {
+  const top = trigger.bottom + 4
+  const left = Math.max(EDGE, Math.min(trigger.left, view.width - FOLD_MENU_WIDTH - EDGE))
+  return { top, left, maxHeight: view.height - top - EDGE }
 }

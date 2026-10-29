@@ -223,6 +223,10 @@ describe('picker.css crumbs', () => {
     expect(crumb['white-space']).toBe('nowrap')
     // The root and the fold never shrink; the folder names do.
     expect(at('.picker-fold')['flex']).toMatch(/^none$|^0 0/)
+    // The parent gives way before the current folder, but keeps a few letters.
+    const shrink = (d: Record<string, string>) => Number(d['flex-shrink'] ?? /^\S+\s+(\S+)/.exec(d['flex'] ?? '')?.[1] ?? 1)
+    expect(shrink(at('button.picker-crumb'))).toBeGreaterThan(shrink(at('.picker-crumb[aria-current="location"]')) * 10)
+    expect(at('button.picker-crumb')['min-width']).toMatch(/em$/)
   })
 
   it('crumbs are muted 14 px Geist, the text colour on hover', () => {
