@@ -165,3 +165,17 @@ describe('runs.css main column and run cards', () => {
     expect(picked?.['border-color']).toBe('var(--border-strong)')
   })
 })
+
+describe('runs.css focus ring room', () => {
+  it('leaves the run cards room for the whole focus ring inside the scrolling list', () => {
+    const base = stripComments(readFileSync(join(here, '../../theme/base.css'), 'utf8'))
+    const ring = decls(/:focus-visible\s*\{([^}]*)\}/.exec(base)![1]!)
+    const width = Number(/(\d+(?:\.\d+)?)px/.exec(ring['outline']!)![1])
+    const offset = Number(/(\d+(?:\.\d+)?)px/.exec(ring['outline-offset']!)![1])
+    const runs = stylesAt(1280).get('.runs')!
+    expect(runs['overflow-y']).toBe('auto')
+    const pad = Number(/^(\d+(?:\.\d+)?)px$/.exec(runs['padding'] ?? '')?.[1] ?? 0)
+    expect(pad, 'padding inside the scroll box').toBeGreaterThanOrEqual(width + offset)
+    expect(runs['margin'], 'the padding is given back so the cards keep their place').toBe(`-${pad}px`)
+  })
+})
