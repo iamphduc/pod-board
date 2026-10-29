@@ -121,9 +121,39 @@ export function startFolder(repoPaths: string[]): string | null {
 
 export type Crumb = { label: string; path: string | null; current: boolean }
 
-/** The path crumbs for a listing. Stub. */
-export function crumbsFor(_listing: FolderListing | undefined): Crumb[] {
-  return []
+/**
+ * The path crumbs for the listed folder: the roots (`This PC` on Windows, `/`
+ * elsewhere, path null), then each folder down to the listed one, which is
+ * `current`. Windows paths come back in backslash style. At the roots there is
+ * one current crumb, named by what the roots hold. No listing → none.
+ */
+export function crumbsFor(listing: FolderListing | undefined): Crumb[] {
+  if (!listing) return []
+  if (listing.path === null) {
+    const drives = listing.folders.some((f) => DRIVE.test(f.path))
+    return [{ label: drives ? 'This PC' : '/', path: null, current: true }]
+  }
+  const p = listing.path
+  const parts = p.split(/[\\/]+/).filter((x) => x !== '')
+  const out: Crumb[] = []
+  if (DRIVE.test(p)) {
+    out.push({ label: 'This PC', path: null, current: false })
+    let path = ''
+    parts.forEach((part, i) => {
+      path = i === 0 ? `${part}\\` : `${path}${i === 1 ? '' : '\\'}${part}`
+      out.push({ label: part, path, current: false })
+    })
+  } else {
+    out.push({ label: '/', path: null, current: false })
+    let path = ''
+    for (const part of parts) {
+      path = `${path}/${part}`
+      out.push({ label: part, path, current: false })
+    }
+  }
+  const last = out.at(-1)!
+  last.current = true
+  return out
 }
 
 type Parsed = { kind: 'roots' } | { kind: 'relative' } | { kind: 'list'; dir: string; prefix: string }
@@ -279,8 +309,10 @@ export function createFolderPicker(deps: PickerDeps, onChange: (s: PickerState) 
     open(path: string) {
       go(path)
     },
-    /** The roots listing. Stub. */
-    roots() {},
+    /** The roots listing (the root crumb). */
+    roots() {
+      go(undefined)
+    },
     /** To the parent; from a root, to the roots. Nothing at the roots. */
     up() {
       if (!listing || listing.path === null) return

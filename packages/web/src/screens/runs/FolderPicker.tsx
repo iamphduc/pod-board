@@ -1,10 +1,10 @@
 // The Add repo folder picker, shown inside AddRepoDialog. The logic is in
 // folder-picker.ts; this file only wires it to React. The opener (screen 1's
 // sidebar) owns the trigger and puts focus back on it after `onClose`.
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { postRepo } from '../../add-repo.ts'
 import { Icon } from '../../theme/icons.tsx'
-import { createFolderPicker, getFolders, startFolder, type PickerState } from './folder-picker.ts'
+import { createFolderPicker, crumbsFor, getFolders, startFolder, type PickerState } from './folder-picker.ts'
 import './picker.css'
 
 export type PickerHandlers = {
@@ -12,6 +12,8 @@ export type PickerHandlers = {
   /** Tab: true when it completed a name (so focus stays put). */
   complete: () => boolean
   open: (path: string) => void
+  /** The root crumb: the drives, or `/` and home. */
+  roots: () => void
   up: () => void
   add: () => void
   close: () => void
@@ -29,6 +31,7 @@ export function PickerPanel({ state, on }: { state: PickerState; on: PickerHandl
     if (e.key === 'Tab' && !e.shiftKey && on.complete()) e.preventDefault()
   }
   const message = state.error ?? state.note
+  const crumbs = crumbsFor(state.listing)
   return (
     <section className="picker" aria-label="Add a repo" onKeyDown={onKey}>
       <div className="picker-head">
@@ -40,9 +43,6 @@ export function PickerPanel({ state, on }: { state: PickerState; on: PickerHandl
         </button>
       </div>
       <div className="picker-bar">
-        <button className="btn sm icon" type="button" aria-label="Up" disabled={state.listing?.path == null} onClick={on.up}>
-          <Icon name="arrow-up" />
-        </button>
         <input
           id="picker-path"
           className="input picker-path"
@@ -58,6 +58,29 @@ export function PickerPanel({ state, on }: { state: PickerState; on: PickerHandl
           onKeyDown={onInputKey}
         />
       </div>
+      <nav className="picker-crumbs" aria-label="Folder path parts">
+        <button className="btn sm icon quiet picker-up" type="button" aria-label="Up one folder" disabled={state.listing?.path == null} onClick={on.up}>
+          <Icon name="arrow-up" />
+        </button>
+        {crumbs.map((c, i) => (
+          <Fragment key={c.path ?? 'roots'}>
+            {i > 0 && (
+              <span className="picker-sep">
+                <Icon name="chevron-right" />
+              </span>
+            )}
+            {c.current ? (
+              <span className="picker-crumb" aria-current="location">
+                {c.label}
+              </span>
+            ) : (
+              <button className="picker-crumb" type="button" onClick={() => (c.path === null ? on.roots() : on.open(c.path))}>
+                {c.label}
+              </button>
+            )}
+          </Fragment>
+        ))}
+      </nav>
       {message && (
         <p id="picker-message" className="picker-message" role="alert">
           {message}
@@ -118,6 +141,7 @@ export function FolderPicker({ repoPaths, onClose }: { repoPaths: string[]; onCl
         type: picker.type,
         complete: picker.complete,
         open: picker.open,
+        roots: picker.roots,
         up: picker.up,
         add: () => void picker.add(),
         close: picker.escape,

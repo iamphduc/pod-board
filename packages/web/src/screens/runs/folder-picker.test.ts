@@ -411,7 +411,7 @@ describe('folder picker', () => {
       'C:\\Empty': listing('C:\\Empty', [], { parent: 'C:\\' }),
     })
     const { p } = picker({ list: fs.list })
-    const handlers = { type() {}, complete: () => false, open() {}, up() {}, add() {}, close() {} }
+    const handlers = { type() {}, complete: () => false, open() {}, roots() {}, up() {}, add() {}, close() {} }
     const html = () => renderToStaticMarkup(createElement(PickerPanel, { state: p.state(), on: handlers }))
 
     p.open('C:\\Locked')
