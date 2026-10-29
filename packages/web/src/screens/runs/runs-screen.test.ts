@@ -103,10 +103,9 @@ describe('runs screen', () => {
     expect(tabs.map((t) => t.label.replace(/ \d+$/, ''))).toEqual(['Waiting', 'Plan', 'Log'])
     expect(tabs.every((t) => t.expanded === 'false')).toBe(true)
     expect(html).not.toMatch(/tab-panel/)
-    // No `live` chip anywhere, and the bar has + Repo and the menu.
+    // No `live` chip anywhere, and no top bar.
     expect(text(html)).not.toMatch(/\blive\b/i)
-    expect(html).toMatch(/<button[^>]*class="btn sm lead"[^>]*aria-expanded="false"[^>]*>[\s\S]*?Repo<\/button>/)
-    expect(html).toMatch(/aria-label="Menu"/)
+    expect(html).not.toMatch(/class="bar"/)
     // The old views are gone.
     expect(text(html)).not.toMatch(/Wave board|Waiting on you|Add a repo/)
   })
@@ -169,5 +168,71 @@ describe('runs screen', () => {
     expect(html).not.toMatch(/next-step/)
     expect(html).not.toMatch(/class="tabs"/)
     expect(html).not.toMatch(/tab-panel/)
+  })
+})
+
+/** The sidebar's own markup. */
+function sideOf(html: string): string {
+  const m = /<aside class="side"[\s\S]*?<\/aside>/.exec(html)
+  expect(m, 'the sidebar').not.toBeNull()
+  return m![0]
+}
+const headerOf = (html: string) => /<header class="run-header"[\s\S]*?<\/header>/.exec(html)?.[0] ?? ''
+
+describe('sidebar', () => {
+  const ADD = /<button[^>]*class="btn lead add-repo"[^>]*>[\s\S]*?<svg[\s\S]*?<\/svg>Add repo<\/button>/
+
+  it('runs top to bottom: title, runs head, runs list, Add repo', () => {
+    const { html } = render({ repo: chess([onlyQueue()]) })
+    const side = sideOf(html)
+    const at = (needle: string) => side.indexOf(needle)
+    expect(at('Pod Board')).toBeGreaterThan(-1)
+    expect(at('Runs · ')).toBeGreaterThan(at('Pod Board'))
+    expect(at('class="run-list"')).toBeGreaterThan(at('Runs · '))
+    expect(side).toMatch(ADD)
+    expect(side.search(ADD)).toBeGreaterThan(at('class="run-list"'))
+    // The button opens a dialog, and nothing is open at start.
+    expect(side).toMatch(/aria-haspopup="dialog"/)
+    expect(html).not.toMatch(/<dialog/)
+  })
+
+  it('keeps the short rows: no plan or sprint subtitle', () => {
+    const side = sideOf(render({ repo: chess([onlyQueue()]) }).html)
+    expect(text(side)).toMatch(/chess-web/)
+    expect(side).toMatch(/class="status /)
+    expect(text(side)).not.toMatch(/sparring-ladder|ladder|wave/i)
+  })
+
+  it('shows lost · retrying beside the title only while lost', () => {
+    const repo = chess([onlyQueue()])
+    const lost = sideOf(render({ repo, stream: 'lost' }).html)
+    expect(lost).toMatch(/class="side-head"[\s\S]*Pod Board[\s\S]*lost · retrying/)
+    expect(sideOf(render({ repo, stream: 'live' }).html)).not.toMatch(/retrying/)
+  })
+
+  it('puts the menu at the right end of the run header', () => {
+    const { html } = render({ repo: chess([onlyQueue()]) })
+    expect(sideOf(html)).not.toMatch(/aria-label="Menu"/)
+    const header = headerOf(html)
+    expect(header).toMatch(/aria-label="Menu"/)
+    expect(header.indexOf('aria-label="Menu"')).toBeGreaterThan(header.indexOf('class="run-name"'))
+    expect(count(html, /aria-label="Menu"/)).toBe(1)
+  })
+
+  it('keeps the menu on the wave board header', () => {
+    expect(headerOf(render({ repo: chess(), view: 'board' }).html)).toMatch(/aria-label="Menu"/)
+  })
+
+  it('keeps the menu reachable with no repos', () => {
+    // No run, so no header: the theme must still be reachable.
+    const board: Board = { generatedAt: NOW, gh: 'ok', repos: [], actions: [] }
+    const html = renderToStaticMarkup(
+      createElement(RunsScreen, { board, stream: 'live', runs: [], selected: undefined, view: 'pipeline', slice: undefined, now: NOW, storage: storage() }),
+    )
+    expect(html).toMatch(/<main[\s\S]*aria-label="Menu"/)
+    expect(text(html)).toMatch(/No repos yet/)
+    expect(text(html)).toMatch(/Add repo/)
+    expect(text(html)).not.toMatch(/in the bar/)
+    expect(sideOf(html)).toMatch(ADD)
   })
 })

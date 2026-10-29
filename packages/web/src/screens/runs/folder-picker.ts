@@ -119,6 +119,53 @@ export function startFolder(repoPaths: string[]): string | null {
   return parents.find((x) => x !== null && counts.get(x.key) === most)?.parent ?? null
 }
 
+export type Crumb = { label: string; path: string | null; current: boolean }
+
+/**
+ * The path crumbs for the listed folder: the roots (`This PC` on Windows, `/`
+ * elsewhere, path null), then each folder down to the listed one, which is
+ * `current`. Windows paths come back in backslash style. At the roots there is
+ * one current crumb, named by what the roots hold. No listing → none.
+ */
+export function crumbsFor(listing: FolderListing | undefined): Crumb[] {
+  if (!listing) return []
+  if (listing.path === null) {
+    const drives = listing.folders.some((f) => DRIVE.test(f.path))
+    return [{ label: drives ? 'This PC' : '/', path: null, current: true }]
+  }
+  const p = listing.path
+  const parts = p.split(/[\\/]+/).filter((x) => x !== '')
+  const out: Crumb[] = []
+  if (DRIVE.test(p)) {
+    out.push({ label: 'This PC', path: null, current: false })
+    let path = ''
+    parts.forEach((part, i) => {
+      path = i === 0 ? `${part}\\` : `${path}${i === 1 ? '' : '\\'}${part}`
+      out.push({ label: part, path, current: false })
+    })
+  } else {
+    out.push({ label: '/', path: null, current: false })
+    let path = ''
+    for (const part of parts) {
+      path = `${path}/${part}`
+      out.push({ label: part, path, current: false })
+    }
+  }
+  const last = out.at(-1)!
+  last.current = true
+  return out
+}
+
+/**
+ * Folds a long crumb trail: the root and the last two (parent and current)
+ * always show; anything between them goes behind one `…` button, in order.
+ * Three crumbs or fewer show as they are.
+ */
+export function foldCrumbs(crumbs: Crumb[]): { head: Crumb[]; hidden: Crumb[]; tail: Crumb[] } {
+  if (crumbs.length <= 3) return { head: crumbs, hidden: [], tail: [] }
+  return { head: crumbs.slice(0, 1), hidden: crumbs.slice(1, -2), tail: crumbs.slice(-2) }
+}
+
 type Parsed = { kind: 'roots' } | { kind: 'relative' } | { kind: 'list'; dir: string; prefix: string }
 
 function parse(text: string): Parsed {
@@ -272,6 +319,10 @@ export function createFolderPicker(deps: PickerDeps, onChange: (s: PickerState) 
     open(path: string) {
       go(path)
     },
+    /** The roots listing (the root crumb). */
+    roots() {
+      go(undefined)
+    },
     /** To the parent; from a root, to the roots. Nothing at the roots. */
     up() {
       if (!listing || listing.path === null) return
@@ -309,4 +360,30 @@ export function createFolderPicker(deps: PickerDeps, onChange: (s: PickerState) 
       seq++
     },
   }
+}
+
+const FOLD_MENU_WIDTH = 320
+/** Two 44 px rows: never a negative or useless height near the window's bottom. */
+export const FOLD_MENU_MIN_HEIGHT = 88
+const EDGE = 16
+
+/**
+ * Where the fold menu opens, in window pixels (it is `position: fixed`, so the
+ * dialog's own scroll box can't clip it): 4 px under the `…` button, moved left
+ * to keep its widest (320 px) 16 px inside the window, and never left of 16 px.
+ * Its height stops 16 px above the window's bottom; longer lists scroll.
+ */
+export function foldMenuPlace(trigger: { left: number; bottom: number }, view: { width: number; height: number }): { top: number; left: number; maxHeight: number } {
+  const top = trigger.bottom + 4
+  const left = Math.max(EDGE, Math.min(trigger.left, view.width - FOLD_MENU_WIDTH - EDGE))
+  return { top, left, maxHeight: Math.max(FOLD_MENU_MIN_HEIGHT, view.height - top - EDGE) }
+}
+
+/**
+ * Whether the page moved under an open fold menu, so it closes: a window
+ * resize, or a scroll anywhere but the menu's own list (the menu is fixed to
+ * the window, so it would part from its `…` button).
+ */
+export function foldMenuMoved(kind: 'scroll' | 'resize', insideMenu: boolean): boolean {
+  return kind === 'resize' || !insideMenu
 }

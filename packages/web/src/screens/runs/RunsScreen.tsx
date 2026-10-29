@@ -4,9 +4,9 @@ import type { StreamState } from '../../board-stream.ts'
 import { hashFor, type View } from '../../selection.ts'
 import { Icon } from '../../theme/icons.tsx'
 import { BoardScreen } from '../board/BoardScreen.tsx'
+import { AddRepoDialog } from './AddRepoDialog.tsx'
 import { BarMenu } from './BarMenu.tsx'
 import { Chip } from './Chip.tsx'
-import { FolderPicker } from './FolderPicker.tsx'
 import { LogTab } from './LogTab.tsx'
 import { NextStepCard } from './NextStepCard.tsx'
 import { nextSteps } from './next-step.ts'
@@ -77,59 +77,61 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
   }
   const tabs: Tab[] = hasPlan ? ['waiting', 'plan', 'log'] : ['waiting', 'log']
 
+  const menu = (
+    <BarMenu
+      key={runKey}
+      autoContinue={selected?.plan !== undefined && autoSwitch ? { target: { repoId: selected.repoId, run: selected.plan }, on: autoSwitch.on } : undefined}
+      portBase={selected?.portBase}
+    />
+  )
+
   return (
     <div className="screen">
-      <header className="bar">
-        <span className="logo">
-          <i aria-hidden="true" />
-          Pod Board
-        </span>
-        {lost && (
-          <span className={`status ${lost.cls}`} role="status">
-            {lost.label}
-          </span>
-        )}
-        <span className="bar-gap" />
-        <button ref={repoButton} className="btn sm lead" type="button" aria-label="Add repo" aria-expanded={picking} onClick={() => setPicking((p) => !p)}>
-          <Icon name="plus" />
-          Repo
-        </button>
-        <BarMenu
-          key={runKey}
-          autoContinue={selected?.plan !== undefined && autoSwitch ? { target: { repoId: selected.repoId, run: selected.plan }, on: autoSwitch.on } : undefined}
-          portBase={selected?.portBase}
-        />
-      </header>
-      {picking && (
-        <div className="picker-slot">
-          <FolderPicker repoPaths={board?.repos.map((r) => r.path) ?? []} onClose={closePicker} />
-        </div>
-      )}
-      {notices.length > 0 && (
-        <div className="banners">
-          {notices.map((b) => (
-            <p key={b.chip.label} className="banner" data-tone={b.chip.cls} role="status">
-              <Chip chip={b.chip} />
-              <span>{b.text}</span>
-            </p>
-          ))}
-        </div>
-      )}
       <div className="screen-body">
         <aside className="side">
+          <div className="side-head">
+            <span className="logo">
+              <i aria-hidden="true" />
+              Pod Board
+            </span>
+            {lost && (
+              <span className={`status ${lost.cls}`} role="status">
+                {lost.label}
+              </span>
+            )}
+          </div>
           <RunsList runs={runs} active={activeRuns(runs)} selected={selected} />
+          <div className="side-foot">
+            <button ref={repoButton} className="btn lead add-repo" type="button" aria-haspopup="dialog" onClick={() => setPicking(true)}>
+              <Icon name="plus" />
+              Add repo
+            </button>
+          </div>
         </aside>
         <main className={view === 'board' ? 'main wide' : 'main'}>
+          {notices.length > 0 && (
+            <div className="banners">
+              {notices.map((b) => (
+                <p key={b.chip.label} className="banner" data-tone={b.chip.cls} role="status">
+                  <Chip chip={b.chip} />
+                  <span>{b.text}</span>
+                </p>
+              ))}
+            </div>
+          )}
           {!board ? (
             <p className="muted">{stream === 'lost' ? 'Waiting for the server…' : 'Connecting to the server…'}</p>
           ) : !selected || !repo ? (
             <div className="empty">
-              <h1 className="run-name">No repos yet</h1>
-              <p className="muted">Press Repo in the bar and pick a repo's folder to see its pod runs.</p>
+              <div className="run-top">
+                <h1 className="run-name">No repos yet</h1>
+                {menu}
+              </div>
+              <p className="muted">Press Add repo in the sidebar and pick a repo's folder to see its pod runs.</p>
             </div>
           ) : view === 'board' && pipeline && selected.plan !== undefined ? (
             <>
-              {header && <RunHeader header={header} />}
+              {header && <RunHeader header={header} actions={menu} />}
               <p className="back">
                 <a href={hashFor(selected)}>Back to the run</a>
               </p>
@@ -137,7 +139,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
             </>
           ) : (
             <>
-              {header && <RunHeader header={header} />}
+              {header && <RunHeader header={header} actions={menu} />}
               {steps && <NextStepCard key={runKey} repo={repo} run={selected} card={steps.card} />}
               <div className="tabs" role="group" aria-label="More about this run">
                 {tabs.map((t) => (
@@ -168,6 +170,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
           )}
         </main>
       </div>
+      {picking && <AddRepoDialog repoPaths={board?.repos.map((r) => r.path) ?? []} onClose={closePicker} />}
     </div>
   )
 }

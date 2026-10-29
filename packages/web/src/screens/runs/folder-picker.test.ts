@@ -3,9 +3,14 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NEED_RELOAD, RESTARTED, UNREACHABLE } from '../../actions-client.ts'
 import type { AddResult } from '../../add-repo.ts'
-import { PickerPanel } from './FolderPicker.tsx'
+import { CrumbFoldView, PickerPanel } from './FolderPicker.tsx'
 import {
   createFolderPicker,
+  crumbsFor,
+  foldCrumbs,
+  FOLD_MENU_MIN_HEIGHT,
+  foldMenuMoved,
+  foldMenuPlace,
   FULL_PATH,
   getFolders,
   LOCKED,
@@ -382,13 +387,13 @@ describe('folder picker', () => {
     const fs = fakeFs({ 'C:\\Users\\ann\\Projects': PROJECTS })
     const { p } = picker({ list: fs.list })
     const html = () => renderToStaticMarkup(createElement(PickerPanel, { state: p.state(), on: handlers }))
-    const handlers = { type() {}, complete: () => false, open() {}, up() {}, add() {}, close() {} }
+    const handlers = { type() {}, complete: () => false, open() {}, roots() {}, up() {}, add() {}, close() {} }
 
     p.start(null)
     await flush()
-    // At the roots: Add and Up are disabled.
+    // At the roots: Add is disabled, and there is no Up button.
     expect(html()).toMatch(/<button[^>]*disabled=""[^>]*>Add this folder<\/button>/)
-    expect(html()).toMatch(/<button[^>]*aria-label="Up"[^>]*disabled=""/)
+    expect(html()).not.toMatch(/aria-label="Up/)
     p.open('C:\\Users\\ann\\Projects')
     await flush()
     const markup = html()
@@ -410,7 +415,7 @@ describe('folder picker', () => {
       'C:\\Empty': listing('C:\\Empty', [], { parent: 'C:\\' }),
     })
     const { p } = picker({ list: fs.list })
-    const handlers = { type() {}, complete: () => false, open() {}, up() {}, add() {}, close() {} }
+    const handlers = { type() {}, complete: () => false, open() {}, roots() {}, up() {}, add() {}, close() {} }
     const html = () => renderToStaticMarkup(createElement(PickerPanel, { state: p.state(), on: handlers }))
 
     p.open('C:\\Locked')
@@ -435,5 +440,176 @@ describe('folder picker', () => {
     expect(p.state().notice).toBe('No folder here starts with “zz”.')
     p.type('C:\\Big\\a')
     expect(p.state().notice).toBe(TRUNCATED)
+  })
+})
+
+describe('folder picker crumbs', () => {
+  it('splits a Windows path into This PC, the drive, and each folder', () => {
+    expect(crumbsFor(listing('E:\\Projects\\pod', []))).toEqual([
+      { label: 'This PC', path: null, current: false },
+      { label: 'E:', path: 'E:\\', current: false },
+      { label: 'Projects', path: 'E:\\Projects', current: false },
+      { label: 'pod', path: 'E:\\Projects\\pod', current: true },
+    ])
+  })
+
+  it('reads forward slashes in a Windows path the same way', () => {
+    expect(crumbsFor(listing('E:/Projects', [])).map((c) => [c.label, c.path])).toEqual([
+      ['This PC', null],
+      ['E:', 'E:\\'],
+      ['Projects', 'E:\\Projects'],
+    ])
+  })
+
+  it('ends at the drive for a drive root', () => {
+    expect(crumbsFor(listing('C:\\', []))).toEqual([
+      { label: 'This PC', path: null, current: false },
+      { label: 'C:', path: 'C:\\', current: true },
+    ])
+  })
+
+  it('splits a POSIX path into /, then each folder', () => {
+    expect(crumbsFor(listing('/home/ann', []))).toEqual([
+      { label: '/', path: null, current: false },
+      { label: 'home', path: '/home', current: false },
+      { label: 'ann', path: '/home/ann', current: true },
+    ])
+  })
+
+  it('shows one current crumb at the roots, named by what they hold', () => {
+    expect(crumbsFor(ROOTS)).toEqual([{ label: 'This PC', path: null, current: true }])
+    const posix = listing(null, [entry('/'), entry('/home/ann')])
+    expect(crumbsFor(posix)).toEqual([{ label: '/', path: null, current: true }])
+  })
+
+  it('has none before the first listing', () => {
+    expect(crumbsFor(undefined)).toEqual([])
+  })
+
+  it('the root crumb lists the roots', async () => {
+    vi.useFakeTimers()
+    const fs = fakeFs({ 'C:\\Users\\ann\\Projects': PROJECTS })
+    const { p } = picker({ list: fs.list })
+    p.start('C:\\Users\\ann\\Projects')
+    await flush()
+    p.roots()
+    await flush()
+    expect(fs.asked.at(-1)).toBeUndefined()
+    expect(fs.asked).toHaveLength(2)
+    expect(p.state().atRoots).toBe(true)
+    expect(p.state().input).toBe('')
+    vi.useRealTimers()
+  })
+
+  it('renders the crumbs row: plain crumbs, the middle folded, the current part marked', async () => {
+    vi.useFakeTimers()
+    const fs = fakeFs({ 'C:\\Users\\ann\\Projects': PROJECTS })
+    const { p } = picker({ list: fs.list })
+    p.start('C:\\Users\\ann\\Projects')
+    await flush()
+    const handlers = { type() {}, complete: () => false, open() {}, roots() {}, up() {}, add() {}, close() {} }
+    const html = renderToStaticMarkup(createElement(PickerPanel, { state: p.state(), on: handlers }))
+    vi.useRealTimers()
+    // The path box has the bar to itself.
+    const bar = /<div class="picker-bar">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? ''
+    expect(bar).toMatch(/id="picker-path"/)
+    expect(bar).not.toMatch(/<button/)
+    // The crumbs sit between the path box and the list.
+    const crumbs = /<nav class="picker-crumbs"[^>]*aria-label="Folder path parts"[^>]*>([\s\S]*?)<\/nav>/.exec(html)
+    expect(crumbs).not.toBeNull()
+    expect(html.indexOf('picker-crumbs')).toBeGreaterThan(html.indexOf('id="picker-path"'))
+    expect(html.indexOf('picker-crumbs')).toBeLessThan(html.indexOf('picker-list'))
+    const row = crumbs![1]!
+    // Plain crumbs: no Up button or other control.
+    expect(row).not.toMatch(/picker-up|aria-label="Up/)
+    // This PC › C: › Users › ann › Projects: the root and the last two stay, C: and Users fold into one button.
+    const parts = [...row.matchAll(/<button[^>]*class="picker-crumb"[^>]*>([^<]*)<\/button>/g)].map((m) => m[1])
+    expect(parts).toEqual(['This PC', 'ann'])
+    const fold = /<button[^>]*class="picker-fold"[^>]*>/.exec(row)?.[0] ?? ''
+    expect(fold).toMatch(/aria-label="Show hidden folders"/)
+    expect(fold).toMatch(/aria-expanded="false"/)
+    expect(row.indexOf('picker-fold')).toBeGreaterThan(row.indexOf('This PC'))
+    expect(row.indexOf('picker-fold')).toBeLessThan(row.indexOf('>ann<'))
+    // The menu stays closed until the fold is pressed.
+    expect(row).not.toMatch(/>Users</)
+    // The current folder: not a button, its full name in a title.
+    expect(row).toMatch(/<span[^>]*class="picker-crumb"[^>]*aria-current="location"[^>]*title="Projects"[^>]*>Projects<\/span>/)
+    expect(row).not.toMatch(/>[›>…]</)
+  })
+
+  it('shows every crumb when there is nothing to fold', async () => {
+    vi.useFakeTimers()
+    const fs = fakeFs({ 'C:\\Users': USERS })
+    const { p } = picker({ list: fs.list })
+    p.start('C:\\Users')
+    await flush()
+    const handlers = { type() {}, complete: () => false, open() {}, roots() {}, add() {}, close() {} }
+    const html = renderToStaticMarkup(createElement(PickerPanel, { state: p.state(), on: handlers }))
+    vi.useRealTimers()
+    expect(html).not.toMatch(/picker-fold/)
+    const parts = [...html.matchAll(/<button[^>]*class="picker-crumb"[^>]*>([^<]*)<\/button>/g)].map((m) => m[1])
+    expect(parts).toEqual(['This PC', 'C:'])
+  })
+})
+
+describe('folding crumbs', () => {
+  const chain = (n: number) => Array.from({ length: n }, (_, i) => ({ label: `c${i}`, path: i === 0 ? null : `/c${i}`, current: i === n - 1 }))
+
+  it('keeps up to three crumbs as they are', () => {
+    for (const n of [0, 1, 2, 3]) expect(foldCrumbs(chain(n))).toEqual({ head: chain(n), hidden: [], tail: [] })
+  })
+
+  it('folds everything between the root and the last two', () => {
+    const c = chain(4)
+    expect(foldCrumbs(c)).toEqual({ head: [c[0]], hidden: [c[1]], tail: [c[2], c[3]] })
+    const deep = chain(8)
+    expect(foldCrumbs(deep)).toEqual({ head: [deep[0]], hidden: deep.slice(1, 6), tail: deep.slice(6) })
+  })
+
+  it('the fold menu lists the hidden folders in order, each a button', () => {
+    const hidden = chain(5).slice(1, 3)
+    const closed = renderToStaticMarkup(createElement(CrumbFoldView, { hidden, open: false, onToggle() {}, onPick() {} }))
+    expect(closed).toMatch(/<button[^>]*class="picker-fold"[^>]*aria-label="Show hidden folders"[^>]*aria-expanded="false"[^>]*><svg/)
+    expect(closed).not.toMatch(/c1/)
+    const open = renderToStaticMarkup(createElement(CrumbFoldView, { hidden, open: true, onToggle() {}, onPick() {} }))
+    expect(open).toMatch(/aria-expanded="true"/)
+    expect(open).toMatch(/class="menu picker-fold-menu"/)
+    expect([...open.matchAll(/<button[^>]*class="picker-fold-item"[^>]*>([^<]*)<\/button>/g)].map((m) => m[1])).toEqual(['c1', 'c2'])
+  })
+})
+
+describe('fold menu placement', () => {
+  it('opens under the … button, inside the window, and scrolls past the bottom edge', () => {
+    // A short dialog would clip a menu placed inside it, so the menu is placed against the window.
+    expect(foldMenuPlace({ left: 380, bottom: 418 }, { width: 1280, height: 800 })).toEqual({ top: 422, left: 380, maxHeight: 362 })
+  })
+
+  it('moves left to stay on a narrow screen', () => {
+    // 320 px wide at most, 16 px from the edge.
+    expect(foldMenuPlace({ left: 200, bottom: 300 }, { width: 375, height: 667 })).toEqual({ top: 304, left: 39, maxHeight: 347 })
+  })
+
+  it('never starts left of the window', () => {
+    expect(foldMenuPlace({ left: 4, bottom: 100 }, { width: 300, height: 600 }).left).toBe(16)
+  })
+})
+
+describe('fold menu while the page moves', () => {
+  it('keeps a usable height near the bottom of the window', () => {
+    // 260 px window, button bottom at 240: 4 px under it would leave a negative height.
+    expect(foldMenuPlace({ left: 380, bottom: 240 }, { width: 1280, height: 260 }).maxHeight).toBe(FOLD_MENU_MIN_HEIGHT)
+    expect(FOLD_MENU_MIN_HEIGHT).toBeGreaterThanOrEqual(88)
+  })
+
+  it('closes on a window resize', () => {
+    expect(foldMenuMoved('resize', false)).toBe(true)
+  })
+
+  it('closes when the dialog or page scrolls under it', () => {
+    expect(foldMenuMoved('scroll', false)).toBe(true)
+  })
+
+  it('stays open while its own list scrolls', () => {
+    expect(foldMenuMoved('scroll', true)).toBe(false)
   })
 })

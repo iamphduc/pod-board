@@ -46,3 +46,13 @@ describe('icons', () => {
     expect(seen.size).toBe(NAMES.length)
   })
 })
+
+describe('the plus fills its box', () => {
+  it('spans 3 to 13 on both axes, so it reads as large as a 14 px label', () => {
+    const markup = renderToStaticMarkup(createElement(Icon, { name: 'plus' }))
+    const d = /<path d="([^"]*)"/.exec(markup)?.[1] ?? ''
+    const nums = [...d.matchAll(/-?\d+(?:\.\d+)?/g)].map((m) => Number(m[0]))
+    expect(d).toMatch(/^M8 3v10M3 8h10$/)
+    expect(Math.min(...nums)).toBe(3)
+  })
+})

@@ -233,10 +233,18 @@ a:hover {
 
 .btn.lead {
   padding-left: 16px;
+  gap: 6px;
 }
 
 .btn.trail {
   padding-right: 16px;
+  gap: 6px;
+}
+
+/* Beside a 14 px / 500 label, the icon's line matches the label's stem. */
+.btn.lead svg,
+.btn.trail svg {
+  stroke-width: 1.75;
 }
 
 .btn.sm.lead {
