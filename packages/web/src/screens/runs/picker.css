@@ -38,19 +38,18 @@
   font-size: var(--size-small);
 }
 
-/* Path crumbs under the path box: a ghost Up, then each folder, the last one current. Wraps, never scrolls sideways. */
+/*
+ * Path crumbs under the path box, on one line: the root, a `…` fold for the
+ * middle folders, then the parent and the current folder. Folder names shrink
+ * and end in an ellipsis (full name in `title`); nothing scrolls sideways.
+ */
 .picker-crumbs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 2px 4px;
+  gap: 4px;
   min-width: 0;
   margin-top: -8px;
-}
-
-.picker-crumbs .picker-up {
-  flex: none;
-  margin-right: 4px;
 }
 
 .picker-sep {
@@ -66,8 +65,8 @@
 
 .picker-crumb {
   appearance: none;
-  display: inline-flex;
-  align-items: center;
+  display: block;
+  flex: 0 1 auto;
   min-width: 0;
   min-height: 32px;
   padding: 0 4px;
@@ -75,9 +74,16 @@
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
-  font: 400 var(--size-dense) / 1.3 var(--font);
-  overflow-wrap: anywhere;
+  font: 400 var(--size-dense) / 32px var(--font);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: left;
+}
+
+/* The root (This PC or /) keeps its whole name. */
+.picker-crumbs > .picker-crumb:first-child {
+  flex: none;
 }
 
 button.picker-crumb {
@@ -92,6 +98,68 @@ button.picker-crumb:hover {
 .picker-crumb[aria-current="location"] {
   color: var(--fg);
   font-weight: 500;
+}
+
+.picker-fold-slot,
+.picker-fold-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.picker-fold {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.picker-fold:hover,
+.picker-fold[aria-expanded="true"] {
+  color: var(--fg);
+  background: var(--hover);
+}
+
+/* The hidden folders, in order, under the `…`. */
+.picker-fold-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 5;
+  display: grid;
+  min-width: 160px;
+  max-width: min(320px, calc(100vw - 48px));
+}
+
+.picker-fold-item {
+  appearance: none;
+  display: block;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  font: 400 var(--size-dense) / 36px var(--font);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.picker-fold-item:hover {
+  background: var(--hover);
 }
 
 .picker-message,
@@ -195,6 +263,17 @@ button.picker-crumb:hover {
 
   button.picker-crumb {
     min-height: 44px;
+    line-height: 44px;
+  }
+
+  .picker-fold {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .picker-fold-item {
+    min-height: 44px;
+    line-height: 44px;
   }
 
   .picker-foot {

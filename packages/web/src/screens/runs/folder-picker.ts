@@ -156,9 +156,14 @@ export function crumbsFor(listing: FolderListing | undefined): Crumb[] {
   return out
 }
 
-/** Stub. */
+/**
+ * Folds a long crumb trail: the root and the last two (parent and current)
+ * always show; anything between them goes behind one `…` button, in order.
+ * Three crumbs or fewer show as they are.
+ */
 export function foldCrumbs(crumbs: Crumb[]): { head: Crumb[]; hidden: Crumb[]; tail: Crumb[] } {
-  return { head: crumbs, hidden: [], tail: [] }
+  if (crumbs.length <= 3) return { head: crumbs, hidden: [], tail: [] }
+  return { head: crumbs.slice(0, 1), hidden: crumbs.slice(1, -2), tail: crumbs.slice(-2) }
 }
 
 type Parsed = { kind: 'roots' } | { kind: 'relative' } | { kind: 'list'; dir: string; prefix: string }

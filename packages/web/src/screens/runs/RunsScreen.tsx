@@ -102,7 +102,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
           </div>
           <RunsList runs={runs} active={activeRuns(runs)} selected={selected} />
           <div className="side-foot">
-            <button ref={repoButton} className="btn sm lead add-repo" type="button" aria-haspopup="dialog" onClick={() => setPicking(true)}>
+            <button ref={repoButton} className="btn lead add-repo" type="button" aria-haspopup="dialog" onClick={() => setPicking(true)}>
               <Icon name="plus" />
               Add repo
             </button>

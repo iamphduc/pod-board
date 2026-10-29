@@ -88,8 +88,8 @@
 .side-foot .add-repo {
   width: 100%;
   justify-content: center;
-  padding-left: 12px;
-  padding-right: 12px;
+  padding-left: 16px;
+  padding-right: 16px;
 }
 
 /* The Add repo dialog: a sizing box; the picker inside keeps its own frame. */
