@@ -101,8 +101,8 @@ describe('runs.css layout', () => {
   })
 
   it('the main column is about 720 px on desktop', () => {
-    const main = stylesAt(1280).get('.main')
-    expect(main?.['max-width']).toBe('720px')
+    // The column's parts stay 720 px; only the flow, a wide data view, goes past it.
+    expect(stylesAt(1280).get('.main:not(.wide) > *')?.['max-width']).toBe('720px')
     expect(stylesAt(1280).get('.screen-body')?.['grid-template-columns']).not.toMatch(/^(1fr|minmax\(0,\s*1fr\))$/)
   })
 })
@@ -143,12 +143,55 @@ describe('runs.css sidebar', () => {
 
 describe('runs.css main column and run cards', () => {
   it('centres the 720 px column beside the sidebar', () => {
-    const main = stylesAt(1280).get('.main')
-    expect(main?.['max-width']).toBe('720px')
+    const styles = stylesAt(1280)
+    const main = styles.get('.main')
     expect(main?.['margin-inline']).toBe('auto')
     expect(main?.['box-sizing']).toBe('content-box')
+    // Each part of the column is 720 px at most, centred in the main box.
+    const part = styles.get('.main:not(.wide) > *')
+    expect(part?.['max-width']).toBe('720px')
+    expect(part?.['width']).toBe('100%')
+    expect(part?.['justify-self']).toBe('center')
     // The wave board keeps the full width.
-    expect(stylesAt(1280).get('.main.wide')?.['max-width']).toBe('none')
+    expect(styles.get('.main.wide')?.['max-width']).toBe('none')
+  })
+
+  it('lets the flow use more width than the column, centred, scrolling inside its own box', () => {
+    const styles = stylesAt(1280)
+    const px = (v: string | undefined) => Number(/^(\d+)px$/.exec(v ?? '')?.[1] ?? NaN)
+    const mainCap = px(styles.get('.main')?.['max-width'])
+    const flowCap = px(styles.get('.main:not(.wide) > .flow-frame')?.['max-width'])
+    expect(flowCap).toBeGreaterThan(720)
+    expect(mainCap).toBeGreaterThanOrEqual(flowCap)
+    const frame = styles.get('.flow-frame')
+    expect(frame?.['overflow-x']).toBe('auto')
+    expect(frame?.['min-width']).toBe('0')
+    // On a phone it still scrolls inside its box.
+    expect(stylesAt(375).get('.flow-frame')?.['overflow-x']).toBe('auto')
+  })
+
+  const STATUS = /var\(--(blocked|needs-you|running|ready|idle)\)/
+
+  it('gives cards a plain border and colours only the highlighted one', () => {
+    const styles = stylesAt(1280)
+    expect(styles.get('.flow-step')?.['border']).toBe('1px solid var(--border)')
+    expect(styles.get('.flow-step.hi.live')?.['border-color']).toBe('var(--running)')
+    expect(styles.get('.flow-step.hi.you')?.['border-color']).toBe('var(--needs-you)')
+    expect(styles.get('.flow-step.hi.blocked')?.['border-color']).toBe('var(--blocked)')
+    // No coloured card edges: a status colour on a border or background only on a highlighted card.
+    for (const r of runsRules().filter((x) => x.selectors.some((sel) => sel.includes('flow')))) {
+      const d = decls(r.body)
+      for (const prop of Object.keys(d)) {
+        if (!/^(border|background|box-shadow)/.test(prop) || !STATUS.test(d[prop]!)) continue
+        for (const sel of r.selectors) expect(sel, `${sel} ${prop}`).toMatch(/^\.flow-step\.hi\./)
+      }
+    }
+  })
+
+  it('dims waiting cards by colour, not opacity, so their text stays readable', () => {
+    const dim = stylesAt(1280).get('.flow-step.dim')
+    expect(dim?.['opacity']).toBeUndefined()
+    expect(stylesAt(1280).get('.flow-step.dim .flow-label')?.['color']).toBe('var(--muted)')
   })
 
   it('shows each run as its own card with a gap, not one box with dividers', () => {

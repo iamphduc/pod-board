@@ -74,3 +74,12 @@ export function runHeader(run: RunSummary | undefined, repo: BoardRepo | undefin
   if (wave !== undefined) header.wave = wave
   return header
 }
+
+export type FlowMark = 'check' | 'dot' | 'alert' | 'blocked' | 'circle'
+export type FlowStep = { key: string; label: string; detail: string; state: StepState; word: string; mark: FlowMark; highlight: boolean; dim: boolean }
+export type FlowColumn = { key: string; caption: string; steps: FlowStep[] }
+
+/** The flow's columns. Not built yet. */
+export function flowColumns(_stages: Stage[]): FlowColumn[] {
+  return []
+}

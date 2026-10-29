@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { Icon, ICON_NAMES, type IconName } from './icons.tsx'
 
-const NAMES: IconName[] = ['plus', 'more', 'check', 'chevron-right', 'chevron-down', 'arrow-up', 'folder', 'close']
+const NAMES: IconName[] = ['plus', 'more', 'check', 'chevron-right', 'chevron-down', 'arrow-up', 'arrow-right', 'folder', 'close', 'dot', 'circle', 'alert', 'blocked']
 
 const render = (name: IconName) => renderToStaticMarkup(createElement(Icon, { name }))
 
