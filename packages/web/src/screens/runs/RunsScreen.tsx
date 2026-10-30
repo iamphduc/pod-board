@@ -140,7 +140,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
           ) : (
             <>
               {header && <RunHeader header={header} actions={menu} />}
-              <Flow key={runKey} stages={stages} {...(pipeline ? { boardHref: hashFor(selected, 'board') } : {})} />
+              <Flow key={`flow:${runKey}`} stages={stages} {...(pipeline ? { boardHref: hashFor(selected, 'board') } : {})} />
               {steps && <NextStepCard key={runKey} repo={repo} run={selected} card={steps.card} />}
               <div className="tabs" role="group" aria-label="More about this run">
                 {TABS.map((t) => (

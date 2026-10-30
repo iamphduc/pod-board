@@ -321,3 +321,15 @@ describe('sidebar', () => {
     expect(sideOf(html)).toMatch(ADD)
   })
 })
+
+describe('sibling keys', () => {
+  // React keeps a stale child when two siblings share a key: switching runs left the last run's flow on screen.
+  it('the flow and the Next step card never share a key', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync(new URL('./RunsScreen.tsx', import.meta.url), 'utf8')
+    const keyOf = (tag: string) => new RegExp(`<${tag} key=\{([^}]+\}?)\}`).exec(src)?.[1]
+    expect(keyOf('Flow')).toBeDefined()
+    expect(keyOf('NextStepCard')).toBeDefined()
+    expect(keyOf('Flow')).not.toBe(keyOf('NextStepCard'))
+  })
+})
