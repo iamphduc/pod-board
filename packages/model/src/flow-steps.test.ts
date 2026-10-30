@@ -61,13 +61,14 @@ function repo(o: RepoOpts = {}): BoardRepo {
   return { id: 'r', name: 'r', path: '/r', source: 'registered', model: buildRepoModel(files), agents: o.agents ?? [], prs: o.prs ?? [], claims: [] }
 }
 
-const gh = (number: number, state: PrStatus['state'], branch: string, base?: string): PrStatus => ({
+const gh = (number: number, state: PrStatus['state'], branch: string, base?: string, mergedAt?: number): PrStatus => ({
   number,
   state,
   checks: 'pass',
   checkedAt: NOW,
   branch,
   ...(base === undefined ? {} : { base }),
+  ...(mergedAt === undefined ? {} : { mergedAt }),
 })
 
 let seq = 0
@@ -170,7 +171,8 @@ describe('buildFlow', () => {
   })
 
   describe('staging → main', () => {
-    const merged = gh(80, 'merged', 'alpha', 'pod-staging')
+    // The final PR #80 merged into pod-staging an hour ago.
+    const merged = gh(80, 'merged', 'alpha', 'pod-staging', NOW - 60 * MIN)
 
     it('is left out with no staging branch', () => {
       expect(stepOf(flow(repo()), 'staging')).toBeUndefined()
@@ -189,13 +191,26 @@ describe('buildFlow', () => {
       expect(read(repo({ prs: [merged, gh(91, 'open', 'pod-staging', 'main')] }), 'staging')).toEqual({ state: 'you', detail: 'PR #91 · you merge' })
       // No Merge here: the Next step card's rules are unchanged.
       expect(stepOf(flow(repo({ prs: [merged, gh(91, 'open', 'pod-staging', 'main')] })), 'staging')).not.toHaveProperty('merge')
-      expect(read(repo({ prs: [merged, gh(91, 'merged', 'pod-staging', 'main')] }), 'staging')).toEqual({ state: 'done', detail: 'merged PR #91' })
-      expect(read(repo({ prs: [merged, gh(91, 'closed', 'pod-staging', 'main')] }), 'staging')).toEqual({ state: 'blocked', detail: 'PR #91 · closed' })
+      expect(read(repo({ prs: [merged, gh(91, 'merged', 'pod-staging', 'main', NOW - 5 * MIN)] }), 'staging')).toEqual({ state: 'done', detail: 'merged PR #91' })
     })
 
-    it("an older staging PR from the last plan doesn't count", () => {
-      // pod-staging is reused by every plan: #70 merged before this plan's final PR #80.
-      expect(read(repo({ prs: [merged, gh(70, 'merged', 'pod-staging', 'main')] }), 'staging')).toEqual({ state: 'wait', detail: 'not open yet' })
+    it('an open staging PR always counts, even one pod reused from an earlier plan', () => {
+      // Gate 7 reuses the open pod-staging → main PR, so its number is below this plan's final PR.
+      expect(read(repo({ prs: [merged, gh(13, 'open', 'pod-staging', 'main')] }), 'staging')).toEqual({ state: 'you', detail: 'PR #13 · you merge' })
+    })
+
+    it('a merged staging PR counts only when it merged after the final PR', () => {
+      // The reused #13 merged after #80: done.
+      expect(read(repo({ prs: [merged, gh(13, 'merged', 'pod-staging', 'main', NOW - 5 * MIN)] }), 'staging')).toEqual({ state: 'done', detail: 'merged PR #13' })
+      // The last plan's staging PR merged before this plan's final PR: not this plan's.
+      expect(read(repo({ prs: [merged, gh(70, 'merged', 'pod-staging', 'main', NOW - 120 * MIN)] }), 'staging')).toEqual({ state: 'wait', detail: 'not open yet' })
+      // A higher number proves nothing without times.
+      expect(read(repo({ prs: [merged, gh(91, 'merged', 'pod-staging', 'main')] }), 'staging')).toEqual({ state: 'wait', detail: 'not open yet' })
+      expect(read(repo({ prs: [gh(80, 'merged', 'alpha', 'pod-staging'), gh(91, 'merged', 'pod-staging', 'main', NOW)] }), 'staging')).toEqual({ state: 'wait', detail: 'not open yet' })
+    })
+
+    it("a closed staging PR isn't shown as this plan's: no time says which plan it was", () => {
+      expect(read(repo({ prs: [merged, gh(91, 'closed', 'pod-staging', 'main')] }), 'staging')).toEqual({ state: 'wait', detail: 'not open yet' })
     })
 
     it("uses the final PR's own staging base over the decision", () => {

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { createExec, createGhReader, type ExecResult, type GhExec } from './gh.ts'
 
 const REPO = 'E:\\Projects\\chess-web'
-const PR_FIELDS = 'number,state,url,statusCheckRollup,baseRefName'
+const PR_FIELDS = 'number,state,url,statusCheckRollup,baseRefName,mergedAt'
 
 type Call = { args: string[]; cwd: string }
 
@@ -354,6 +354,19 @@ describe('createGhReader', () => {
       expect(reader.get(REPO, 80)?.base).toBe('pod-staging')
     })
 
+    test('merge time', async () => {
+      const gh = fakeGh()
+      gh.prs.set(80, ok(JSON.stringify({ number: 80, state: 'MERGED', url: 'u', statusCheckRollup: [], mergedAt: '2026-10-30T10:00:00Z' })))
+      gh.prs.set(81, ok(JSON.stringify({ number: 81, state: 'OPEN', url: 'u', statusCheckRollup: [], mergedAt: null })))
+      gh.prs.set(82, ok(JSON.stringify({ number: 82, state: 'MERGED', url: 'u', statusCheckRollup: [], mergedAt: 'soon' })))
+      const reader = createGhReader({ exec: gh.exec, now: clock().now })
+      await reader.refresh(REPO, [80, 81, 82])
+      expect(reader.get(REPO, 80)?.mergedAt).toBe(Date.UTC(2026, 9, 30, 10))
+      // No time, or one that isn't a date: left out.
+      expect(reader.get(REPO, 81)).not.toHaveProperty('mergedAt')
+      expect(reader.get(REPO, 82)).not.toHaveProperty('mergedAt')
+    })
+
     test('url', async () => {
       expect((await view(prJson(4, 'OPEN')))?.url).toBe('https://github.com/o/r/pull/4')
       const noUrl = await view(JSON.stringify({ number: 4, state: 'OPEN', statusCheckRollup: [] }))
@@ -411,7 +424,7 @@ describe('createGhReader', () => {
 })
 
 describe('PRs found by head branch (fix runs)', () => {
-  const LIST_FIELDS = 'number,state,url,statusCheckRollup,baseRefName,headRefName'
+  const LIST_FIELDS = 'number,state,url,statusCheckRollup,baseRefName,mergedAt,headRefName'
   const item = (n: number, state: string, head = 'fix-scroll') => ({ number: n, state, url: `https://github.com/o/r/pull/${n}`, statusCheckRollup: [], headRefName: head })
 
   /** A fake `gh` that answers `pr list --head <b>` from `lists`. */
