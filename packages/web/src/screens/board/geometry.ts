@@ -26,13 +26,21 @@ export function downPath(from: Box, to: Box, origin: Box): string {
 }
 
 /** An open chevron, 5 deep and 8 wide, with its tip on (`x`, `y`), pointing `dir`. */
-export function headPath(x: number, y: number, dir: 'right' | 'down'): string {
-  return dir === 'right'
-    ? `M${n(x - 5)} ${n(y - 4)} L${n(x)} ${n(y)} L${n(x - 5)} ${n(y + 4)}`
-    : `M${n(x - 4)} ${n(y - 5)} L${n(x)} ${n(y)} L${n(x + 4)} ${n(y - 5)}`
+export function headPath(x: number, y: number, dir: 'right' | 'left' | 'down'): string {
+  if (dir === 'right') return `M${n(x - 5)} ${n(y - 4)} L${n(x)} ${n(y)} L${n(x - 5)} ${n(y + 4)}`
+  if (dir === 'left') return `M${n(x + 5)} ${n(y - 4)} L${n(x)} ${n(y)} L${n(x + 5)} ${n(y + 4)}`
+  return `M${n(x - 4)} ${n(y - 5)} L${n(x)} ${n(y)} L${n(x + 4)} ${n(y - 5)}`
 }
 
-/** Not built yet. */
-export function backPath(_from: Box, _to: Box, _origin: Box): string {
-  return ''
+/**
+ * Back to an earlier column: from `from`'s left edge (at its middle) to `to`'s right edge a third of the
+ * way down, so it doesn't meet a line leaving `to`'s right edge at its middle. Relative to `origin`.
+ */
+export function backPath(from: Box, to: Box, origin: Box): string {
+  const x1 = from.left - origin.left
+  const y1 = (from.top + from.bottom) / 2 - origin.top
+  const x2 = to.right - origin.left
+  const y2 = to.top + (to.bottom - to.top) / 3 - origin.top
+  const m = (x1 + x2) / 2
+  return `M${n(x1)} ${n(y1)} C${n(m)} ${n(y1)} ${n(m)} ${n(y2)} ${n(x2)} ${n(y2)}`
 }

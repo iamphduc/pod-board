@@ -104,20 +104,46 @@ export function runHeader(run: RunSummary | undefined, repo: BoardRepo | undefin
   return header
 }
 
-/** One connector of the flow's path, between two steps by key. */
-export type FlowEdge = { from: string; to: string; kind: 'down' | 'across'; walked: boolean; dashed: boolean }
+/** One connector of the flow's path, between two steps by key. `back` runs to an earlier column. */
+export type FlowEdge = { from: string; to: string; kind: 'down' | 'across' | 'back'; walked: boolean; dashed: boolean }
 
 /**
- * The flow's one ordered path: every step to the next, down inside a column and across from a column's
- * last card to the next column's first. Walked (drawn in --fg) up to and into the current step, or all of
- * it when no step is current; the line into an optional step (Fix pass) is dashed.
+ * Optional steps (only run if a review fails), by raw step key, and the review step they branch off:
+ * a plan's Fix pass after the Final review, a fix run's after Round 1.
+ */
+const DETOURS: Record<string, string> = { fix: 'review', 'fix-pass': 'round-1' }
+/** States that show a step actually ran. */
+const RAN = new Set<StepState>(['done', 'live', 'you', 'blocked'])
+
+/**
+ * The flow's path. The main path runs through every step but the optional ones, in order (a fix run's
+ * Engineer → Round 1 → Round 2 → PR, the real order of events): down inside a column, across to a later
+ * one. An optional step is a dashed detour from its review step into it and on to the next main step.
+ * Walked (drawn in --fg): the main path up to and into the current step (all of it when none is
+ * current; only up to the review step while the fix pass runs); a detour only once its step ran.
  */
 export function flowEdges(columns: FlowColumn[]): FlowEdge[] {
-  const steps = columns.flatMap((c) => c.steps.map((s) => ({ s, col: c.key })))
-  const current = currentIndex(steps.map((x) => x.s.state))
-  const reached = current < 0 ? steps.length : current
-  return steps.slice(1).map(({ s, col }, i) => {
-    const prev = steps[i]!
-    return { from: prev.s.key, to: s.key, kind: prev.col === col ? 'down' : 'across', walked: i + 1 <= reached, dashed: s.optional }
-  })
+  const all = columns.flatMap((c, col) => c.steps.map((s) => ({ s, col, raw: s.key.slice(s.key.indexOf(':') + 1) })))
+  type At = (typeof all)[number]
+  const kind = (a: At, b: At): FlowEdge['kind'] => (a.col === b.col ? 'down' : a.col < b.col ? 'across' : 'back')
+  const main = all.filter((x) => !x.s.optional)
+  const branchOf = (o: At) => main.findIndex((m) => m.raw === DETOURS[o.raw])
+
+  let reached = currentIndex(main.map((x) => x.s.state))
+  if (reached < 0) reached = main.length
+  for (const o of all.filter((x) => x.s.optional && HIGHLIGHT.has(x.s.state))) {
+    const at = branchOf(o)
+    if (at >= 0) reached = Math.min(reached, at)
+  }
+
+  const edges: FlowEdge[] = main.slice(1).map((b, i) => ({ from: main[i]!.s.key, to: b.s.key, kind: kind(main[i]!, b), walked: i + 1 <= reached, dashed: false }))
+  for (const o of all.filter((x) => x.s.optional)) {
+    const at = branchOf(o)
+    const from = main[at]
+    const next = main[at + 1]
+    if (!from || !next) continue
+    edges.push({ from: from.s.key, to: o.s.key, kind: kind(from, o), walked: RAN.has(o.s.state), dashed: true })
+    edges.push({ from: o.s.key, to: next.s.key, kind: kind(o, next), walked: o.s.state === 'done' && at + 1 <= reached, dashed: true })
+  }
+  return edges
 }
