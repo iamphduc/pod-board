@@ -60,7 +60,23 @@
   cursor: pointer;
 }
 
-.wait-toggle:hover .wait-body {
+.wait-toggle:hover .wait-body,
+.wait-title,
+.wait-detail,
+.wait-answer,
+.answer-entry {
+  max-width: 72ch;
+}
+
+/* The card's entry in full, above the answer box. */
+.answer-entry {
+  margin: 0;
+  font-size: var(--size-dense);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.wait-body {
   color: var(--fg);
 }
 

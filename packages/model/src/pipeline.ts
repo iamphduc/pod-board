@@ -62,9 +62,16 @@ const PENDING_GATE =
  * `someday: …`, an agent default, a note that names a gate mid-sentence) don't stop it. Run state
  * still follows `isHalted` (BLOCKED → blocked; a PENDING reads needs-you).
  */
-/** Not built yet. */
-export function haltGate(_body: string): number | undefined {
-  return undefined
+const GATE_NAMES = ['blocked-concern', 'plan-review-fail', 'auto-merge-fail', 'inter-wave-verify', 'safety-bound', 'escalation-valve', 'plan-complete']
+
+/** The gate (1–7) an autopilot halt entry starts with, by its number or else its name; undefined when it isn't a halt. */
+export function haltGate(body: string): number | undefined {
+  const head = PENDING_GATE.exec(body)?.[0]
+  if (head === undefined) return undefined
+  const n = /gate\s*([1-7])\b/i.exec(head)?.[1]
+  if (n !== undefined) return Number(n)
+  const i = GATE_NAMES.findIndex((name) => head.toLowerCase().endsWith(name))
+  return i < 0 ? undefined : i + 1
 }
 
 export const isAutopilotStopped = (plan: Pick<PlanModel, 'queue'>) =>

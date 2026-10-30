@@ -41,7 +41,7 @@ export function NextStepCard({ repo, run, card }: Props) {
           <span className={`status ${status.cls}`}>{status.label}</span>
         </div>
         <h2 id={titleId} className="next-title">
-          {card.title}
+          <CardTitle title={card.title} link={card.titleLink} />
         </h2>
         {/* A reply's rows each say why, so its detail would only repeat the first one. */}
         {card.detail && a.kind !== 'reply' && <p className="next-detail">{card.detail}</p>}
@@ -77,8 +77,21 @@ export function NextStepCard({ repo, run, card }: Props) {
           <ReplyPanel key="reply-panel" view={a.kind === 'reply' ? a.panel : undefined} target={{ repoId: repo.id, run: run.plan }} framed={false} />
         )}
       </section>
-      {answer.kind !== 'idle' && <AnswerForm state={answer} flow={answerFlow} note={answerNote(run)} />}
+      {answer.kind !== 'idle' && <AnswerForm state={answer} flow={answerFlow} note={answerNote(run)} {...(card.entry ? { entry: card.entry.body } : {})} />}
       {merge.kind !== 'idle' && <MergeConfirm state={merge} flow={mergeFlow} label={`PR #${merge.target.number}`} />}
+    </>
+  )
+}
+
+/** The title, with `link.text` (the first time it appears) as a link. */
+function CardTitle({ title, link }: { title: string; link: NextItem['titleLink'] }) {
+  const at = link ? title.indexOf(link.text) : -1
+  if (!link || at < 0) return <>{title}</>
+  return (
+    <>
+      {title.slice(0, at)}
+      <a href={link.href}>{link.text}</a>
+      {title.slice(at + link.text.length)}
     </>
   )
 }

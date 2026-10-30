@@ -1,8 +1,9 @@
 /*
  * Screen 1: a full-height sidebar on the left (the title, the runs list, and
- * Add repo at the bottom) beside a narrow main column (about 720 px): the run
- * header with the ⋯ menu, the run's flow (wider, up to 1200 px), the Next step
- * card, and the tabs.
+ * Add repo at the bottom) beside one shared main column as wide as the run flow
+ * (1120 px at most): the run header with the wave board link and the ⋯ menu,
+ * the run's flow, the Next step card, and the tabs, all with the same edges.
+ * Text inside the card and the Waiting rows stops near 72 characters.
  * Tokens and L1's classes only; no colour literals (pwa.test.ts checks).
  * At 820px and below the sidebar stacks above the main column.
  */
@@ -199,8 +200,8 @@
   display: grid;
   align-content: start;
   min-width: 0;
-  /* The flow's cap; every other part of the column stays 720 px (below). */
-  max-width: 1200px;
+  /* One column for every part, as wide as the run flow needs (five columns). */
+  max-width: 1120px;
   padding: 48px 48px 64px;
   box-sizing: content-box;
   /* Centred in the space beside the sidebar. Auto margins turn off the grid's
@@ -210,16 +211,9 @@
 }
 
 /* Each part of the column is 720 px at most, centred; the flow, a wide data view, takes the main box's width. */
+/* Every part spans the column, so their left and right edges line up. */
 .main:not(.wide) > * {
   width: 100%;
-  max-width: 720px;
-  justify-self: center;
-}
-
-/* The flow is as wide as its columns need, up to 1200 px and never past the main box, centred. */
-.main:not(.wide) > .flow-frame {
-  width: fit-content;
-  max-width: min(100%, 1200px);
 }
 
 /* The wave board takes the whole main width. */
@@ -243,6 +237,17 @@
 
 .run-title {
   min-width: 0;
+}
+
+.run-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.board-link {
+  white-space: nowrap;
 }
 
 .run-crumb {
@@ -293,11 +298,9 @@
   min-width: 0;
 }
 
-/* Columns 208 px, shrinking to 152 px before the flow scrolls, so the cards stay dense on a wide screen.
-   A set width (not a flex basis) is what the box's fit-content width counts. */
+/* Columns grow from 208 px to fill the column, and shrink to 152 px before the flow scrolls. */
 .flow-col {
-  flex: 0 1 auto;
-  width: 208px;
+  flex: 1 1 208px;
   min-width: 152px;
   display: grid;
   align-content: start;
@@ -419,11 +422,6 @@
 }
 
 /* The wave board link stays at the left edge while the flow scrolls. */
-.flow-board {
-  justify-self: start;
-  margin: 0;
-  font-size: var(--size-dense);
-}
 
 /* The fold line: phones only (below). Desktop always shows the whole flow. */
 .flow-fold {
@@ -495,12 +493,14 @@
 }
 
 .next-title {
+  max-width: 72ch;
   font-size: 20px;
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
 .next-detail {
+  max-width: 72ch;
   margin: 8px 0 0;
   color: var(--muted);
   font-size: var(--size-dense);
@@ -904,10 +904,6 @@
 
 /* Phone: each row stacks, the copy and send buttons under its text, full width. */
 @media (max-width: 480px) {
-  .main:not(.wide) > .flow-frame {
-    width: 100%;
-  }
-
   .flow-fold {
     display: flex;
     align-items: center;
@@ -925,8 +921,7 @@
     cursor: pointer;
   }
 
-  .flow-frame:not(.open) > .flow-scroll,
-  .flow-frame:not(.open) > .flow-board {
+  .flow-frame:not(.open) > .flow-scroll {
     display: none;
   }
 

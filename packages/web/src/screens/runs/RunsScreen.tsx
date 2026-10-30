@@ -139,8 +139,22 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
             </>
           ) : (
             <>
-              {header && <RunHeader header={header} actions={menu} />}
-              <Flow key={`flow:${runKey}`} stages={stages} {...(pipeline ? { boardHref: hashFor(selected, 'board') } : {})} />
+              {header && (
+                <RunHeader
+                  header={header}
+                  actions={
+                    <div className="run-actions">
+                      {pipeline && (
+                        <a className="btn sm quiet board-link" href={hashFor(selected, 'board')}>
+                          Open the wave board
+                        </a>
+                      )}
+                      {menu}
+                    </div>
+                  }
+                />
+              )}
+              <Flow key={`flow:${runKey}`} stages={stages} />
               {steps && <NextStepCard key={runKey} repo={repo} run={selected} card={steps.card} />}
               <div className="tabs" role="group" aria-label="More about this run">
                 {TABS.map((t) => (

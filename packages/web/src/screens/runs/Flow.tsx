@@ -3,14 +3,14 @@ import type { Stage } from '@pod-board/model'
 import { Icon } from '../../theme/icons.tsx'
 import { flowColumns, foldLine } from './plan-view.ts'
 
-type Props = { stages: Stage[]; boardHref?: string }
+type Props = { stages: Stage[] }
 
 /**
- * The run's flow: a column of step cards per stage, arrows between columns; then the wave board link.
+ * The run's flow: a column of step cards per stage, arrows between columns.
  * On phones (CSS, ≤ 480 px) it starts folded to one line naming the current step; the line opens and
  * folds it. Nothing is remembered: the caller keys it by run, so every load and run starts folded.
  */
-export function Flow({ stages, boardHref }: Props) {
+export function Flow({ stages }: Props) {
   const [open, setOpen] = useState(false)
   const listId = useId()
   const columns = flowColumns(stages)
@@ -63,11 +63,6 @@ export function Flow({ stages, boardHref }: Props) {
         ))}
         </ol>
       </div>
-      {boardHref !== undefined && (
-        <p className="flow-board">
-          <a href={boardHref}>Open the wave board</a>
-        </p>
-      )}
     </section>
   )
 }
