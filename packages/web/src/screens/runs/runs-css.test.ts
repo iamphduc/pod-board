@@ -100,9 +100,9 @@ describe('runs.css layout', () => {
     }
   })
 
-  it('the main column is about 720 px on desktop', () => {
-    // The column's parts stay 720 px; only the flow, a wide data view, goes past it.
-    expect(stylesAt(1280).get('.main:not(.wide) > *')?.['max-width']).toBe('720px')
+  it('the main column is one shared column, about 1120 px at most, on desktop', () => {
+    expect(stylesAt(1280).get('.main')?.['max-width']).toBe('1120px')
+    expect(stylesAt(1280).get('.main:not(.wide) > *')?.['max-width']).toBeUndefined()
     expect(stylesAt(1280).get('.screen-body')?.['grid-template-columns']).not.toMatch(/^(1fr|minmax\(0,\s*1fr\))$/)
   })
 })
@@ -147,11 +147,13 @@ describe('runs.css main column and run cards', () => {
     const main = styles.get('.main')
     expect(main?.['margin-inline']).toBe('auto')
     expect(main?.['box-sizing']).toBe('content-box')
-    // Each part of the column is 720 px at most, centred in the main box.
+    // Every part spans the one column, so all their left and right edges line up.
     const part = styles.get('.main:not(.wide) > *')
-    expect(part?.['max-width']).toBe('720px')
     expect(part?.['width']).toBe('100%')
-    expect(part?.['justify-self']).toBe('center')
+    expect(part?.['max-width']).toBeUndefined()
+    expect(part?.['justify-self']).toBeUndefined()
+    // Text inside the card and the Waiting rows stops near 72 characters.
+    for (const sel of ['.next-title', '.next-detail']) expect(styles.get(sel)?.['max-width'], sel).toBe('72ch')
     // The wave board keeps the full width.
     expect(styles.get('.main.wide')?.['max-width']).toBe('none')
   })
@@ -160,14 +162,12 @@ describe('runs.css main column and run cards', () => {
     const styles = stylesAt(1280)
     const px = (v: string | undefined) => Number(/^(\d+)px$/.exec(v ?? '')?.[1] ?? NaN)
     const mainCap = px(styles.get('.main')?.['max-width'])
-    const flow = styles.get('.main:not(.wide) > .flow-frame')
-    // As wide as its columns need, never past the main box (or the page would scroll sideways), up to its own cap.
-    expect(flow?.['width']).toBe('fit-content')
-    const cap = /^min\(100%,\s*(\d+)px\)$/.exec(flow?.['max-width'] ?? '')
-    expect(cap, flow?.['max-width']).not.toBeNull()
-    const flowCap = Number(cap![1])
-    expect(flowCap).toBeGreaterThan(720)
-    expect(mainCap).toBeGreaterThanOrEqual(flowCap)
+    // The flow spans the shared column like every other part; the column is the flow's width.
+    expect(styles.get('.main:not(.wide) > .flow-frame')).toBeUndefined()
+    expect(mainCap).toBe(1120)
+    // Its columns grow to fill the column (from 208 px) and shrink to 152 px before the box scrolls.
+    expect(styles.get('.flow-col')?.['flex']).toBe('1 1 208px')
+    expect(styles.get('.flow-col')?.['min-width']).toBe('152px')
     // The columns scroll in their own box inside the flow, so the fold line and the board link stay put.
     const frame = styles.get('.flow-scroll')
     expect(frame?.['overflow-x']).toBe('auto')
@@ -204,7 +204,7 @@ describe('runs.css main column and run cards', () => {
     expect(phone.get('.flow-fold')?.['display']).toBe('flex')
     expect(phone.get('.flow-fold')?.['min-height']).toBe('44px')
     // Folded (no .open): the columns and the board link hide on phones only.
-    for (const sel of ['.flow-frame:not(.open) > .flow-scroll', '.flow-frame:not(.open) > .flow-board']) {
+    for (const sel of ['.flow-frame:not(.open) > .flow-scroll']) {
       expect(phone.get(sel)?.['display'], sel).toBe('none')
       expect(desk.get(sel)?.['display'], sel).toBeUndefined()
     }

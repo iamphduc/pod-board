@@ -160,3 +160,17 @@ describe('tab panels', () => {
     expect(at(none, 'Action log')).toBeGreaterThan(none.indexOf('No agent has started'))
   })
 })
+
+describe('answer form', () => {
+  it('shows the full entry text above the answer box when given', async () => {
+    const { AnswerForm } = await import('./AnswerForm.tsx')
+    const state = { kind: 'editing', seq: 1, target: { repoId: 'chess', line: 'x' }, text: '' } as const
+    const flow = { open() {}, type() {}, save() {}, cancel() {}, key() {} } as unknown as Parameters<typeof AnswerForm>[0]['flow']
+    const body = 'gate 3 auto-merge-fail: wave PR https://github.com/o/r/pull/9 has no passing CI and the whole story'
+    const html = renderToStaticMarkup(createElement(AnswerForm, { state, flow, note: 'n', entry: body }))
+    expect(html).toMatch(/<p class="answer-entry">gate 3 auto-merge-fail: wave PR https:\/\/github.com\/o\/r\/pull\/9 has no passing CI and the whole story<\/p>/)
+    expect(html.indexOf('answer-entry')).toBeLessThan(html.indexOf('<textarea'))
+    // Without it, no entry line.
+    expect(renderToStaticMarkup(createElement(AnswerForm, { state, flow, note: 'n' }))).not.toMatch(/answer-entry/)
+  })
+})

@@ -223,9 +223,11 @@ describe('run flow', () => {
     // The fold line for phones: the current step, with its mark, closed at start.
     expect(flow.markup).toMatch(/<button[^>]*class="flow-fold"[^>]*aria-expanded="false"[^>]*>[\s\S]*?<svg[\s\S]*?Wave 3 · PR #78 · you merge[\s\S]*?<\/button>/)
     expect(flow.markup).not.toMatch(/class="flow-frame open"/)
-    // The wave board link sits with the flow.
-    expect(flow.markup).toContain(`href="${hashFor(run, 'board')}"`)
-    expect(text(flow.markup)).toMatch(/Open the wave board/)
+    // The wave board link sits in the run header, before the ⋯ menu; not in the flow.
+    expect(flow.markup).not.toMatch(/Open the wave board/)
+    const header = headerOf(html)
+    expect(header).toMatch(new RegExp(`<a[^>]*class="btn sm quiet board-link"[^>]*href="${hashFor(run, 'board').replace(/[/#]/g, (c) => `\\${c}`)}"[^>]*>Open the wave board</a>`))
+    expect(header.indexOf('Open the wave board')).toBeLessThan(header.indexOf('aria-label="Menu"'))
   })
 
   it('an autopilot run has no Go card, and its live wave is highlighted', () => {
@@ -246,13 +248,26 @@ describe('run flow', () => {
     expect(flow.captions).toEqual(['Build', 'Review', 'Ship'])
     expect(count(flow.markup, /class="flow-arrow"/)).toBe(2)
     expect(flow.markup).not.toMatch(/Open the wave board/)
+    expect(headerOf(html)).not.toMatch(/Open the wave board/)
     // A fix run folds too: its first waiting step.
     expect(flow.markup).toMatch(/class="flow-fold"[\s\S]*?Engineer · not started/)
     expect(html.indexOf('aria-label="Run flow"')).toBeLessThan(html.indexOf('next-step'))
   })
 
   it('stays off the wave board view', () => {
-    expect(render({ repo: chess(), view: 'board' }).html).not.toMatch(/aria-label="Run flow"/)
+    const { html } = render({ repo: chess(), view: 'board' })
+    expect(html).not.toMatch(/aria-label="Run flow"/)
+    // The board view has Back to the run, not a link to itself.
+    expect(headerOf(html)).not.toMatch(/Open the wave board/)
+  })
+
+  it('an autopilot gate halt reads as a plain sentence with its PR as a link', () => {
+    const url = 'https://github.com/iamphduc/pod-trial/pull/9'
+    const halt = entry('BLOCKED', 'orchestrator → human', `plan: ${PLAN}`, `gate 3 auto-merge-fail: wave PR ${url} has no passing CI`)
+    const { html } = render({ repo: chess([onlyQueue(halt)]) })
+    const card = cardOf(html)
+    expect(card).toMatch(new RegExp(`<h2[^>]*class="next-title"[^>]*>Autopilot stopped: wave <a href="${url.replace(/[/.]/g, (c) => `\\${c}`)}">PR #9</a> couldn&#x27;t merge</h2>`))
+    expect(text(card)).not.toMatch(/auto-merge-fail/)
   })
 })
 

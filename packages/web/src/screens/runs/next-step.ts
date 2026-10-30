@@ -122,3 +122,10 @@ export function nextSteps(run: RunSummary | undefined, repo: BoardRepo | undefin
   if (first && ACTION_TIERS.has(first.tier)) return { card: first, rest: sorted.slice(1) }
   return { card: nothingCard(run, repo), rest: sorted }
 }
+
+export type GateTitle = { title: string; link?: { text: string; href: string } }
+
+/** Not built yet. */
+export function gateTitle(_body: string): GateTitle | undefined {
+  return undefined
+}

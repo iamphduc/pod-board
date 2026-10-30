@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as model from './index.ts'
 import type { AgentRun, BoardRepo, PrStatus } from './board.ts'
-import { buildPipeline, isRun, type Pipeline, type Stage } from './pipeline.ts'
+import { buildPipeline, haltGate, isRun, type Pipeline, type Stage } from './pipeline.ts'
 import { buildRepoModel, type RepoFiles } from './run-model.ts'
 
 // Every snapshot is built inline: test/no-io.test.ts scans this folder, so no file reads here.
@@ -426,5 +426,27 @@ describe('buildPipeline', () => {
 
   it('is exported from the package entry', () => {
     expect(model.buildPipeline).toBe(buildPipeline)
+  })
+})
+
+describe('haltGate', () => {
+  it('reads the gate an autopilot halt starts with, by number or by name', () => {
+    expect(haltGate('gate 3 auto-merge-fail: wave PR https://github.com/o/r/pull/9 has no passing CI')).toBe(3)
+    expect(haltGate('**Gate 6** escalation-valve: PR #12 held')).toBe(6)
+    expect(haltGate('Autopilot gate 2: the review still fails')).toBe(2)
+    const names: [string, number][] = [
+      ['blocked-concern', 1],
+      ['plan-review-fail', 2],
+      ['auto-merge-fail', 3],
+      ['inter-wave-verify', 4],
+      ['safety-bound', 5],
+      ['escalation-valve', 6],
+      ['plan-complete', 7],
+    ]
+    for (const [name, n] of names) expect(haltGate(`${name}: details`), name).toBe(n)
+    // Not a halt: a gate named mid-sentence, a longer word, or nothing.
+    expect(haltGate('now: see gate 3 later')).toBeUndefined()
+    expect(haltGate('safety-bounded run')).toBeUndefined()
+    expect(haltGate('Pick the step size.')).toBeUndefined()
   })
 })

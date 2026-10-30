@@ -62,6 +62,11 @@ const PENDING_GATE =
  * `someday: …`, an agent default, a note that names a gate mid-sentence) don't stop it. Run state
  * still follows `isHalted` (BLOCKED → blocked; a PENDING reads needs-you).
  */
+/** Not built yet. */
+export function haltGate(_body: string): number | undefined {
+  return undefined
+}
+
 export const isAutopilotStopped = (plan: Pick<PlanModel, 'queue'>) =>
   isHalted(plan) ||
   plan.queue.some(
