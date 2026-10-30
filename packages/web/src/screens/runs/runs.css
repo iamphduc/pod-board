@@ -316,7 +316,8 @@
 /* In the gap left of the next column's first card, centred on that card's mid-line. */
 .flow-arrow {
   position: absolute;
-  right: 100%;
+  /* Past the card's 1 px border, so the box is exactly the gap. */
+  right: calc(100% + 1px);
   top: 50%;
   transform: translateY(-50%);
   width: 32px;

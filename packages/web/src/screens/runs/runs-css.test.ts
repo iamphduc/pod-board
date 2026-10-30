@@ -381,7 +381,9 @@ describe('runs.css flow arrows', () => {
     const gap = styles.get('.flow')?.['gap']
     expect(gap).toMatch(/^\d+px$/)
     expect(arrow?.['width']).toBe(gap)
-    expect(arrow?.['right']).toBe('100%')
+    // Measured from the card's padding box, so past its 1 px border.
+    expect(arrow?.['right']).toBe('calc(100% + 1px)')
+    expect(step?.['border']).toBe('1px solid var(--border)')
     expect(arrow?.['justify-content']).toBe('center')
   })
 })
