@@ -60,7 +60,12 @@
   cursor: pointer;
 }
 
-.wait-toggle:hover .wait-body,
+.wait-toggle:hover .wait-body {
+  color: var(--fg);
+}
+
+/* Text lines stop near 72 characters; the rows themselves span the column. */
+.wait-body,
 .wait-title,
 .wait-detail,
 .wait-answer,
@@ -74,10 +79,6 @@
   font-size: var(--size-dense);
   color: var(--muted);
   overflow-wrap: anywhere;
-}
-
-.wait-body {
-  color: var(--fg);
 }
 
 .wait-meta {

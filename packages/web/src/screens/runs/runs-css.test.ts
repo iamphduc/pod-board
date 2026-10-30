@@ -351,3 +351,19 @@ describe('runs.css Add repo size', () => {
     expect(add?.['width']).toBe('100%')
   })
 })
+
+describe('tabs.css text caps', () => {
+  const tabsRules = () => rules(stripComments(readFileSync(join(here, 'tabs.css'), 'utf8')))
+  const tabsStyle = (sel: string) => Object.assign({}, ...tabsRules().filter((r) => !r.media && r.selectors.includes(sel)).map((r) => decls(r.body)))
+
+  it('caps the Waiting rows and the answer entry near 72 characters', () => {
+    for (const sel of ['.wait-body', '.wait-title', '.wait-detail', '.wait-answer', '.answer-entry']) expect(tabsStyle(sel)['max-width'], sel).toBe('72ch')
+  })
+
+  it('keeps the hover rule to its own colour', () => {
+    const hover = tabsRules().filter((r) => r.selectors.includes('.wait-toggle:hover .wait-body'))
+    expect(hover).toHaveLength(1)
+    expect(hover[0]!.selectors).toEqual(['.wait-toggle:hover .wait-body'])
+    expect(decls(hover[0]!.body)).not.toHaveProperty('max-width')
+  })
+})
