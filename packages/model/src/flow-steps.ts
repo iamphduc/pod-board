@@ -87,8 +87,10 @@ function stagingOf(repo: Pick<BoardRepo, 'model' | 'prs'>, plan: PlanModel): str
 
 /**
  * Left out with no staging branch. Waits until the final PR merges; then the staging branch's PR to
- * main (found by its head): open needs you, merged done, closed blocked. pod-staging is reused by every
- * plan, so only a PR newer than this plan's final PR counts.
+ * main (found by its head). An open one always counts and needs you: pod's gate 7 opens it, or reuses
+ * one an earlier plan left open (so its number can be below the final PR's). pod-staging is reused by
+ * every plan, so a merged one counts as done only when gh's merge times show it merged after the final
+ * PR; a merged PR with no times, or a closed one, can't be shown to be this plan's and reads `not open yet`.
  */
 function readStaging(ctx: FlowCtx): FlowReading | undefined {
   const branch = stagingOf(ctx.repo, ctx.plan)
@@ -97,10 +99,10 @@ function readStaging(ctx: FlowCtx): FlowReading | undefined {
   const shipped = fromPipeline('final-pr')(ctx)?.state === 'done'
   if (!shipped) return { state: 'wait', detail: 'after the final PR' }
   const pr = prByBranch(ctx.repo, branch)
-  if (!pr || (final !== undefined && pr.number <= final.number)) return { state: 'wait', detail: 'not open yet' }
-  if (pr.state === 'merged') return { state: 'done', detail: `merged PR #${pr.number}` }
-  if (pr.state === 'closed') return { state: 'blocked', detail: `PR #${pr.number} · closed` }
-  return { state: 'you', detail: `PR #${pr.number} · you merge` }
+  if (pr?.state === 'open') return { state: 'you', detail: `PR #${pr.number} · you merge` }
+  const after = pr?.state === 'merged' && pr.mergedAt !== undefined && final?.mergedAt !== undefined && pr.mergedAt > final.mergedAt
+  if (pr && after) return { state: 'done', detail: `merged PR #${pr.number}` }
+  return { state: 'wait', detail: 'not open yet' }
 }
 
 /** The flow's steps, in order within each column. */

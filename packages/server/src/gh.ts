@@ -35,7 +35,7 @@ export type GhCache = GhReader & {
 export const AUTH_RECHECK_MS = 60_000
 export const PR_CACHE_MS = 30_000
 export const GH_TIMEOUT_MS = 10_000
-const PR_FIELDS = 'number,state,url,statusCheckRollup,baseRefName'
+const PR_FIELDS = 'number,state,url,statusCheckRollup,baseRefName,mergedAt'
 const LIST_FIELDS = `${PR_FIELDS},headRefName`
 /** A branch gh can't read as a flag, with no spaces or shell characters. */
 const BRANCH = /^[A-Za-z0-9][\w./-]{0,199}$/
@@ -246,6 +246,8 @@ function prOf(data: unknown, n: number, checkedAt: number): PrStatus | undefined
   const pr: PrStatus = { number: n, state, checks: rollupChecks(d.statusCheckRollup), checkedAt }
   if (typeof d.url === 'string' && d.url) pr.url = d.url
   if (typeof d.baseRefName === 'string' && d.baseRefName) pr.base = d.baseRefName
+  const mergedAt = typeof d.mergedAt === 'string' ? Date.parse(d.mergedAt) : NaN
+  if (Number.isFinite(mergedAt)) pr.mergedAt = mergedAt
   return pr
 }
 

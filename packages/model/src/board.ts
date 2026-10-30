@@ -56,6 +56,8 @@ export type PrStatus = {
   branch?: string
   /** The base branch gh reports (`baseRefName`), when it reports one. */
   base?: string
+  /** When it merged (ms since epoch), from gh's `mergedAt`; only on a merged PR gh gave a time for. */
+  mergedAt?: number
 }
 
 export type GhStatus = 'ok' | 'missing' | 'logged-out' | 'unknown'
