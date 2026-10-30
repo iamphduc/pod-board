@@ -43,3 +43,4 @@ Screen 2, at `#/<repoId>/<plan>/board`, opened from `Open the wave board` in the
 - 2026-10-21 · merge-actions P1 · the cards of a wave whose PR waits on you read `needs you`, with `PR #N · you merge`.
 - 2026-10-26 · fix-autopilot-view · fixed: an autopilot wave's cards read `needs you · PR #N · you merge`; now they read `running` while autopilot merges, and `needs you · PR #N · autopilot stopped` after a halt. Card minutes leave out idle gaps over 15 minutes.
 - 2026-10-28 · calm-dashboard · look only: plain cards with a status dot and word (no colored edge), critical path in `--fg`, other lines `--border-strong`; opened from the Plan tab with `Back to the run`; final PR #54 passed review at round 1 · [report](../reports/calm-dashboard.html)
+- 2026-10-30 · fix-run-flow round 5 · `geometry.ts` adds `downPath` and `headPath` beside `edgePath`; screen 1's run flow draws its connectors with all three.
