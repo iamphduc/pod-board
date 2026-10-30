@@ -1000,6 +1000,11 @@
   }
 
   .run-header {
+    margin-bottom: 12px;
+  }
+
+  /* The folded flow is one line: a tight gap keeps the Next step card's button on a 375 × 667 screen. */
+  .flow-frame {
     margin-bottom: 16px;
   }
 

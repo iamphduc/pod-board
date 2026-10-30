@@ -210,6 +210,13 @@ describe('runs.css main column and run cards', () => {
     }
   })
 
+  it('keeps the folded flow tight on phones, so the Next step card and its button fit 375 × 667', () => {
+    const px = (v: string | undefined) => Number(/^(\d+)px$/.exec(v ?? '')?.[1] ?? NaN)
+    const phone = stylesAt(375)
+    expect(px(phone.get('.flow-frame')?.['margin-bottom'])).toBeLessThanOrEqual(16)
+    expect(px(phone.get('.run-header')?.['margin-bottom'])).toBeLessThanOrEqual(12)
+  })
+
   it('draws the progress strip under the plan name', () => {
     const styles = stylesAt(1280)
     expect(styles.get('.strip')?.['display']).toBe('flex')
