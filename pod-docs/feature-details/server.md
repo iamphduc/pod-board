@@ -83,3 +83,4 @@ flowchart TD
 - 2026-10-28 · calm-screen F1: `GET /api/fs/folders` (the folder listing for the picker) behind a new read guard on `/api/fs/*`; the token compare is shared with the action guard.
 - 2026-10-28 · calm-dashboard · plan complete: the folder listing and its read guard ship with the folder picker; final PR #54 passed review at round 1 · [report](../reports/calm-dashboard.html)
 - 2026-10-30 · fix-run-flow · the repo read adds `pod-docs/decisions.md` and the `.md` reports directly in `pod-docs/research` (same real-path and size rules); gh reads each PR's `baseRefName`, and `refresh` takes staging heads (`stagingBranches`) that are asked about every 30 s even after a merge, since every plan reuses the staging branch.
+- 2026-10-30 · fix-run-flow review round 1 · gh also reads each PR's `mergedAt` (read-only `--json`), so a staging PR can be told apart from the last plan's by merge time.
