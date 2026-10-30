@@ -93,11 +93,12 @@ describe('runs screen', () => {
     expect(card).toMatch(/id="merge-pr-78"/)
     expect(text(card)).toMatch(/Merge PR #78/)
     expect(text(card)).toMatch(/Needs you/)
-    // The header, then the flow, then the card: the header has no progress strip, the flow shows the steps.
+    // The header (with its progress strip and wave), then the flow, then the card.
     expect(html.indexOf('run-header')).toBeGreaterThan(-1)
     expect(html.indexOf('run-header')).toBeLessThan(html.indexOf('aria-label="Run flow"'))
     expect(html.indexOf('aria-label="Run flow"')).toBeLessThan(html.indexOf('next-step'))
-    expect(headerOf(html)).not.toMatch(/class="strip"|Wave 3 of 3/)
+    expect(headerOf(html)).toMatch(/class="strip" role="img" aria-label="\d+ of \d+ steps done"/)
+    expect(text(headerOf(html))).toMatch(/Wave 3 of 3/)
     // Tabs follow the card, all closed, with no panel. The flow replaced the Plan tab.
     expect(html.indexOf('class="tabs"')).toBeGreaterThan(html.indexOf('next-step'))
     const tabs = tabsOf(html)
@@ -191,31 +192,36 @@ describe('run flow', () => {
     // /pod:code run, T1 pushed and PR #78 open: wave 3 is handed back to you.
     const { html, run } = render({ repo: chess([onlyQueue(), manual, t1Pushed], { prs: [gh(78, 'open')] }) })
     const flow = flowOf(html)
-    expect(flow.captions).toEqual(['Plan', 'Sprint 1 of 1', 'Check', 'Ship'])
+    expect(flow.captions).toEqual(['Think', 'You', 'Sprint 1 of 1', 'Check', 'Ship'])
     // An arrow icon between each pair of columns, none before the first.
-    expect(count(flow.markup, /class="flow-arrow"/)).toBe(3)
-    const labels = ['Plan', 'Go', 'Wave 1', 'Wave 2', 'Wave 3', 'Final review', 'Fix pass', 'Final PR']
+    expect(count(flow.markup, /class="flow-arrow"/)).toBe(4)
+    const labels = ['Research', 'Plan interview', 'Look picked', 'Replied go', 'Wave 1', 'Wave 2', 'Wave 3', 'Final review', 'Fix pass', 'Final PR']
     expect(flow.cards).toHaveLength(labels.length)
     flow.cards.forEach((c, i) => expect(c.text.startsWith(labels[i]!), c.text).toBe(true))
     // Each card: its label, its muted detail line, an SVG mark, and its state word for screen readers.
-    expect(flow.cards[4]!.markup).toMatch(/<span class="flow-detail">PR #78 · you merge<\/span>/)
+    expect(flow.cards[6]!.markup).toMatch(/<span class="flow-detail">PR #78 · you merge<\/span>/)
     for (const c of flow.cards) {
       expect(c.markup, c.text).toMatch(/<span class="flow-mark"[^>]*><svg/)
       expect(c.markup, c.text).toMatch(/<span class="sr-only">/)
     }
     expect(text(flow.markup)).not.toMatch(/[✓●○→•]/)
     // The step that needs you has the highlighted border; waiting ones are dim; done ones neither.
-    const wave3 = flow.cards[4]!
+    const wave3 = flow.cards[6]!
     expect(wave3.cls).toMatch(/\byou\b/)
     expect(wave3.cls).toMatch(/\bhi\b/)
     expect(wave3.text).toMatch(/needs you/)
-    const review = flow.cards[5]!
+    const review = flow.cards[7]!
     expect(review.cls).toMatch(/\bdim\b/)
     expect(review.cls).not.toMatch(/\bhi\b/)
-    expect(flow.cards[0]!.cls).not.toMatch(/\b(hi|dim)\b/)
+    // Plan interview is done: neither. Research (no report in the fixture) is skipped: dim.
+    expect(flow.cards[1]!.cls).not.toMatch(/\b(hi|dim)\b/)
+    expect(flow.cards[0]!.cls).toMatch(/\bskipped\b.*\bdim\b/)
     // No Merge in the flow: the Next step card holds the one Merge for this PR.
     expect(flow.markup).not.toMatch(/<button/)
     expect(count(html, /id="merge-pr-78"/)).toBe(1)
+    // The fold line for phones: the current step, with its mark, closed at start.
+    expect(flow.markup).toMatch(/<button[^>]*class="flow-fold"[^>]*aria-expanded="false"[^>]*>[\s\S]*?<svg[\s\S]*?Wave 3 · PR #78 · you merge[\s\S]*?<\/button>/)
+    expect(flow.markup).not.toMatch(/class="flow-frame open"/)
     // The wave board link sits with the flow.
     expect(flow.markup).toContain(`href="${hashFor(run, 'board')}"`)
     expect(text(flow.markup)).toMatch(/Open the wave board/)
@@ -223,8 +229,8 @@ describe('run flow', () => {
 
   it('an autopilot run has no Go card, and its live wave is highlighted', () => {
     const flow = flowOf(render({ repo: chess([onlyQueue()]) }).html)
-    expect(flow.captions).toEqual(['Plan', 'Sprint 1 of 1', 'Check', 'Ship'])
-    expect(flow.cards.some((c) => c.text.startsWith('Go'))).toBe(false)
+    expect(flow.captions).toEqual(['Think', 'You', 'Sprint 1 of 1', 'Check', 'Ship'])
+    expect(flow.cards.some((c) => c.text.startsWith('Replied go'))).toBe(false)
     const wave3 = flow.cards.find((c) => c.text.startsWith('Wave 3'))!
     expect(wave3.cls).toMatch(/\blive\b/)
     expect(wave3.cls).toMatch(/\bhi\b/)
@@ -239,6 +245,8 @@ describe('run flow', () => {
     expect(flow.captions).toEqual(['Build', 'Review', 'Ship'])
     expect(count(flow.markup, /class="flow-arrow"/)).toBe(2)
     expect(flow.markup).not.toMatch(/Open the wave board/)
+    // A fix run folds too: its first waiting step.
+    expect(flow.markup).toMatch(/class="flow-fold"[\s\S]*?Engineer · not started/)
     expect(html.indexOf('aria-label="Run flow"')).toBeLessThan(html.indexOf('next-step'))
   })
 

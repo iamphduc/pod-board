@@ -52,3 +52,10 @@ export function runHeader(run: RunSummary | undefined, repo: { id: string } | un
   const name = run.fix !== undefined ? `fix · ${run.fix}` : (run.plan ?? run.repo)
   return { crumb: run.repo, name }
 }
+
+export type FoldLine = { label: string; detail: string; mark: FlowMark; word: string; state: FlowStep['state'] }
+
+/** Not built yet. */
+export function foldLine(_columns: FlowColumn[]): FoldLine | undefined {
+  return undefined
+}

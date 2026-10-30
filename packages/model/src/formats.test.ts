@@ -4,6 +4,8 @@ import {
   docsVersion,
   needsYou,
   planExtras,
+  planFacts,
+  stagingBranch,
   prRef,
   sliceDeps,
 } from './formats.ts'
@@ -232,5 +234,61 @@ describe('planExtras', () => {
     })
     // go stays unknown whatever the doc says.
     expect(planExtras(plan('go: yes\nGo: 2026-10-18\n')).go).toBe('unknown')
+  })
+})
+
+describe('planFacts', () => {
+  const plan = (meta: string, body = '') => `# Plan: Board read\n\n_Generated: 2026-10-17 · Status: active${meta}_\n\n## Goal\n\nShow every run.\n${body}`
+
+  test('grilled-with', () => {
+    expect(planFacts(plan(' · Grilled-with: grilling (fast)')).grilledWith).toBe('grilling (fast)')
+    expect(planFacts(plan(' · Grilled-with: grill-me · Port: 3')).grilledWith).toBe('grill-me')
+    // No value, or no field: not recorded.
+    expect(planFacts(plan(' · Grilled-with: ')).grilledWith).toBeUndefined()
+    expect(planFacts(plan(''))).not.toHaveProperty('grilledWith')
+    // A prose mention isn't the field.
+    expect(planFacts(plan('', '\nWe never wrote `Grilled-with:` here.\n'))).not.toHaveProperty('grilledWith')
+  })
+
+  test('look', () => {
+    // No Look section: not set at all.
+    expect(planFacts(plan(''))).not.toHaveProperty('look')
+    // An empty section proves nothing.
+    expect(planFacts(plan('', '\n## Look\n\n## Key decisions\n\nx\n')).look).toEqual({ kind: 'empty' })
+    // A section that says there is no UI.
+    expect(planFacts(plan('', '\n## Look\nNone: no UI change.\n')).look).toEqual({ kind: 'none' })
+    expect(planFacts(plan('', '\n## Look\n\nNo UI in this plan.\n')).look).toEqual({ kind: 'none' })
+    expect(planFacts(plan('', '\n## Look\nN/A\n')).look).toEqual({ kind: 'none' })
+    // A picked direction, by letter or number, stops at the section's end.
+    expect(planFacts(plan('', '\n## Look\nThe human picked direction C, simplified.\n## Key decisions\ndirection D\n')).look).toEqual({ kind: 'set', direction: 'direction C' })
+    expect(planFacts(plan('', '\n## Look\nDirection 2 won.\n')).look).toEqual({ kind: 'set', direction: 'direction 2' })
+    // Text with no direction: set.
+    expect(planFacts(plan('', '\n## Look\n- **Thesis:** a quiet page.\n')).look).toEqual({ kind: 'set' })
+    // A `## Look` inside a code fence isn't the section.
+    expect(planFacts(plan('', '\n```\n## Look\ndirection A\n```\n'))).not.toHaveProperty('look')
+  })
+
+  test('research links', () => {
+    expect(planFacts(plan('', '\nSee [research](../research/folder-picker.md) and research/folder-picker.html, and pod-docs/research/live-feed.md.\n')).researchLinks).toEqual([
+      'folder-picker',
+      'live-feed',
+    ])
+    expect(planFacts(plan(''))).not.toHaveProperty('researchLinks')
+  })
+})
+
+describe('stagingBranch', () => {
+  const doc = (body: string) => `# Decisions\n\n${body}\n`
+  test('stagingBranch', () => {
+    // The decision's backticked staging branch.
+    expect(stagingBranch(doc('## 2026-10-18 — merge target: staging\n\nDecision: autopilot merges land on `pod-staging`. The human moves them to `main`.\n'))).toBe('pod-staging')
+    expect(stagingBranch(doc('## 2026-10-18 — Merge target: staging\n\nLand on `release-staging`.\n\n## Other\n`x-staging`\n'))).toBe('release-staging')
+    // The decision with no branch named: pod's default.
+    expect(stagingBranch(doc('## 2026-10-18 — merge target: staging\n\nWe use staging.\n'))).toBe('pod-staging')
+    // A branch named only in a later section doesn't count.
+    expect(stagingBranch(doc('## 2026-10-18 — merge target: staging\n\nYes.\n\n## Later\n`other-staging`\n'))).toBe('pod-staging')
+    // No such decision, or no file.
+    expect(stagingBranch(doc('## 2026-10-18 — merge target: main\n\n`pod-staging` is gone.\n'))).toBeUndefined()
+    expect(stagingBranch(undefined)).toBeUndefined()
   })
 })

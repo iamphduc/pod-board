@@ -195,6 +195,27 @@ describe('runs.css main column and run cards', () => {
     }
   })
 
+  it('folds the flow to one line on phones, and never on desktop', () => {
+    const desk = stylesAt(1280)
+    const phone = stylesAt(375)
+    // The fold button: hidden on desktop, a 44 px line on phones.
+    expect(desk.get('.flow-fold')?.['display']).toBe('none')
+    expect(phone.get('.flow-fold')?.['display']).toBe('flex')
+    expect(phone.get('.flow-fold')?.['min-height']).toBe('44px')
+    // Folded (no .open): the columns and the board link hide on phones only.
+    for (const sel of ['.flow-frame:not(.open) > .flow', '.flow-frame:not(.open) > .flow-board']) {
+      expect(phone.get(sel)?.['display'], sel).toBe('none')
+      expect(desk.get(sel)?.['display'], sel).toBeUndefined()
+    }
+  })
+
+  it('draws the progress strip under the plan name', () => {
+    const styles = stylesAt(1280)
+    expect(styles.get('.strip')?.['display']).toBe('flex')
+    expect(styles.get('.strip i')?.['height']).toBe('4px')
+    expect(styles.get('.strip i.done')?.['background']).toBe('var(--fg)')
+  })
+
   it('dims waiting cards by colour, not opacity, so their text stays readable', () => {
     const dim = stylesAt(1280).get('.flow-step.dim')
     expect(dim?.['opacity']).toBeUndefined()

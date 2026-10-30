@@ -90,3 +90,16 @@ export function planExtras(md: string): { portBase?: number; go: 'unknown' } {
     ? { portBase, go: 'unknown' }
     : { go: 'unknown' }
 }
+
+export type PlanLook = { kind: 'set' | 'none' | 'empty'; direction?: string }
+export type PlanFacts = { grilledWith?: string; look?: PlanLook; researchLinks?: string[] }
+
+/** Not built yet. */
+export function planFacts(_md: string): PlanFacts {
+  return {}
+}
+
+/** Not built yet. */
+export function stagingBranch(_decisions: string | undefined): string | undefined {
+  return undefined
+}
