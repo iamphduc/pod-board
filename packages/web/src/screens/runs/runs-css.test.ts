@@ -168,11 +168,12 @@ describe('runs.css main column and run cards', () => {
     const flowCap = Number(cap![1])
     expect(flowCap).toBeGreaterThan(720)
     expect(mainCap).toBeGreaterThanOrEqual(flowCap)
-    const frame = styles.get('.flow-frame')
+    // The columns scroll in their own box inside the flow, so the fold line and the board link stay put.
+    const frame = styles.get('.flow-scroll')
     expect(frame?.['overflow-x']).toBe('auto')
     expect(frame?.['min-width']).toBe('0')
     // On a phone it still scrolls inside its box.
-    expect(stylesAt(375).get('.flow-frame')?.['overflow-x']).toBe('auto')
+    expect(stylesAt(375).get('.flow-scroll')?.['overflow-x']).toBe('auto')
     // The cards' screen-reader words are absolutely placed: the box must hold them, or they widen the page.
     expect(frame?.['position']).toBe('relative')
   })
@@ -203,7 +204,7 @@ describe('runs.css main column and run cards', () => {
     expect(phone.get('.flow-fold')?.['display']).toBe('flex')
     expect(phone.get('.flow-fold')?.['min-height']).toBe('44px')
     // Folded (no .open): the columns and the board link hide on phones only.
-    for (const sel of ['.flow-frame:not(.open) > .flow', '.flow-frame:not(.open) > .flow-board']) {
+    for (const sel of ['.flow-frame:not(.open) > .flow-scroll', '.flow-frame:not(.open) > .flow-board']) {
       expect(phone.get(sel)?.['display'], sel).toBe('none')
       expect(desk.get(sel)?.['display'], sel).toBeUndefined()
     }

@@ -53,7 +53,9 @@ const SPRINT = [
 type RepoOpts = PlanOpts & { research?: string[]; decisions?: string; agents?: AgentRun[]; prs?: PrStatus[] }
 
 function repo(o: RepoOpts = {}): BoardRepo {
-  const files: RepoFiles = { 'pod-docs/README.md': README, 'pod-docs/plans/alpha.md': planDoc(o), 'pod-docs/sprints/one.md': SPRINT }
+  // The active sprint doc decides autopilot, so it carries the marker too.
+  const sprint = o.autopilot ? SPRINT.replace('\n\n## Status board', '\n<!-- autopilot-run: started=2026-10-18T10:00:00Z sprints=1 waves=2 -->\n\n## Status board') : SPRINT
+  const files: RepoFiles = { 'pod-docs/README.md': README, 'pod-docs/plans/alpha.md': planDoc(o), 'pod-docs/sprints/one.md': sprint }
   for (const slug of o.research ?? []) files[`pod-docs/research/${slug}.md`] = '# Research\n'
   if (o.decisions !== undefined) files['pod-docs/decisions.md'] = o.decisions
   return { id: 'r', name: 'r', path: '/r', source: 'registered', model: buildRepoModel(files), agents: o.agents ?? [], prs: o.prs ?? [], claims: [] }

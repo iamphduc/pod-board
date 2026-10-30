@@ -9,7 +9,8 @@ import { formatTokens, isDone } from './pod-flow/model.ts'
 import type { PlanModel, SliceModel, SprintModel, WaveModel } from './run-model.ts'
 import { agentState, IDLE_GAP_MS, STALE_MS } from './transcript.ts'
 
-export type StepState = 'done' | 'live' | 'wait' | 'you' | 'blocked' | 'unknown'
+/** `skipped`: the plan didn't take this step (no research, no UI); the flow shows it dim. */
+export type StepState = 'done' | 'live' | 'wait' | 'you' | 'blocked' | 'unknown' | 'skipped'
 /** `merge` is set only on a step that shows a PR waiting on you (see `waitingPrs`). */
 export type Step = { key: string; label: string; state: StepState; detail: string; merge?: { number: number } }
 export type Stage = { key: string; caption: string; steps: Step[] }

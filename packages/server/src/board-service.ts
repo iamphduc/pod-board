@@ -9,6 +9,7 @@ import {
   fixRunNames,
   handBackPr,
   parseAgentTranscript,
+  stagingBranches,
   type ActionEntry,
   type AutoToggle,
   type AgentRun,
@@ -129,7 +130,12 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
     const byBranch = prBranches({ model, claims: entry.claims })
       .map((b) => deps.gh.getBranch(entry.path, b))
       .filter((pr): pr is PrStatus => pr !== undefined)
-    const prs = [...numbered.filter((p) => !byBranch.some((b) => b.number === p.number)), ...byBranch]
+    const found = [...numbered.filter((p) => !byBranch.some((b) => b.number === p.number)), ...byBranch]
+    // A staging branch's PR to main, once a plan reached its final PR (its base may name the branch).
+    const staging = stagingBranches({ model, claims: entry.claims, prs: found })
+      .map((b) => deps.gh.getBranch(entry.path, b))
+      .filter((pr): pr is PrStatus => pr !== undefined && !found.some((p) => p.number === pr.number))
+    const prs = [...found, ...staging]
     return { ...base, model, agents: await agentsOf(entry.path, listed), prs }
   }
 
@@ -155,7 +161,7 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
       // One repo at a time: the first call settles `gh auth status` for the rest.
       for (const repo of board.repos) {
         if (repo.error !== undefined) continue
-        if (await deps.gh.refresh(repo.path, livePrNumbers(repo.model, repo.claims), prBranches(repo))) changed = true
+        if (await deps.gh.refresh(repo.path, livePrNumbers(repo.model, repo.claims), prBranches(repo), stagingBranches(repo))) changed = true
       }
       return changed
     },

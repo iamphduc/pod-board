@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
 import type { RunHeader as Header } from './plan-view.ts'
 
-/** The run's header: the repo crumb, the plan's name, and `actions` (the ⋯ menu) at the right end. The flow under it shows the steps. */
+/** The run's header: the repo crumb, the plan's name, and `actions` (the ⋯ menu) at the right end; then the progress strip (one segment per flow step) and `Wave N of M`. */
 export function RunHeader({ header, actions }: { header: Header; actions?: ReactNode }) {
+  const done = header.segments.filter((s) => s === 'done').length
+  const total = header.segments.length
   return (
     <header className="run-header">
       <div className="run-top">
@@ -12,6 +14,18 @@ export function RunHeader({ header, actions }: { header: Header; actions?: React
         </div>
         {actions}
       </div>
+      {(total > 0 || header.wave !== undefined) && (
+        <div className="run-meta">
+          {total > 0 && (
+            <span className="strip" role="img" aria-label={`${done} of ${total} steps done`}>
+              {header.segments.map((s, i) => (
+                <i key={i} className={s} />
+              ))}
+            </span>
+          )}
+          {header.wave !== undefined && <span className="mono muted run-wave">{header.wave}</span>}
+        </div>
+      )}
     </header>
   )
 }

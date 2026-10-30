@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { activeRuns, buildFixPipeline, buildPipeline, type Board, type RunSummary } from '@pod-board/model'
+import { activeRuns, buildFixPipeline, buildFlow, buildPipeline, type Board, type RunSummary } from '@pod-board/model'
 import type { StreamState } from '../../board-stream.ts'
 import { hashFor, type View } from '../../selection.ts'
 import { Icon } from '../../theme/icons.tsx'
@@ -56,14 +56,15 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
   const isFix = selected?.fix !== undefined
   const fixPipeline = repo && isFix && selected?.plan !== undefined ? buildFixPipeline(repo, selected.plan, now) : undefined
   const pipeline = repo && !isFix && selected?.plan !== undefined ? buildPipeline(repo, selected.plan, now) : undefined
-  const header = runHeader(selected, repo)
+  const header = runHeader(selected, repo, now)
   const steps = nextSteps(selected, repo, now)
   const shown = shownTab(stored, { view })
   const notices = banners(board, stream)
   const lost = connectionStatus(stream)
   const autoSwitch = switchView(selected, board)
   const runKey = selected ? hashFor(selected) : 'none'
-  const stages = fixPipeline?.stages ?? pipeline?.stages ?? []
+  // A plan's full flow (Think → You → sprints → Check → Ship); a fix run's Build, Review, Ship.
+  const stages = fixPipeline?.stages ?? (repo && pipeline && selected?.plan !== undefined ? (buildFlow(repo, selected.plan, now) ?? []) : [])
 
   const press = (t: Tab) => {
     const next = tabPress(shown, t, view)
@@ -139,7 +140,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
           ) : (
             <>
               {header && <RunHeader header={header} actions={menu} />}
-              <Flow stages={stages} {...(pipeline ? { boardHref: hashFor(selected, 'board') } : {})} />
+              <Flow key={runKey} stages={stages} {...(pipeline ? { boardHref: hashFor(selected, 'board') } : {})} />
               {steps && <NextStepCard key={runKey} repo={repo} run={selected} card={steps.card} />}
               <div className="tabs" role="group" aria-label="More about this run">
                 {TABS.map((t) => (

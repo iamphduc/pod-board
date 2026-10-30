@@ -217,7 +217,8 @@ describe('run flow', () => {
     expect(flow.cards[1]!.cls).not.toMatch(/\b(hi|dim)\b/)
     expect(flow.cards[0]!.cls).toMatch(/\bskipped\b.*\bdim\b/)
     // No Merge in the flow: the Next step card holds the one Merge for this PR.
-    expect(flow.markup).not.toMatch(/<button/)
+    expect(flow.markup).not.toMatch(/>Merge<|merge-pr-/)
+    expect(count(flow.markup, /<button/)).toBe(1)
     expect(count(html, /id="merge-pr-78"/)).toBe(1)
     // The fold line for phones: the current step, with its mark, closed at start.
     expect(flow.markup).toMatch(/<button[^>]*class="flow-fold"[^>]*aria-expanded="false"[^>]*>[\s\S]*?<svg[\s\S]*?Wave 3 · PR #78 · you merge[\s\S]*?<\/button>/)

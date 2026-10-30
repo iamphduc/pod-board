@@ -265,14 +265,19 @@
  * by colour, not opacity, so their text stays readable. Below its columns' minimum
  * width the flow scrolls inside its own box.
  */
+/* The flow: the fold line (phones only), the columns' scroll box, then the wave board link. */
 .flow-frame {
-  /* Holds the cards' absolutely placed screen-reader words, so they scroll with it instead of widening the page. */
-  position: relative;
   display: grid;
   gap: 12px;
   min-width: 0;
-  overflow-x: auto;
   margin-bottom: 32px;
+}
+
+.flow-scroll {
+  /* Holds the cards' absolutely placed screen-reader words, so they scroll with it instead of widening the page. */
+  position: relative;
+  min-width: 0;
+  overflow-x: auto;
   /* Room for the highlighted border and the focus ring inside the scroll box. */
   padding: 2px;
 }
@@ -361,19 +366,23 @@
   overflow-wrap: anywhere;
 }
 
-.flow-step.done .flow-mark svg {
+.flow-step.done .flow-mark svg,
+.flow-fold[data-state="done"] .flow-mark svg {
   color: var(--ready);
 }
 
-.flow-step.live .flow-mark svg {
+.flow-step.live .flow-mark svg,
+.flow-fold[data-state="live"] .flow-mark svg {
   color: var(--running);
 }
 
-.flow-step.you .flow-mark svg {
+.flow-step.you .flow-mark svg,
+.flow-fold[data-state="you"] .flow-mark svg {
   color: var(--needs-you);
 }
 
-.flow-step.blocked .flow-mark svg {
+.flow-step.blocked .flow-mark svg,
+.flow-fold[data-state="blocked"] .flow-mark svg {
   color: var(--blocked);
 }
 
@@ -411,12 +420,64 @@
 
 /* The wave board link stays at the left edge while the flow scrolls. */
 .flow-board {
-  /* As wide as its text: a box as wide as the flow has no room to stick. */
   justify-self: start;
-  position: sticky;
-  left: 0;
   margin: 0;
   font-size: var(--size-dense);
+}
+
+/* The fold line: phones only (below). Desktop always shows the whole flow. */
+.flow-fold {
+  display: none;
+}
+
+.flow-fold-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.flow-fold-chevron {
+  display: flex;
+  color: var(--muted);
+}
+
+.flow-frame.open .flow-fold-chevron {
+  transform: rotate(180deg);
+}
+
+/* The progress strip: done steps white, the current one dimmed, the rest grey. */
+.run-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 10px;
+}
+
+.run-wave {
+  font-size: var(--size-small);
+}
+
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.strip i {
+  width: 20px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.strip i.done {
+  background: var(--fg);
+}
+
+.strip i.current {
+  background: var(--fg);
+  opacity: 0.45;
 }
 
 /* Next step card: the base .card, plain; the dot carries the state. */
@@ -843,6 +904,32 @@
 
 /* Phone: each row stacks, the copy and send buttons under its text, full width. */
 @media (max-width: 480px) {
+  .main:not(.wide) > .flow-frame {
+    width: 100%;
+  }
+
+  .flow-fold {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--fg);
+    font: inherit;
+    font-size: var(--size-dense);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .flow-frame:not(.open) > .flow-scroll,
+  .flow-frame:not(.open) > .flow-board {
+    display: none;
+  }
+
   .reply-row,
   .reply-cmd,
   .reply-actions,
