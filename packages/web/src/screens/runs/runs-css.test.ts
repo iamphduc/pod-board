@@ -217,6 +217,13 @@ describe('runs.css main column and run cards', () => {
     expect(px(phone.get('.run-header')?.['margin-bottom'])).toBeLessThanOrEqual(12)
   })
 
+  it('shortens the wave board link on phones', () => {
+    expect(stylesAt(1280).get('.board-link-short')?.['display']).toBe('none')
+    expect(stylesAt(1280).get('.board-link-long')?.['display']).toBeUndefined()
+    expect(stylesAt(375).get('.board-link-short')?.['display']).toBe('inline')
+    expect(stylesAt(375).get('.board-link-long')?.['display']).toBe('none')
+  })
+
   it('draws the progress strip under the plan name', () => {
     const styles = stylesAt(1280)
     expect(styles.get('.strip')?.['display']).toBe('flex')

@@ -226,8 +226,12 @@ describe('run flow', () => {
     // The wave board link sits in the run header, before the ⋯ menu; not in the flow.
     expect(flow.markup).not.toMatch(/Open the wave board/)
     const header = headerOf(html)
-    expect(header).toMatch(new RegExp(`<a[^>]*class="btn sm quiet board-link"[^>]*href="${hashFor(run, 'board').replace(/[/#]/g, (c) => `\\${c}`)}"[^>]*>Open the wave board</a>`))
-    expect(header.indexOf('Open the wave board')).toBeLessThan(header.indexOf('aria-label="Menu"'))
+    const link = new RegExp(`<a[^>]*class="btn sm quiet board-link"[^>]*href="${hashFor(run, 'board').replace(/[/#]/g, (c) => `\\${c}`)}"[^>]*>([\\s\\S]*?)</a>`).exec(header)
+    expect(link, 'the board link').not.toBeNull()
+    // The full label on desktop; a short one on phones, so the plan name keeps one line beside the menu.
+    expect(link![0]).toMatch(/aria-label="Open the wave board"/)
+    expect(link![1]).toBe('<span class="board-link-long">Open the wave board</span><span class="board-link-short">Wave board</span>')
+    expect(header.indexOf('board-link')).toBeLessThan(header.indexOf('aria-label="Menu"'))
   })
 
   it('an autopilot run has no Go card, and its live wave is highlighted', () => {
