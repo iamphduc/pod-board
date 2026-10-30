@@ -31,3 +31,8 @@ export function headPath(x: number, y: number, dir: 'right' | 'down'): string {
     ? `M${n(x - 5)} ${n(y - 4)} L${n(x)} ${n(y)} L${n(x - 5)} ${n(y + 4)}`
     : `M${n(x - 4)} ${n(y - 5)} L${n(x)} ${n(y)} L${n(x + 4)} ${n(y - 5)}`
 }
+
+/** Not built yet. */
+export function backPath(_from: Box, _to: Box, _origin: Box): string {
+  return ''
+}

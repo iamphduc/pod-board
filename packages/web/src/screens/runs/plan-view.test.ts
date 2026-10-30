@@ -162,37 +162,85 @@ describe('plan view', () => {
 describe('flow edges', () => {
   const step = (key: string, state: Step['state'], label = key): Step => ({ key, label, state, detail: `${key} detail` })
   const stage = (key: string, caption: string, steps: Step[]): Stage => ({ key, caption, steps })
+  const edges = (stages: Stage[]) => flowEdges(flowColumns(stages)).map((e) => `${e.from}>${e.to} ${e.kind}${e.walked ? ' W' : ''}${e.dashed ? ' D' : ''}`)
+  const plan = (review: Step['state'], fix: Step['state'], finalPr: Step['state']) => [
+    stage('think', 'Think', [step('research', 'skipped'), step('interview', 'done')]),
+    stage('you', 'You', [step('look', 'done')]),
+    stage('check', 'Check', [step('review', review), step('fix', fix)]),
+    stage('ship', 'Ship', [step('final-pr', finalPr)]),
+  ]
+  const fixRun = (engineer: Step['state'], fixPass: Step['state'], round1: Step['state'], round2: Step['state'], pr: Step['state']) => [
+    stage('build', 'Build', [step('engineer', engineer), step('fix-pass', fixPass)]),
+    stage('review', 'Review', [step('round-1', round1), step('round-2', round2)]),
+    stage('ship', 'Ship', [step('pr', pr)]),
+  ]
 
-  it('joins every step in order: down inside a column, across to the next column', () => {
-    const cols = flowColumns([
-      stage('think', 'Think', [step('research', 'skipped'), step('interview', 'done')]),
-      stage('you', 'You', [step('look', 'done')]),
-      stage('check', 'Check', [step('review', 'live'), step('fix', 'wait')]),
-      stage('ship', 'Ship', [step('final-pr', 'wait')]),
-    ])
-    expect(flowEdges(cols)).toEqual([
-      { from: 'think:research', to: 'think:interview', kind: 'down', walked: true, dashed: false },
-      { from: 'think:interview', to: 'you:look', kind: 'across', walked: true, dashed: false },
-      { from: 'you:look', to: 'check:review', kind: 'across', walked: true, dashed: false },
-      // Into Fix pass: dashed, since it only runs if review fails.
-      { from: 'check:review', to: 'check:fix', kind: 'down', walked: false, dashed: true },
-      { from: 'check:fix', to: 'ship:final-pr', kind: 'across', walked: false, dashed: false },
+  it('plan, review running: the main path skips Fix pass; the detour is dashed and not walked', () => {
+    expect(edges(plan('live', 'wait', 'wait'))).toEqual([
+      'think:research>think:interview down W',
+      'think:interview>you:look across W',
+      'you:look>check:review across W',
+      'check:review>ship:final-pr across',
+      'check:review>check:fix down D',
+      'check:fix>ship:final-pr across D',
     ])
   })
 
-  it('walks up to the first waiting step when nothing runs, and the whole path when all is done', () => {
+  it('plan, review passed first time: the walked line goes straight from Final review to Final PR, never through Fix pass', () => {
+    expect(edges(plan('done', 'wait', 'you')).slice(3)).toEqual([
+      'check:review>ship:final-pr across W',
+      'check:review>check:fix down D',
+      'check:fix>ship:final-pr across D',
+    ])
+    // Final PR not open yet: still the main line into it, Fix pass untouched.
+    expect(edges(plan('done', 'wait', 'wait')).slice(3)).toEqual([
+      'check:review>ship:final-pr across W',
+      'check:review>check:fix down D',
+      'check:fix>ship:final-pr across D',
+    ])
+  })
+
+  it('plan, after a fix pass: the detour is walked too', () => {
+    expect(edges(plan('done', 'done', 'you')).slice(3)).toEqual([
+      'check:review>ship:final-pr across W',
+      'check:review>check:fix down W D',
+      'check:fix>ship:final-pr across W D',
+    ])
+  })
+
+  it('plan, fix pass running: walked into Fix pass, not past it', () => {
+    expect(edges(plan('done', 'live', 'wait')).slice(3)).toEqual([
+      'check:review>ship:final-pr across',
+      'check:review>check:fix down W D',
+      'check:fix>ship:final-pr across D',
+    ])
+  })
+
+  it('fix run in round 1: the main line runs Engineer → Round 1 → Round 2 → PR; Fix pass is a dashed detour back from Round 1', () => {
+    expect(edges(fixRun('done', 'wait', 'live', 'wait', 'wait'))).toEqual([
+      'build:engineer>review:round-1 across W',
+      'review:round-1>review:round-2 down',
+      'review:round-2>ship:pr across',
+      'review:round-1>build:fix-pass back D',
+      'build:fix-pass>review:round-2 across D',
+    ])
+  })
+
+  it('fix run after a fix pass: the detour is walked, and the main line up to round 2', () => {
+    expect(edges(fixRun('done', 'done', 'done', 'live', 'wait'))).toEqual([
+      'build:engineer>review:round-1 across W',
+      'review:round-1>review:round-2 down W',
+      'review:round-2>ship:pr across',
+      'review:round-1>build:fix-pass back W D',
+      'build:fix-pass>review:round-2 across W D',
+    ])
+  })
+
+  it('with no optional step: one path, walked up to the first waiting step, or all of it when done', () => {
     const cols = (states: Step['state'][]) => flowColumns([stage('s', 'S', states.map((st, i) => step(`s${i}`, st)))])
     expect(flowEdges(cols(['done', 'wait', 'wait'])).map((e) => e.walked)).toEqual([true, false])
     expect(flowEdges(cols(['done', 'done'])).map((e) => e.walked)).toEqual([true])
     expect(flowEdges(cols(['done']))).toEqual([])
     expect(flowEdges([])).toEqual([])
-  })
-
-  it("a fix run's Fix pass is dashed too", () => {
-    const cols = flowColumns([stage('build', 'Build', [step('engineer', 'done'), step('fix-pass', 'wait')]), stage('review', 'Review', [step('round-1', 'wait')])])
-    expect(flowEdges(cols).map((e) => [e.to, e.dashed])).toEqual([
-      ['build:fix-pass', true],
-      ['review:round-1', false],
-    ])
   })
 })
