@@ -368,22 +368,42 @@ describe('tabs.css text caps', () => {
   })
 })
 
-describe('runs.css flow arrows', () => {
-  it('centres each arrow on the first card of the column it points into, in the gap before it', () => {
+describe('runs.css flow rows and lines', () => {
+  it('lays the flow out in rows, so cards in a row share one height', () => {
     const styles = stylesAt(1440)
+    const flow = styles.get('.flow')
+    expect(flow?.['display']).toBe('grid')
+    expect(flow?.['position']).toBe('relative')
+    expect(flow?.['grid-template-columns']).toBe('repeat(var(--flow-cols), minmax(152px, 1fr))')
+    expect(flow?.['grid-template-rows']).toBe('auto repeat(var(--flow-rows), auto)')
+    expect(flow?.['min-width']).toBe('calc(var(--flow-cols) * 152px + (var(--flow-cols) - 1) * 32px)')
+    // Columns and their step lists share the flow's rows.
+    expect(styles.get('.flow-col')?.['grid-template-rows']).toBe('subgrid')
+    expect(styles.get('.flow-steps')?.['grid-template-rows']).toBe('subgrid')
+    expect(styles.get('.flow-cols')?.['display']).toBe('contents')
+    // Room for the title and two detail lines; never cut: no clamp, nothing hidden.
     const step = styles.get('.flow-step')
+    expect(step?.['min-height']).toMatch(/^calc\(/)
     expect(step?.['position']).toBe('relative')
-    const arrow = styles.get('.flow-arrow')
-    expect(arrow?.['position']).toBe('absolute')
-    expect(arrow?.['top']).toBe('50%')
-    expect(arrow?.['transform']).toBe('translateY(-50%)')
-    // The arrow box is the whole gap left of the card, its icon centred in it.
-    const gap = styles.get('.flow')?.['gap']
-    expect(gap).toMatch(/^\d+px$/)
-    expect(arrow?.['width']).toBe(gap)
-    // Measured from the card's padding box, so past its 1 px border.
-    expect(arrow?.['right']).toBe('calc(100% + 1px)')
-    expect(step?.['border']).toBe('1px solid var(--border)')
-    expect(arrow?.['justify-content']).toBe('center')
+    expect(step?.['align-self'] ?? 'stretch').toBe('stretch')
+    for (const sel of ['.flow-step', '.flow-detail']) {
+      const d = styles.get(sel) ?? {}
+      expect(d['overflow'], sel).toBeUndefined()
+      expect(d['-webkit-line-clamp'], sel).toBeUndefined()
+      expect(d['line-clamp'], sel).toBeUndefined()
+    }
+    // No arrow rules left.
+    expect(runsRules().some((r) => r.selectors.some((x) => x.includes('flow-arrow')))).toBe(false)
+  })
+
+  it('draws quiet lines, the walked part in --fg, the optional one dashed', () => {
+    const styles = stylesAt(1440)
+    const lines = styles.get('.flow-lines')
+    expect(lines?.['position']).toBe('absolute')
+    expect(lines?.['pointer-events']).toBe('none')
+    expect(styles.get('.flow-lines path')?.['stroke']).toBe('var(--border-strong)')
+    expect(styles.get('.flow-lines path')?.['fill']).toBe('none')
+    expect(styles.get('.flow-lines path.walked')?.['stroke']).toBe('var(--fg)')
+    expect(styles.get('.flow-lines path.dashed')?.['stroke-dasharray']).toMatch(/^\d+ \d+$/)
   })
 })

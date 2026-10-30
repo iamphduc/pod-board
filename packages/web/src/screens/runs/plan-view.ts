@@ -99,3 +99,10 @@ export function runHeader(run: RunSummary | undefined, repo: BoardRepo | undefin
   if (wave !== undefined) header.wave = wave
   return header
 }
+
+export type FlowEdge = { from: string; to: string; kind: 'down' | 'across'; walked: boolean; dashed: boolean }
+
+/** Not built yet. */
+export function flowEdges(_columns: FlowColumn[]): FlowEdge[] {
+  return []
+}

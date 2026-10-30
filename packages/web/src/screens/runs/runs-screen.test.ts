@@ -195,20 +195,11 @@ describe('run flow', () => {
     const { html, run } = render({ repo: chess([onlyQueue(), manual, t1Pushed], { prs: [gh(78, 'open')] }) })
     const flow = flowOf(html)
     expect(flow.captions).toEqual(['Think', 'You', 'Sprint 1 of 1', 'Check', 'Ship'])
-    // An arrow icon between each pair of columns, none before the first.
-    expect(count(flow.markup, /class="flow-arrow"/)).toBe(4)
-    // Each arrow sits in the first card of the column it points into, so it centres on that card, not on the column.
-    expect(flow.markup).not.toMatch(/<li class="flow-arrow"/)
-    const cols = flow.markup.split('<li class="flow-col">').slice(1)
-    expect(cols).toHaveLength(5)
-    cols.forEach((col, i) => {
-      const first = /<li class="flow-step[^"]*">([\s\S]*?)<\/li>/.exec(col)![1]!
-      if (i === 0) expect(col, 'the first column has no arrow').not.toMatch(/flow-arrow/)
-      else {
-        expect(first, `column ${i + 1}'s first card`).toMatch(/^<span class="flow-arrow" aria-hidden="true"><svg/)
-        expect(count(col, /class="flow-arrow"/), `column ${i + 1}`).toBe(1)
-      }
-    })
+    // No arrow icons: an SVG layer draws the path between the cards (filled in from the page's layout).
+    expect(flow.markup).not.toMatch(/flow-arrow/)
+    expect(flow.markup).toMatch(/<svg class="flow-lines" aria-hidden="true"/)
+    // A grid: one row of headings, then row i holds every column's i-th card (3 at most here: the sprint's waves).
+    expect(flow.markup).toMatch(/<div class="flow" style="--flow-cols:5;--flow-rows:3">/)
     const labels = ['Research', 'Plan interview', 'Look picked', 'Replied go', 'Wave 1', 'Wave 2', 'Wave 3', 'Final review', 'Fix pass', 'Final PR']
     expect(flow.cards).toHaveLength(labels.length)
     flow.cards.forEach((c, i) => expect(c.text.startsWith(labels[i]!), c.text).toBe(true))
@@ -264,7 +255,8 @@ describe('run flow', () => {
     const { html } = render({ repo: chess([], { claims: [claim] }), plan: name })
     const flow = flowOf(html)
     expect(flow.captions).toEqual(['Build', 'Review', 'Ship'])
-    expect(count(flow.markup, /class="flow-arrow"/)).toBe(2)
+    expect(flow.markup).not.toMatch(/flow-arrow/)
+    expect(flow.markup).toMatch(/<div class="flow" style="--flow-cols:3;--flow-rows:2">/)
     expect(flow.markup).not.toMatch(/Open the wave board/)
     expect(headerOf(html)).not.toMatch(/Open the wave board/)
     // A fix run folds too: its first waiting step.

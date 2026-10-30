@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { edgePath } from './geometry.ts'
+import { downPath, edgePath, headPath } from './geometry.ts'
 
 describe('edge path', () => {
   const origin = { left: 100, top: 50, right: 900, bottom: 650 }
@@ -16,5 +16,21 @@ describe('edge path', () => {
     const to = { left: 630.1, top: 60, right: 850, bottom: 100 }
     // x1 = 490.27, y1 = 280.165, x2 = 530.1, y2 = 30, m = 510.185
     expect(edgePath(from, to, origin)).toBe('M490.3 280.2 C510.2 280.2 510.2 30 530.1 30')
+  })
+})
+
+describe('down path and heads', () => {
+  const origin = { left: 100, top: 50, right: 900, bottom: 650 }
+
+  it('runs straight down from the middle of one card bottom edge to the middle of the next card top edge', () => {
+    const from = { left: 110, top: 60, right: 330, bottom: 138 }
+    const to = { left: 110, top: 154, right: 330, bottom: 232 }
+    // x = 220 - 100 = 120; y1 = 138 - 50 = 88; y2 = 154 - 50 = 104
+    expect(downPath(from, to, origin)).toBe('M120 88 L120 104')
+  })
+
+  it('draws a small chevron with its tip on the point', () => {
+    expect(headPath(270, 180.5, 'right')).toBe('M265 176.5 L270 180.5 L265 184.5')
+    expect(headPath(120, 104, 'down')).toBe('M116 99 L120 104 L124 99')
   })
 })

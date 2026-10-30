@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildFlow, buildPipeline, buildRepoModel, listRuns, type BoardRepo, type Claim, type RunSummary, type Stage, type Step } from '@pod-board/model'
 import { loadFixture } from '../../../../model/test/load-fixture.ts'
-import { flowColumns, foldLine, runHeader } from './plan-view.ts'
+import { flowColumns, flowEdges, foldLine, runHeader } from './plan-view.ts'
 
 const NOW = Date.UTC(2026, 9, 20, 12)
 const PLAN = 'pod-docs/plans/sparring-ladder.md'
@@ -156,5 +156,43 @@ describe('plan view', () => {
     expect(runHeader(row, undefined, NOW)).toBeUndefined()
     // Another repo's run never reads as this repo's.
     expect(runHeader({ ...row, repoId: 'other' }, repo, NOW)).toBeUndefined()
+  })
+})
+
+describe('flow edges', () => {
+  const step = (key: string, state: Step['state'], label = key): Step => ({ key, label, state, detail: `${key} detail` })
+  const stage = (key: string, caption: string, steps: Step[]): Stage => ({ key, caption, steps })
+
+  it('joins every step in order: down inside a column, across to the next column', () => {
+    const cols = flowColumns([
+      stage('think', 'Think', [step('research', 'skipped'), step('interview', 'done')]),
+      stage('you', 'You', [step('look', 'done')]),
+      stage('check', 'Check', [step('review', 'live'), step('fix', 'wait')]),
+      stage('ship', 'Ship', [step('final-pr', 'wait')]),
+    ])
+    expect(flowEdges(cols)).toEqual([
+      { from: 'think:research', to: 'think:interview', kind: 'down', walked: true, dashed: false },
+      { from: 'think:interview', to: 'you:look', kind: 'across', walked: true, dashed: false },
+      { from: 'you:look', to: 'check:review', kind: 'across', walked: true, dashed: false },
+      // Into Fix pass: dashed, since it only runs if review fails.
+      { from: 'check:review', to: 'check:fix', kind: 'down', walked: false, dashed: true },
+      { from: 'check:fix', to: 'ship:final-pr', kind: 'across', walked: false, dashed: false },
+    ])
+  })
+
+  it('walks up to the first waiting step when nothing runs, and the whole path when all is done', () => {
+    const cols = (states: Step['state'][]) => flowColumns([stage('s', 'S', states.map((st, i) => step(`s${i}`, st)))])
+    expect(flowEdges(cols(['done', 'wait', 'wait'])).map((e) => e.walked)).toEqual([true, false])
+    expect(flowEdges(cols(['done', 'done'])).map((e) => e.walked)).toEqual([true])
+    expect(flowEdges(cols(['done']))).toEqual([])
+    expect(flowEdges([])).toEqual([])
+  })
+
+  it("a fix run's Fix pass is dashed too", () => {
+    const cols = flowColumns([stage('build', 'Build', [step('engineer', 'done'), step('fix-pass', 'wait')]), stage('review', 'Review', [step('round-1', 'wait')])])
+    expect(flowEdges(cols).map((e) => [e.to, e.dashed])).toEqual([
+      ['build:fix-pass', true],
+      ['review:round-1', false],
+    ])
   })
 })
