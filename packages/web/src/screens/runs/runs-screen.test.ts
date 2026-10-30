@@ -197,6 +197,18 @@ describe('run flow', () => {
     expect(flow.captions).toEqual(['Think', 'You', 'Sprint 1 of 1', 'Check', 'Ship'])
     // An arrow icon between each pair of columns, none before the first.
     expect(count(flow.markup, /class="flow-arrow"/)).toBe(4)
+    // Each arrow sits in the first card of the column it points into, so it centres on that card, not on the column.
+    expect(flow.markup).not.toMatch(/<li class="flow-arrow"/)
+    const cols = flow.markup.split('<li class="flow-col">').slice(1)
+    expect(cols).toHaveLength(5)
+    cols.forEach((col, i) => {
+      const first = /<li class="flow-step[^"]*">([\s\S]*?)<\/li>/.exec(col)![1]!
+      if (i === 0) expect(col, 'the first column has no arrow').not.toMatch(/flow-arrow/)
+      else {
+        expect(first, `column ${i + 1}'s first card`).toMatch(/^<span class="flow-arrow" aria-hidden="true"><svg/)
+        expect(count(col, /class="flow-arrow"/), `column ${i + 1}`).toBe(1)
+      }
+    })
     const labels = ['Research', 'Plan interview', 'Look picked', 'Replied go', 'Wave 1', 'Wave 2', 'Wave 3', 'Final review', 'Fix pass', 'Final PR']
     expect(flow.cards).toHaveLength(labels.length)
     flow.cards.forEach((c, i) => expect(c.text.startsWith(labels[i]!), c.text).toBe(true))

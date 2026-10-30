@@ -367,3 +367,21 @@ describe('tabs.css text caps', () => {
     expect(decls(hover[0]!.body)).not.toHaveProperty('max-width')
   })
 })
+
+describe('runs.css flow arrows', () => {
+  it('centres each arrow on the first card of the column it points into, in the gap before it', () => {
+    const styles = stylesAt(1440)
+    const step = styles.get('.flow-step')
+    expect(step?.['position']).toBe('relative')
+    const arrow = styles.get('.flow-arrow')
+    expect(arrow?.['position']).toBe('absolute')
+    expect(arrow?.['top']).toBe('50%')
+    expect(arrow?.['transform']).toBe('translateY(-50%)')
+    // The arrow box is the whole gap left of the card, its icon centred in it.
+    const gap = styles.get('.flow')?.['gap']
+    expect(gap).toMatch(/^\d+px$/)
+    expect(arrow?.['width']).toBe(gap)
+    expect(arrow?.['right']).toBe('100%')
+    expect(arrow?.['justify-content']).toBe('center')
+  })
+})
