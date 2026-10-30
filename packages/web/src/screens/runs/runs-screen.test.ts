@@ -109,7 +109,9 @@ describe('runs screen', () => {
     expect(text(html)).not.toMatch(/\blive\b/i)
     expect(html).not.toMatch(/class="bar"/)
     // The old views are gone.
-    expect(text(html)).not.toMatch(/Wave board|Waiting on you|Add a repo/)
+    // (The header's short wave board link says "Wave board"; the old Wave board tab is gone from the tabs.)
+    expect(text(html)).not.toMatch(/Waiting on you|Add a repo/)
+    expect(tabsOf(html).some((t) => /Wave board/.test(t.label))).toBe(false)
   })
 
   it('shows the connection status only while lost', () => {

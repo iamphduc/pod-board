@@ -250,6 +250,11 @@
   white-space: nowrap;
 }
 
+/* Phones get the short label (below), so the plan name keeps one line beside the link and the menu. */
+.board-link-short {
+  display: none;
+}
+
 .run-crumb {
   margin: 0 0 6px;
   font-size: var(--size-small);
@@ -904,6 +909,14 @@
 
 /* Phone: each row stacks, the copy and send buttons under its text, full width. */
 @media (max-width: 480px) {
+  .board-link-long {
+    display: none;
+  }
+
+  .board-link-short {
+    display: inline;
+  }
+
   .flow-fold {
     display: flex;
     align-items: center;

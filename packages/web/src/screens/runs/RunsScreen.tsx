@@ -145,8 +145,9 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
                   actions={
                     <div className="run-actions">
                       {pipeline && (
-                        <a className="btn sm quiet board-link" href={hashFor(selected, 'board')}>
-                          Open the wave board
+                        <a className="btn sm quiet board-link" href={hashFor(selected, 'board')} aria-label="Open the wave board">
+                          <span className="board-link-long">Open the wave board</span>
+                          <span className="board-link-short">Wave board</span>
                         </a>
                       )}
                       {menu}
