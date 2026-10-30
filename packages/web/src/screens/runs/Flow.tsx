@@ -1,4 +1,4 @@
-import { Fragment, useId, useState } from 'react'
+import { useId, useState } from 'react'
 import type { Stage } from '@pod-board/model'
 import { Icon } from '../../theme/icons.tsx'
 import { flowColumns, foldLine } from './plan-view.ts'
@@ -6,7 +6,8 @@ import { flowColumns, foldLine } from './plan-view.ts'
 type Props = { stages: Stage[] }
 
 /**
- * The run's flow: a column of step cards per stage, arrows between columns.
+ * The run's flow: a column of step cards per stage, arrows between columns. Each arrow sits in the first
+ * card of the column it points into, so it centres on that card whatever the columns hold.
  * On phones (CSS, ≤ 480 px) it starts folded to one line naming the current step; the line opens and
  * folds it. Nothing is remembered: the caller keys it by run, so every load and run starts folded.
  */
@@ -36,31 +37,29 @@ export function Flow({ stages }: Props) {
       <div className="flow-scroll" id={listId} tabIndex={0}>
         <ol className="flow">
           {columns.map((col, i) => (
-            <Fragment key={col.key}>
-              {i > 0 && (
-                <li className="flow-arrow" aria-hidden="true">
-                  <Icon name="arrow-right" />
-                </li>
-              )}
-              <li className="flow-col">
-                <h2 className="flow-cap">{col.caption}</h2>
-                <ol className="flow-steps">
-                  {col.steps.map((s) => (
-                    <li key={s.key} className={`flow-step ${s.state}${s.highlight ? ' hi' : ''}${s.dim ? ' dim' : ''}`}>
-                      <span className="flow-mark" aria-hidden="true">
-                        <Icon name={s.mark} />
+            <li key={col.key} className="flow-col">
+              <h2 className="flow-cap">{col.caption}</h2>
+              <ol className="flow-steps">
+                {col.steps.map((s, j) => (
+                  <li key={s.key} className={`flow-step ${s.state}${s.highlight ? ' hi' : ''}${s.dim ? ' dim' : ''}`}>
+                    {i > 0 && j === 0 && (
+                      <span className="flow-arrow" aria-hidden="true">
+                        <Icon name="arrow-right" />
                       </span>
-                      <span className="flow-label">
-                        {s.label}
-                        <span className="sr-only"> ({s.word})</span>
-                      </span>
-                      <span className="flow-detail">{s.detail}</span>
-                    </li>
-                  ))}
-                </ol>
-              </li>
-            </Fragment>
-        ))}
+                    )}
+                    <span className="flow-mark" aria-hidden="true">
+                      <Icon name={s.mark} />
+                    </span>
+                    <span className="flow-label">
+                      {s.label}
+                      <span className="sr-only"> ({s.word})</span>
+                    </span>
+                    <span className="flow-detail">{s.detail}</span>
+                  </li>
+                ))}
+              </ol>
+            </li>
+          ))}
         </ol>
       </div>
     </section>

@@ -298,7 +298,8 @@
   padding: 0;
   display: flex;
   align-items: stretch;
-  gap: 8px;
+  /* The gap holds the arrow into the next column. */
+  gap: 32px;
   /* Lets the columns shrink to fit before the box scrolls; past their minimum they overflow into the scroll. */
   min-width: 0;
 }
@@ -312,10 +313,16 @@
   gap: 8px;
 }
 
+/* In the gap left of the next column's first card, centred on that card's mid-line. */
 .flow-arrow {
-  flex: none;
-  align-self: center;
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
   display: flex;
+  justify-content: center;
+  pointer-events: none;
 }
 
 .flow-arrow svg {
@@ -340,6 +347,8 @@
 }
 
 .flow-step {
+  /* Holds the arrow into this column (first card only) and the screen-reader word. */
+  position: relative;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
   gap: 2px 8px;
