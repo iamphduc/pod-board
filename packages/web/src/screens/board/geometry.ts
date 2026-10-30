@@ -1,6 +1,8 @@
-// Where the wave board's dependency lines go: a curve from the right edge of one
-// card to the left edge of the next, each at its card's middle, in the board's
-// own coordinates. Pure, so the SVG drawing in BoardScreen is only glue.
+// Where the connector lines go, on the wave board and in screen 1's run flow: a
+// curve from the right edge of one card to the left edge of the next, each at its
+// card's middle; a straight line from the middle of a card's bottom edge to the
+// next card's top edge; and a small arrowhead. In the drawing box's own
+// coordinates. Pure, so the SVG drawing is only glue.
 
 export type Box = { left: number; top: number; right: number; bottom: number }
 
@@ -17,12 +19,15 @@ export function edgePath(from: Box, to: Box, origin: Box): string {
   return `M${n(x1)} ${n(y1)} C${n(m)} ${n(y1)} ${n(m)} ${n(y2)} ${n(x2)} ${n(y2)}`
 }
 
-/** Not built yet. */
-export function downPath(_from: Box, _to: Box, _origin: Box): string {
-  return ''
+/** `M x y1 L x y2`: from the middle of `from`'s bottom edge straight down to `to`'s top edge, relative to `origin`. */
+export function downPath(from: Box, to: Box, origin: Box): string {
+  const x = (from.left + from.right) / 2 - origin.left
+  return `M${n(x)} ${n(from.bottom - origin.top)} L${n(x)} ${n(to.top - origin.top)}`
 }
 
-/** Not built yet. */
-export function headPath(_x: number, _y: number, _dir: 'right' | 'down'): string {
-  return ''
+/** An open chevron, 5 deep and 8 wide, with its tip on (`x`, `y`), pointing `dir`. */
+export function headPath(x: number, y: number, dir: 'right' | 'down'): string {
+  return dir === 'right'
+    ? `M${n(x - 5)} ${n(y - 4)} L${n(x)} ${n(y)} L${n(x - 5)} ${n(y + 4)}`
+    : `M${n(x - 4)} ${n(y - 5)} L${n(x)} ${n(y)} L${n(x + 4)} ${n(y - 5)}`
 }

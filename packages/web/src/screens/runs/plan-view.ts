@@ -8,7 +8,8 @@ export type RunHeader = { crumb: string; name: string; segments: Segment[]; wave
 
 /** The SVG mark of each state (names in theme/icons.tsx). */
 export type FlowMark = 'check' | 'dot' | 'alert' | 'blocked' | 'circle'
-export type FlowStep = { key: string; label: string; detail: string; state: StepState; word: string; mark: FlowMark; highlight: boolean; dim: boolean }
+/** `optional`: a step that only runs if an earlier one fails (Fix pass); the line into it is dashed. */
+export type FlowStep = { key: string; label: string; detail: string; state: StepState; word: string; mark: FlowMark; highlight: boolean; dim: boolean; optional: boolean }
 export type FlowColumn = { key: string; caption: string; steps: FlowStep[] }
 export type FoldLine = { label: string; detail: string; mark: FlowMark; word: string; state: StepState }
 
@@ -28,6 +29,8 @@ const MARKS: Record<StepState, FlowMark> = { done: 'check', live: 'dot', you: 'a
 const HIGHLIGHT = new Set<StepState>(['live', 'you', 'blocked'])
 /** Steps not reached yet, not recorded, or not taken: dim. */
 const DIM = new Set<StepState>(['wait', 'unknown', 'skipped'])
+/** Step keys (plan and fix run) that only run if the review fails. */
+const OPTIONAL = new Set(['fix', 'fix-pass'])
 /** Steps the strip counts as done once a later step started: the board can't see them happen. */
 const UNSEEN = new Set<StepState>(['unknown', 'skipped'])
 
@@ -47,6 +50,7 @@ export function flowColumns(stages: Stage[]): FlowColumn[] {
         mark: MARKS[step.state],
         highlight: HIGHLIGHT.has(step.state),
         dim: DIM.has(step.state),
+        optional: OPTIONAL.has(step.key),
       })),
     }))
 }
@@ -100,9 +104,20 @@ export function runHeader(run: RunSummary | undefined, repo: BoardRepo | undefin
   return header
 }
 
+/** One connector of the flow's path, between two steps by key. */
 export type FlowEdge = { from: string; to: string; kind: 'down' | 'across'; walked: boolean; dashed: boolean }
 
-/** Not built yet. */
-export function flowEdges(_columns: FlowColumn[]): FlowEdge[] {
-  return []
+/**
+ * The flow's one ordered path: every step to the next, down inside a column and across from a column's
+ * last card to the next column's first. Walked (drawn in --fg) up to and into the current step, or all of
+ * it when no step is current; the line into an optional step (Fix pass) is dashed.
+ */
+export function flowEdges(columns: FlowColumn[]): FlowEdge[] {
+  const steps = columns.flatMap((c) => c.steps.map((s) => ({ s, col: c.key })))
+  const current = currentIndex(steps.map((x) => x.s.state))
+  const reached = current < 0 ? steps.length : current
+  return steps.slice(1).map(({ s, col }, i) => {
+    const prev = steps[i]!
+    return { from: prev.s.key, to: s.key, kind: prev.col === col ? 'down' : 'across', walked: i + 1 <= reached, dashed: s.optional }
+  })
 }

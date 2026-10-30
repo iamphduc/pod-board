@@ -165,9 +165,8 @@ describe('runs.css main column and run cards', () => {
     // The flow spans the shared column like every other part; the column is the flow's width.
     expect(styles.get('.main:not(.wide) > .flow-frame')).toBeUndefined()
     expect(mainCap).toBe(1120)
-    // Its columns grow to fill the column (from 208 px) and shrink to 152 px before the box scrolls.
-    expect(styles.get('.flow-col')?.['flex']).toBe('1 1 208px')
-    expect(styles.get('.flow-col')?.['min-width']).toBe('152px')
+    // Its columns share the column equally and shrink to 152 px before the box scrolls.
+    expect(styles.get('.flow')?.['grid-template-columns']).toBe('repeat(var(--flow-cols), minmax(152px, 1fr))')
     // The columns scroll in their own box inside the flow, so the fold line and the board link stay put.
     const frame = styles.get('.flow-scroll')
     expect(frame?.['overflow-x']).toBe('auto')

@@ -292,42 +292,68 @@
   padding: 2px;
 }
 
+/*
+ * The flow is one grid: a heading row, then row i holds every column's i-th card. Columns and their step
+ * lists share the rows (subgrid), so the cards of a row always share one height, and a card whose detail
+ * wraps grows its whole row. Columns grow from 152 px to fill the box; below their minimum the grid
+ * keeps its width and scrolls in .flow-scroll. The lines layer (.flow-lines) spans the whole grid.
+ */
 .flow {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--flow-cols), minmax(152px, 1fr));
+  grid-template-rows: auto repeat(var(--flow-rows), auto);
+  /* The column gap holds the line across to the next column; the row gap the line down to the next card. */
+  column-gap: 32px;
+  row-gap: 16px;
+  min-width: calc(var(--flow-cols) * 152px + (var(--flow-cols) - 1) * 32px);
+}
+
+.flow-cols {
+  display: contents;
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  align-items: stretch;
-  /* The gap holds the arrow into the next column. */
-  gap: 32px;
-  /* Lets the columns shrink to fit before the box scrolls; past their minimum they overflow into the scroll. */
+}
+
+.flow-col {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: 1 / -1;
   min-width: 0;
 }
 
-/* Columns grow from 208 px to fill the column, and shrink to 152 px before the flow scrolls. */
-.flow-col {
-  flex: 1 1 208px;
-  min-width: 152px;
+.flow-steps {
   display: grid;
-  align-content: start;
-  gap: 8px;
+  grid-template-rows: subgrid;
+  grid-row: 2 / -1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-/* In the gap left of the next column's first card, centred on that card's mid-line. */
-.flow-arrow {
+/* The path between the steps: quiet lines, the walked part in --fg, the line into an optional step dashed. */
+.flow-lines {
   position: absolute;
-  /* Past the card's 1 px border, so the box is exactly the gap. */
-  right: calc(100% + 1px);
-  top: 50%;
-  transform: translateY(-50%);
-  width: 32px;
-  display: flex;
-  justify-content: center;
+  inset: 0;
   pointer-events: none;
+  overflow: visible;
 }
 
-.flow-arrow svg {
-  color: var(--faint);
+.flow-lines path {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.flow-lines path.walked {
+  stroke: var(--fg);
+}
+
+.flow-lines path.dashed {
+  stroke-dasharray: 4 4;
 }
 
 .flow-cap {
@@ -339,20 +365,15 @@
   overflow-wrap: anywhere;
 }
 
-.flow-steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-
 .flow-step {
-  /* Holds the arrow into this column (first card only) and the screen-reader word. */
+  /* Holds the screen-reader word. */
   position: relative;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
+  align-content: start;
   gap: 2px 8px;
+  /* Room for the title and two detail lines: padding 20 + border 2 + title 20 + gap 2, then 2 lines of 1.4 × 12 px. */
+  min-height: calc(44px + 2.8 * var(--size-micro));
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
