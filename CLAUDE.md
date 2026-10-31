@@ -6,6 +6,7 @@
 - Pick the cap by content type: screen 1 uses one shared column as wide as the run flow (about 1120 px max), with text inside cards capped near 72ch; the wave board may use the full width.
 - On narrow screens (≤ 820 px), the sidebar stacks above the main column instead of squeezing beside it.
 - Sidebar run items are separate cards with a small gap, not one bordered box with divider rows.
+- The sidebar is resizable on wider screens (200–400 px, 260 by default, kept per browser); the main column stays centred in the space left, and the page never scrolls sideways. The handle is off where the sidebar stacks.
 
 ## Buttons with icons
 
