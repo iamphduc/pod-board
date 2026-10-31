@@ -1,9 +1,11 @@
-// The run's flow: Think → You → a column per sprint → Check → Ship. Every step but the sprint
+// The run's flow: Think → You → Sprint → Check → Ship. Every step but the sprint
 // waves is one entry in FLOW_STEPS: its id, column, label, and a reader that takes its state and
 // detail from the repo model (and the pipeline already built from it). To add a step, add one entry
 // and its reader's test; to remove one, delete its entry. A reader that returns nothing leaves its
 // step out (Replied go on an autopilot run, Staging → main with no staging branch); a column with no
-// steps is left out. The waves come from the sprint docs, as `buildPipeline` reads them.
+// steps is left out. The Sprint column stacks every sprint in plan order: a done sprint as one card,
+// the current one as its waves, a later one as one waiting card. These come from the sprint docs, as
+// `buildPipeline` reads them.
 // Rule: a step is `done` only on data that proves it; with nothing to read it is `unknown` ("not recorded").
 // Pure. The rules and why are in pod-docs/feature-details/runs-and-pipeline.md.
 
@@ -17,7 +19,7 @@ export type FlowReading = { state: StepState; detail: string }
 export type FlowCtx = { repo: BoardRepo; plan: PlanModel; now: number; pipeline: Pipeline }
 export type FlowStepDef = { id: string; column: FlowColumnKey; label: string; read: (ctx: FlowCtx) => FlowReading | undefined }
 
-/** The columns in order; `sprints` stands for one column per sprint. */
+/** The columns in order; `sprints` stands for the one Sprint column, which holds every sprint. */
 const COLUMNS: ({ key: FlowColumnKey; caption: string } | 'sprints')[] = [
   { key: 'think', caption: 'Think' },
   { key: 'you', caption: 'You' },
@@ -118,6 +120,18 @@ export const FLOW_STEPS: FlowStepDef[] = [
   { id: 'staging', column: 'ship', label: 'Staging → main', read: readStaging },
 ]
 
+/**
+ * Every sprint's steps in one column, in plan order, captioned `Sprint N of M`: N is the current sprint,
+ * or M once none is current (all done, or the plan archived). Left out with no sprints.
+ */
+function sprintColumn(plan: PlanModel, pipeline: Pipeline): Stage[] {
+  const steps = pipeline.stages.filter((s) => s.key.startsWith('sprint:')).flatMap((s) => s.steps)
+  if (steps.length === 0) return []
+  const m = plan.sprints.length
+  const at = plan.sprints.findIndex((s) => s.slug === plan.currentSprint)
+  return [{ key: 'sprint', caption: `Sprint ${at >= 0 ? at + 1 : m} of ${m}`, steps }]
+}
+
 /** The plan's flow as stages; undefined for a plan the repo doesn't have. `steps` is the registry (tests pass their own). */
 export function buildFlow(repo: BoardRepo, planSlug: string, now: number, steps: FlowStepDef[] = FLOW_STEPS): Stage[] | undefined {
   const plan = repo.model.plans.find((p) => p.slug === planSlug)
@@ -125,7 +139,7 @@ export function buildFlow(repo: BoardRepo, planSlug: string, now: number, steps:
   if (!plan || !pipeline) return undefined
   const ctx: FlowCtx = { repo, plan, now, pipeline }
   return COLUMNS.flatMap((col): Stage[] => {
-    if (col === 'sprints') return pipeline.stages.filter((s) => s.key.startsWith('sprint:'))
+    if (col === 'sprints') return sprintColumn(plan, pipeline)
     const found = steps
       .filter((d) => d.column === col.key)
       .flatMap((d): Step[] => {
