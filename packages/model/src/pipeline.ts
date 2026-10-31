@@ -412,8 +412,10 @@ function logStatus(ctx: Ctx, s: SprintModel, w: WaveModel): string {
   if (w.slices.every(isSliceDone)) return numbered === undefined ? 'merged' : `merged PR #${numbered}`
   const open = w.slices.find((x) => x.pr.state === 'open' && x.pr.number !== undefined)?.pr.number
   if (open !== undefined) return `PR #${open} open`
-  // The wave in progress says what the run does, as the runs list does: running only while it runs.
-  return isWaveLive(ctx, s, w) ? IN_PROGRESS[ctx.state] : 'planned'
+  if (!isWaveLive(ctx, s, w)) return 'planned'
+  // An engineer at work on this wave is a fact about it: running. Otherwise the wave in progress says
+  // what the run does, as the runs list does (blocked, needs you, or waiting).
+  return waveAgents(ctx, s, w).some((x) => x.live) ? 'running' : IN_PROGRESS[ctx.state]
 }
 
 const IN_PROGRESS: Record<PlanState, string> = { blocked: 'blocked', 'needs-you': 'needs you', running: 'running', idle: 'waiting' }
