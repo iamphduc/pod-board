@@ -447,15 +447,17 @@
   border-color: var(--blocked);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .flow-step.live .flow-mark {
-    animation: flow-pulse 1.6s ease-in-out infinite;
-  }
+/* The running step's dot breathes (base.css's keyframes), in the flow and on the phone's fold line. */
+.flow-step.live .flow-mark svg,
+.flow-fold[data-state="live"] .flow-mark svg {
+  animation: breathe 2s ease-in-out infinite;
 }
 
-@keyframes flow-pulse {
-  50% {
-    opacity: 0.4;
+/* Reduced motion: the dot stays solid. */
+@media (prefers-reduced-motion: reduce) {
+  .flow-step.live .flow-mark svg,
+  .flow-fold[data-state="live"] .flow-mark svg {
+    animation: none;
   }
 }
 
