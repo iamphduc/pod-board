@@ -440,8 +440,8 @@ describe('sidebar', () => {
     }
     // No window on the Board: 30 days, so the agent 10 days back counts.
     expect(headerWith(undefined)).toMatch(/started 10 days ago/)
-    // A 10-day window: that start is at the edge, so the plan's stamp (2 days ago) counts.
-    expect(headerWith(10)).toMatch(/started 2 days ago/)
+    // A 10-day window: that start is at the edge, so it reads as a date.
+    expect(headerWith(10)).toMatch(/started Oct 10/)
   })
 })
 
