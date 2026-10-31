@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run flow choices</title>
+<style>
+:root{--bg:#000;--surface:#0a0a0a;--hover:#1a1a1a;--border:#262626;--strong:#3a3a3a;--fg:#ededed;--muted:#a1a1a1;--faint:#6e6e6e;
+--red:#ff5f5f;--amber:#f5a623;--blue:#52a8ff;--green:#3ecf72;color-scheme:dark}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#fff;--surface:#fafafa;--hover:#f2f2f2;--border:#eaeaea;--strong:#d4d4d4;--fg:#171717;--muted:#666;--faint:#8f8f8f;--red:#d0262f;--amber:#b25d00;--blue:#0068d6;--green:#1a8a45;color-scheme:light}}
+:root[data-theme="light"]{--bg:#fff;--surface:#fafafa;--hover:#f2f2f2;--border:#eaeaea;--strong:#d4d4d4;--fg:#171717;--muted:#666;--faint:#8f8f8f;--red:#d0262f;--amber:#b25d00;--blue:#0068d6;--green:#1a8a45;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,"Segoe UI",sans-serif}
+.page{max-width:1100px;margin:0 auto;padding:40px 16px 80px}
+h1{font-size:28px;letter-spacing:-.02em;margin:0 0 8px}
+h2{font-size:21px;margin:56px 0 6px}
+p,li{color:var(--muted);max-width:75ch}
+b{color:var(--fg)}
+.mono,code{font:13px ui-monospace,Consolas,monospace}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:16px}
+.pair>div{min-width:0}
+.label{font:12px ui-monospace,Consolas,monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.frame{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;overflow-x:auto}
+.flow{display:flex;gap:10px;align-items:flex-start;min-width:max-content}
+.col{display:grid;gap:8px;width:118px}
+.col h4{margin:0;font:11px ui-monospace,Consolas,monospace;letter-spacing:.06em;color:var(--muted)}
+.arrow{color:var(--faint);align-self:center;font-size:13px}
+.step{border:1px solid var(--border);border-radius:8px;padding:8px 9px;background:var(--bg)}
+.step b{display:flex;gap:6px;align-items:center;font-size:13px}
+.step span{display:block;font:11px ui-monospace,Consolas,monospace;color:var(--muted);margin-top:2px}
+.step.dim{opacity:.5}
+.step.you{border-color:var(--amber)}
+.step.live{border-color:var(--blue)}
+.step.gone{border-style:dashed;border-color:var(--red);opacity:.55}
+.ok{color:var(--green)} .run{color:var(--blue)} .warn{color:var(--amber)}
+.tag{display:inline-block;font:11px ui-monospace,Consolas,monospace;padding:1px 6px;border-radius:999px;border:1px solid var(--strong);color:var(--muted)}
+.del{border-color:var(--red);color:var(--red)}
+.hdr .crumb{font:12px ui-monospace,Consolas,monospace;color:var(--muted)}
+.hdr .name{font-size:19px;font-weight:600;margin:2px 0 8px}
+.strip{display:flex;gap:4px;align-items:center}
+.strip i{display:block;width:16px;height:3px;border-radius:2px;background:var(--fg)}
+.strip i.off{background:var(--strong)}
+.strip small{font:11px ui-monospace,Consolas,monospace;color:var(--muted);margin-left:8px}
+.card{border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface)}
+.card .k{font:10px ui-monospace,Consolas,monospace;letter-spacing:.06em;color:var(--muted)}
+.card .t{font-weight:600;font-size:14px;margin:4px 0}
+.btn{display:inline-block;background:var(--fg);color:var(--bg);border-radius:6px;padding:4px 12px;font-size:12px;font-weight:500}
+.phone{width:188px;height:334px;border:1px solid var(--strong);border-radius:16px;overflow:hidden;position:relative;background:var(--bg);margin:0 auto}
+.phone .in{padding:10px;display:grid;gap:8px;font-size:11px}
+.phone .fold{position:absolute;left:0;right:0;top:334px}
+.mini{border:1px solid var(--border);border-radius:6px;padding:6px;font-size:10px;color:var(--muted)}
+.mini.card2{background:var(--surface);color:var(--fg)}
+.below{position:absolute;left:0;right:0;bottom:0;padding:6px;text-align:center;font:10px ui-monospace,Consolas,monospace;color:var(--amber);background:linear-gradient(transparent,var(--bg) 40%)}
+.why{margin-top:14px;padding:12px 14px;border-left:2px solid var(--strong)}
+.opts{margin-top:10px}
+.opts li{margin:4px 0}
+.reply{margin-top:56px;padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+@media (max-width:760px){.pair{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Run flow: three choices in PR #57</h1>
+<p>While the engineer built the flow, it made three choices you didn't ask for. Each section below shows <b>before</b> and <b>after</b> PR #57, why the engineer chose it, and what you can say instead. If you merge as is, the "after" stays.</p>
+
+<h2>1. Some cards from your screenshot aren't shown</h2>
+<p>Your screenshot had a THINK column (Research, Plan interview), a YOU column (Look picked, Replied go), and a Staging → main card. PR #57 shows only the steps the board has data for.</p>
+<div class="pair">
+  <div><p class="label">Your screenshot (what you asked for)</p>
+  <div class="frame"><div class="flow">
+    <div class="col"><h4>THINK</h4>
+      <div class="step"><b><span class="ok">✓</span>Research</b><span>3 researchers · 6 min</span></div>
+      <div class="step"><b><span class="ok">✓</span>Plan interview</b><span>12 questions · 18 min</span></div></div>
+    <div class="arrow">→</div>
+    <div class="col"><h4>YOU</h4>
+      <div class="step"><b><span class="ok">✓</span>Look picked</b><span>direction B</span></div>
+      <div class="step"><b><span class="ok">✓</span>Replied go</b><span>2 sprints · staging</span></div></div>
+    <div class="arrow">→</div>
+    <div class="col"><h4>SPRINT 1 OF 2</h4>
+      <div class="step"><b><span class="ok">✓</span>Wave 1</b><span>3 engineers · 41 min</span></div>
+      <div class="step live"><b><span class="run">●</span>Wave 2</b><span>2 engineers · 14 min</span></div></div>
+    <div class="arrow">→</div>
+    <div class="col"><h4>CHECK</h4>
+      <div class="step dim"><b>Final review</b><span>reviewer</span></div></div>
+    <div class="arrow">→</div>
+    <div class="col"><h4>SHIP</h4>
+      <div class="step dim"><b>Final PR</b><span>to pod-staging</span></div>
+      <div class="step you"><b><span class="warn">!</span>Staging → main</b><span>you merge</span></div></div>
+  </div></div></div>
+  <div><p class="label">PR #57 (what was built)</p>
+  <div class="frame"><div class="flow">
+    <div class="col"><h4>PLAN</h4>
+      <div class="step"><b><span class="ok">✓</span>Plan</b><span>2 sprints</span></div>
+      <div class="step"><b><span class="ok">✓</span>Go</b><span>replied go</span></div></div>
+    <div class="arrow">→</div>
+    <div class="col"><h4>SPRINT 1 OF 2</h4>
+      <div class="step"><b><span class="ok">✓</span>Wave 1</b><span>3 engineers · 41 min</span></div>
+      <div class="step live"><b><span class="run">●</span>Wave 2</b><span>2 engineers · 14 min</span></div></div>
+    <div class="arrow">→</div>
+    <div class="col"><h4>CHECK</h4>
+      <div class="step dim"><b>Final review</b><span>reviewer</span></div></div>
+    <div class="arrow">→</div>
+    <div class="col"><h4>SHIP</h4>
+      <div class="step dim"><b>Final PR</b><span>to pod-staging</span></div></div>
+  </div></div>
+  <p style="margin-top:10px"><span class="tag del">not shown</span> Research · Plan interview · Look picked · Staging → main</p></div>
+</div>
+<div class="why"><b>Why:</b> the board doesn't read pod's research files, plan interview or look choice today, so it can't tell whether those steps are done or how long they took. Showing them green would be guessing. "Plan" and "Go" stand in for the THINK and YOU columns.
+<ul class="opts"><li><b>Keep it</b>: the flow shows only steps the board knows about.</li>
+<li><b>Add the missing cards</b>: a bigger change. The server has to learn to read those steps from pod's files first, then the flow can show them.</li></ul></div>
+
+<h2>2. The progress bar in the header is gone</h2>
+<p>Before PR #57, the header had a thin bar and "Wave 3 of 3" under the plan name. PR #57 removes it, because the flow right below shows the same thing.</p>
+<div class="pair">
+  <div><p class="label">Before (PR #56, merged)</p>
+  <div class="frame hdr"><div class="crumb">chess-web /</div><div class="name">sparring-ladder</div>
+    <div class="strip"><i></i><i></i><i></i><i class="off"></i><i class="off"></i><i class="off"></i><small>Wave 3 of 3</small></div>
+    <div class="card" style="margin-top:14px"><div class="k">NEXT STEP</div><div class="t">Merge PR #78</div><span class="btn">Merge</span></div></div></div>
+  <div><p class="label">After (PR #57)</p>
+  <div class="frame hdr"><div class="crumb">chess-web /</div><div class="name">sparring-ladder</div>
+    <div class="flow" style="margin-top:4px">
+      <div class="col" style="width:70px"><h4>PLAN</h4><div class="step"><b><span class="ok">✓</span>Plan</b></div></div>
+      <div class="arrow">→</div>
+      <div class="col" style="width:80px"><h4>SPRINT</h4><div class="step you"><b><span class="warn">!</span>Wave 3</b></div></div>
+      <div class="arrow">→</div>
+      <div class="col" style="width:70px"><h4>CHECK</h4><div class="step dim"><b>Review</b></div></div>
+    </div>
+    <div class="card" style="margin-top:14px"><div class="k">NEXT STEP</div><div class="t">Merge PR #78</div><span class="btn">Merge</span></div></div></div>
+</div>
+<div class="why"><b>Why:</b> the bar and the flow both say "where the run is". With the flow on screen, the bar repeats it.
+<ul class="opts"><li><b>Keep it removed</b>.</li><li><b>Bring the bar back</b> above the flow.</li></ul></div>
+
+<h2>3. On a phone, the Next step card is below the fold</h2>
+<p>You asked for the order header → flow → card. On a 375 × 667 phone screen, the flow now fills the first screen, so you scroll down to reach the Merge or Answer card. Before, the card showed without scrolling.</p>
+<div class="pair">
+  <div><p class="label">Before (PR #56) · 375 × 667</p>
+  <div class="phone"><div class="in">
+    <div class="mini">Pod Board · runs list</div>
+    <div class="mini">chess-web / sparring-ladder</div>
+    <div class="mini card2"><b>NEXT STEP</b><br>Merge PR #78<br><span class="btn" style="font-size:10px;margin-top:4px">Merge</span></div>
+    <div class="mini">Waiting · Plan · Log</div>
+  </div></div></div>
+  <div><p class="label">After (PR #57) · 375 × 667</p>
+  <div class="phone"><div class="in">
+    <div class="mini">Pod Board · runs list</div>
+    <div class="mini">chess-web / sparring-ladder</div>
+    <div class="mini" style="height:150px">FLOW<br>Plan → Sprint → Check → Ship<br>(scrolls sideways inside its box)</div>
+  </div><div class="below">↓ Next step card: scroll to see it</div></div></div>
+</div>
+<div class="why"><b>Why:</b> it follows the order you asked for. The flow is tall, so on a small screen it pushes the card down.
+<ul class="opts"><li><b>Accept it</b>: scroll to the card on a phone.</li>
+<li><b>Fold the flow on phones</b>: on screens 480 px or narrower, the flow starts folded to one line ("Wave 3 · you merge"), and tapping it opens the full flow. The card stays on the first screen.</li>
+<li><b>Card first on phones only</b>: desktop keeps flow → card; phones show card → flow.</li></ul></div>
+
+<div class="reply"><b>How to answer:</b> reply in the terminal, for example "1 keep, 2 bring the bar back, 3 fold the flow on phones". Anything you don't mention stays as built.</div>
+</div>
+</body>
+</html>
