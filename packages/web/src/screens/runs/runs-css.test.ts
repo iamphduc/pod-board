@@ -431,7 +431,8 @@ describe('breathing running dot', () => {
   })
 
   it('animates only the running mark in the flow and the fold line, never the card or its text', () => {
-    const animated = runsRules().filter((r) => !r.media && 'animation' in decls(r.body))
+    // `animation: none` stops one (the Waiting tab's kind dot), so it doesn't count.
+    const animated = runsRules().filter((r) => !r.media && 'animation' in decls(r.body) && decls(r.body)['animation'] !== 'none')
     expect(animated.flatMap((r) => r.selectors).sort()).toEqual([...LIVE_MARKS].sort())
     for (const r of animated) expect(decls(r.body)['animation']).toBe('breathe 2s ease-in-out infinite')
   })
@@ -449,6 +450,56 @@ describe('breathing running dot', () => {
   })
 })
 
+describe('runs.css waiting rows', () => {
+  const ROW = '.waiting-tab .wait-row'
+  const ACTIONS = `${ROW} > .inplace-actions`
+  const HEAD = `${ROW} > .wait-toggle`
+
+  it('puts Answer at the right end of the row, centred on the entry, on desktop', () => {
+    for (const width of [1280, 821]) {
+      const s = stylesAt(width)
+      expect(s.get(ROW)?.['grid-template-columns'], `row at ${width} px`).toMatch(/^minmax\(0,\s*1fr\)\s+auto$/)
+      expect(s.get(ACTIONS)?.['grid-column'], `actions at ${width} px`).toBe('2')
+      expect(s.get(ACTIONS)?.['grid-row'], `actions at ${width} px`).toBe('1')
+      expect(s.get(ACTIONS)?.['align-self'], `actions at ${width} px`).toBe('center')
+      expect(s.get(HEAD)?.['grid-column'], `entry at ${width} px`).toBe('1')
+      expect(s.get(HEAD)?.['grid-row'], `entry at ${width} px`).toBe('1')
+      // The open form, your answer, and a reply panel take the row's full text width under it.
+      expect(s.get(`${ROW} > *`)?.['grid-column']).toBe('1 / -1')
+    }
+  })
+
+  it('puts Answer back under the text at 820 px and below', () => {
+    for (const width of [820, 375]) {
+      const s = stylesAt(width)
+      expect(s.get(ACTIONS)?.['grid-column'], `actions at ${width} px`).toBe('1 / -1')
+      expect(s.get(ACTIONS)?.['grid-row'], `actions at ${width} px`).toBe('auto')
+      expect(s.get(HEAD)?.['grid-column'], `entry at ${width} px`).toBe('1 / -1')
+      expect(s.get(HEAD)?.['grid-row'], `entry at ${width} px`).toBe('auto')
+    }
+  })
+
+  it('the kind dot never breathes: a decision is not running', () => {
+    expect(stylesAt(1280).get('.waiting-tab .wait-meta .wait-kind::before')?.['animation']).toBe('none')
+  })
+
+  it('the group header is a 44 px touch target on phones', () => {
+    expect(stylesAt(375).get('.wait-group-toggle')?.['min-height']).toBe('44px')
+    expect(stylesAt(480).get('.wait-group-toggle')?.['min-height']).toBe('44px')
+    expect(stylesAt(1280).get('.wait-group-toggle')?.['min-height']).toBeUndefined()
+  })
+
+  it('Show more is a 44 px touch target on phones, and its chevron turns for Show less', () => {
+    expect(stylesAt(375).get('.wait-more')?.['min-height']).toBe('44px')
+    expect(stylesAt(1280).get('.wait-more')?.['min-height']).toBeUndefined()
+    expect(stylesAt(1280).get('.wait-toggle[aria-expanded="true"] .wait-more svg')?.['transform']).toBe('rotate(180deg)')
+  })
+
+  it('the Next step card shows the kind like the rows, and its dot never breathes', () => {
+    expect(stylesAt(1280).get('.next-kind .wait-kind::before')?.['animation']).toBe('none')
+    expect(stylesAt(1280).get('.next-kind')?.['font-size']).toBe('var(--size-micro)')
+  })
+})
 
 describe('runs.css log tab', () => {
   // The slice log (and a fix run's agent log, the same table) reads calm: no line under every row.

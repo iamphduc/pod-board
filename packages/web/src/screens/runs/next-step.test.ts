@@ -314,6 +314,62 @@ describe('next step', () => {
     expect(order(s)).toEqual([`pending ${entryKey(UNJOINED)}`])
   })
 
+  it('pending entries sort by kind: now, decision, before, other, someday', () => {
+    const p = (date: string, body: string) => entry('PENDING', 'reviewer → human', `plan: ${PLAN}`, body).replace('2026-10-19', date)
+    const SOMEDAY_OLD = p('2026-10-19', 'someday: trim the cache.')
+    const DECISION = p('2026-10-30', 'decision: pick the port.')
+    const OTHER = p('2026-10-20', 'Check the npm cache.')
+    const BEFORE = p('2026-10-21', 'before hosting: add TLS.')
+    const SOMEDAY_NEW = p('2026-10-22', 'someday (pod side): a field in pod.')
+    const NOW_ = p('2026-10-23', 'now (product choice): the title line.')
+    const DECISION_2 = p('2026-10-24', 'decision (wording): the card text.')
+    const repo = chess([onlyQueue(SOMEDAY_OLD, DECISION, OTHER, BEFORE, T1_BLOCKED, SOMEDAY_NEW, NOW_, DECISION_2)])
+    // The tier order stays (blocked first); inside pending, by kind, file order within a kind.
+    expect(order(steps(repo))).toEqual([
+      `blocked ${entryKey(T1_BLOCKED)}`,
+      `pending ${entryKey(NOW_)}`,
+      `pending ${entryKey(DECISION)}`,
+      `pending ${entryKey(DECISION_2)}`,
+      `pending ${entryKey(BEFORE)}`,
+      `pending ${entryKey(OTHER)}`,
+      `pending ${entryKey(SOMEDAY_OLD)}`,
+      `pending ${entryKey(SOMEDAY_NEW)}`,
+    ])
+    // With no BLOCKED, the card is the first entry by kind, not the oldest in the file.
+    const noBlock = steps(chess([onlyQueue(SOMEDAY_OLD, DECISION, NOW_)]))
+    expect(noBlock.card.key).toBe(entryKey(NOW_))
+    // The card's title drops the kind prefix; the kind shows as a dot and word, like the rows.
+    expect(noBlock.card.title).toBe('the title line.')
+    expect(noBlock.card.kind).toEqual({ cls: 's-you', label: 'now (product choice)' })
+    // Answered entries are info, not pending: they stay after every pending kind (the answer brings a continue reply).
+    const answered = `${SOMEDAY_OLD.replace('trim', 'cut')} **Answer (human):** later`
+    expect(order(steps(chess([onlyQueue(answered, SOMEDAY_NEW)])))).toEqual([`reply reply:${PLAN}`, `pending ${entryKey(SOMEDAY_NEW)}`, `info ${entryKey(answered)}`])
+  })
+
+  it('the card shows the entry kind as a dot and word, and its title without the prefix', () => {
+    const p = (type: string, body: string) => entry(type, 'reviewer → human', `plan: ${PLAN}`, body)
+    const DECISION = p('PENDING', '**decision (wording):** pick the `port` label.')
+    const s = steps(chess([onlyQueue(DECISION)]))
+    expect(s.card).toMatchObject({ tier: 'pending', status: 'needs-you', title: 'pick the port label.', kind: { cls: 's-run', label: 'decision (wording)' } })
+    // A BLOCKED entry keeps its blocked status; its kind shows beside it.
+    const BLOCKED_NOW = p('BLOCKED', 'now: the rates file is missing.')
+    expect(steps(chess([onlyQueue(BLOCKED_NOW)])).card).toMatchObject({ tier: 'blocked', status: 'blocked', title: 'the rates file is missing.', kind: { cls: 's-you', label: 'now' } })
+    // No kind word: no kind on the card (a BLOCKED one already says blocked), and the whole body as title.
+    const plain = steps(chess([onlyQueue(T1_BLOCKED)])).card
+    expect(plain.title).toBe("T1 can't reach the rates file.")
+    expect(plain).not.toHaveProperty('kind')
+    // A gate halt keeps its sentence and has no kind.
+    const halt = steps(chess([onlyQueue(HALT)])).card
+    expect(halt.title).toBe('Autopilot stopped: a slice is blocked')
+    expect(halt).not.toHaveProperty('kind')
+    // Merge, reply and nothing cards never carry a kind.
+    const merge = steps(chess([manual, t1Pushed, onlyQueue()], { prs: [gh(78, 'open')] }))
+    expect(merge.card.action.kind).toBe('merge')
+    expect(merge.card).not.toHaveProperty('kind')
+    expect(merge.rest.every((i) => i.kind === undefined)).toBe(true)
+    expect(steps(chess([onlyQueue()])).card).not.toHaveProperty('kind')
+  })
+
   it('stable keys', () => {
     // Two Boards with the same items: the same keys.
     const a = steps(chess([manual, t1Pushed, addQueue(T1_BLOCKED)], { prs: [gh(78, 'open')] }))
