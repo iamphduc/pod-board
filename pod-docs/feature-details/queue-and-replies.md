@@ -64,3 +64,4 @@ Which reply pod waits for on a run (`continue`, `go`, or `try`), why, and the ch
 - 2026-10-30 · fix-waiting-kinds · added: entry kinds on the Waiting tab: the pending tier sorts and groups by kind (Someday closed), each row shows its kind as a dot and word, and Answer sits at the right end of the row on desktop.
 - 2026-10-31 · fix-waiting-kinds · added: `Show more` / `Show less` under a clamped entry body; Answer and Merge centred on their row on desktop.
 - 2026-10-31 · fix-waiting-kinds · changed: the Next step card shows a queue entry's kind as a dot and word, and its title drops the kind prefix, as the Waiting rows do.
+- 2026-10-31 · fix-waiting-spacing · changed: the Waiting tab's gaps sit on the 4 px scale (kind dot to word 8, group chevron to label 4, count 4); no rule changed.

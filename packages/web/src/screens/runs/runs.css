@@ -1334,7 +1334,7 @@
 .waiting-tab .wait-meta .wait-kind {
   font-family: inherit;
   font-size: inherit;
-  gap: 6px;
+  gap: 8px;
   vertical-align: baseline;
 }
 
@@ -1358,11 +1358,11 @@
 .wait-group-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   margin: 0;
   /* The chevron's ink starts about 4 px into its box: pull it back so the ink lines up with the rows. */
   margin-inline-start: -4px;
-  padding: 4px 6px 4px 0;
+  padding: 4px 4px 4px 0;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -1383,7 +1383,7 @@
 }
 
 .wait-count {
-  margin-inline-start: 5px;
+  margin-inline-start: 4px;
   font-size: var(--size-micro);
   font-weight: 400;
   color: var(--muted);
