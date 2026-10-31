@@ -441,7 +441,8 @@ describe('sidebar', () => {
     // No window on the Board: 30 days, so the agent 10 days back counts.
     expect(headerWith(undefined)).toMatch(/started 10 days ago/)
     // A 10-day window: that start is at the edge, so it reads as a date.
-    expect(headerWith(10)).toMatch(/started Oct 10/)
+    const day = new Date(NOW - 10 * D)
+    expect(headerWith(10)).toContain(`started ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][day.getMonth()]} ${day.getDate()}`)
   })
 })
 
