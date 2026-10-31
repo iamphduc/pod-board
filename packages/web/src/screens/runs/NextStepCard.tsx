@@ -40,6 +40,12 @@ export function NextStepCard({ repo, run, card }: Props) {
           <span className="eyebrow">Next step</span>
           <span className={`status ${status.cls}`}>{status.label}</span>
         </div>
+        {/* A queue entry's kind, as a dot and word like the Waiting rows. */}
+        {card.kind && (
+          <p className="next-kind mono">
+            <span className={`status ${card.kind.cls} wait-kind`}>{card.kind.label}</span>
+          </p>
+        )}
         <h2 id={titleId} className="next-title">
           <CardTitle title={card.title} link={card.titleLink} />
         </h2>
@@ -77,7 +83,7 @@ export function NextStepCard({ repo, run, card }: Props) {
           <ReplyPanel key="reply-panel" view={a.kind === 'reply' ? a.panel : undefined} target={{ repoId: repo.id, run: run.plan }} framed={false} />
         )}
       </section>
-      {answer.kind !== 'idle' && <AnswerForm state={answer} flow={answerFlow} note={answerNote(run)} {...(card.entry ? { entry: card.entry.body } : {})} />}
+      {answer.kind !== 'idle' && <AnswerForm state={answer} flow={answerFlow} note={answerNote(run)} {...(card.entry ? { entry: card.entry.text } : {})} />}
       {merge.kind !== 'idle' && <MergeConfirm state={merge} flow={mergeFlow} label={`PR #${merge.target.number}`} />}
     </>
   )

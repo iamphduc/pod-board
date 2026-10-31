@@ -1171,7 +1171,14 @@
   align-self: center;
 }
 
-/* The kind leads the meta line as a dot and a word, in the line's own mono face. */
+/* The kind leads the meta line as a dot and a word, in the line's own mono face; the card's kind too. */
+.next-kind {
+  margin: 0 0 8px;
+  font-size: var(--size-micro);
+  color: var(--muted);
+}
+
+.next-kind .wait-kind,
 .waiting-tab .wait-meta .wait-kind {
   font-family: inherit;
   font-size: inherit;
@@ -1180,6 +1187,7 @@
 }
 
 /* A kind is not a live state: the blue dot of a decision stays solid. */
+.next-kind .wait-kind::before,
 .waiting-tab .wait-meta .wait-kind::before {
   animation: none;
 }

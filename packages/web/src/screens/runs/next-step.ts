@@ -7,6 +7,7 @@
 import { haltGate, isAnswerable, waitingPrs, type BoardRepo, type QueueItem, type RunSummary, type WaitingPr } from '@pod-board/model'
 import { KIND_ORDER } from './entry-kind.ts'
 import { waitingEntries, waitingRows, type WaitingRow } from './queue-view.ts'
+import { kindChip } from './waiting-tab.ts'
 import { replyPanel, type ReplyPanelView } from './reply-view.ts'
 import { emptyMessage, type Chip } from './view.ts'
 
@@ -73,12 +74,15 @@ function entryKeys(rows: WaitingRow[]): string[] {
 function entryItem(e: QueueItem, row: WaitingRow, key: string, repoId: string): NextItem {
   const answer: NextAction = { kind: 'answer', repoId, line: row.line }
   const blocked = e.type === 'BLOCKED'
+  // The title is the body without its kind prefix; the kind shows as a dot and word, as on the rows.
+  const title = entryTitle(row.text)
   if (isAnswerable(e)) {
+    const kind = row.kind === 'other' ? {} : { kind: kindChip(row) }
     return blocked
-      ? { key, tier: 'blocked', status: 'blocked', ...entryTitle(row.body), detail: BLOCKED_DETAIL, entry: row, action: answer }
-      : { key, tier: 'pending', status: 'needs-you', ...entryTitle(row.body), detail: PENDING_DETAIL, entry: row, action: answer }
+      ? { key, tier: 'blocked', status: 'blocked', ...title, ...kind, detail: BLOCKED_DETAIL, entry: row, action: answer }
+      : { key, tier: 'pending', status: 'needs-you', ...title, ...kind, detail: PENDING_DETAIL, entry: row, action: answer }
   }
-  return { key, tier: 'info', status: blocked ? 'blocked' : 'idle', ...entryTitle(row.body), detail: row.yourAnswer ?? row.route, entry: row, action: { kind: 'none' } }
+  return { key, tier: 'info', status: blocked ? 'blocked' : 'idle', ...title, detail: row.yourAnswer ?? row.route, entry: row, action: { kind: 'none' } }
 }
 
 function prDetail(pr: WaitingPr): string {
