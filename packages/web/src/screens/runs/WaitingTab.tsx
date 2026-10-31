@@ -17,6 +17,7 @@ import {
   replyGhost,
   replySeen,
   rowMeta,
+  toggleGroup,
   toggleOpen,
   waitGroups,
   type ReplySeen,
@@ -168,7 +169,7 @@ export function WaitingTab({ repo, run, items }: Props) {
         return (
           <section key={g.key} className="wait-group" aria-label={g.label}>
             <h3 className="wait-group-head">
-              <button className="wait-group-toggle" type="button" aria-expanded={isOpen} onClick={() => setFlipped((f) => toggleOpen(f, g.key, groupKeys))}>
+              <button className="wait-group-toggle" type="button" aria-expanded={isOpen} onClick={() => setFlipped((f) => toggleGroup(f, g, groupKeys, anchors))}>
                 <Icon name={isOpen ? 'chevron-down' : 'chevron-right'} />
                 <span>{g.label}</span>
                 <span className="wait-count mono">{g.items.length}</span>

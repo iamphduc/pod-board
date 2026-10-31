@@ -1237,3 +1237,10 @@
     grid-row: auto;
   }
 }
+
+/* Phone: the group header is a 44 px touch target, like the other controls. */
+@media (max-width: 480px) {
+  .wait-group-toggle {
+    min-height: 44px;
+  }
+}

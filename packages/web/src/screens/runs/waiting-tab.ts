@@ -98,4 +98,11 @@ export function groupOpen(g: WaitGroup, flipped: ReadonlySet<string>, anchors: r
   return g.startsOpen !== flipped.has(g.key)
 }
 
-export const toggleGroup = (flipped: ReadonlySet<string>, _g: WaitGroup, _keys: readonly string[], _anchors: readonly (string | undefined)[]): ReadonlySet<string> => flipped
+/**
+ * A header click: flips the group, except while it holds the open answer form or merge confirm (it shows
+ * open whatever the state, so a flip there would close it under you once the form closes).
+ */
+export function toggleGroup(flipped: ReadonlySet<string>, g: WaitGroup, keys: readonly string[], anchors: readonly (string | undefined)[]): ReadonlySet<string> {
+  if (g.items.some((i) => anchors.includes(i.key))) return flipped
+  return toggleOpen(flipped, g.key, keys)
+}
