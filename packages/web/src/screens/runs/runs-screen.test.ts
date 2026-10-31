@@ -281,6 +281,11 @@ describe('run flow', () => {
     const idle = flow.cards.find((c) => c.text.startsWith('Wave 3'))!
     expect(idle.cls).toMatch(/\bwait\b.*\bdim\b/)
     expect(idle.text).toMatch(/waiting/)
+    // Autopilot merging T1's pushed PR #78: the run is running, so is the wave (highlighted), with no engineer.
+    const merging = flowOf(render({ repo: chess([onlyQueue(), t1Pushed]) }).html).cards.find((c) => c.text.startsWith('Wave 3'))!
+    expect(merging.cls).toMatch(/\blive\b/)
+    expect(merging.cls).toMatch(/\bhi\b/)
+    expect(merging.text).toMatch(/running/)
     // T1's engineer at work: running, highlighted.
     const engineer = { id: 'e1', session: 's', type: 'pod:engineer', tokens: 0, ended: false, sprint: 'ladder', slice: 'T1', startedAt: NOW - 10 * 60_000, lastAt: NOW - 60_000 }
     const busy = flowOf(render({ repo: chess([onlyQueue()], { agents: [engineer] }) }).html).cards.find((c) => c.text.startsWith('Wave 3'))!
