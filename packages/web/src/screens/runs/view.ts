@@ -61,13 +61,13 @@ const NEXT_STATUS: Record<NextStatus, Chip> = {
 /** The Next step card's status: its dot class and word. */
 export const nextStatus = (s: NextStatus): Chip => NEXT_STATUS[s]
 
-/** A slice log group's status (`merged PR #N`, `PR #N open`, `running`, `blocked`, `planned`). */
+/** A slice log group's status (`merged PR #N`, `PR #N open`, `running`, `needs you`, `blocked`, `waiting`, `planned`). */
 export function groupChip(status: string): Chip {
   const cls: ChipClass = status.startsWith('merged')
     ? 's-ok'
     : status === 'blocked'
       ? 's-bad'
-      : status.endsWith(' open')
+      : status.endsWith(' open') || status === 'needs you'
         ? 's-you'
         : status === 'running'
           ? 's-run'
@@ -82,10 +82,11 @@ export type LogBlock = { key: string; title: string; chip?: Chip; waves: LogWave
 
 /**
  * The slice log as one block per sprint, in log order, each holding its waves. The sprint's number
- * comes from the plan (a sprint with no doc has no log, so numbers can skip); its state is done,
- * running (the plan's current sprint), or waiting. A sprint the plan doesn't list keeps its slug alone.
+ * comes from the plan (a sprint with no doc has no log, so numbers can skip); its state is done, the
+ * run's own chip for the current sprint (`current`, so the Log never disagrees with the runs list), or
+ * waiting. A sprint the plan doesn't list keeps its slug alone.
  */
-export function logBlocks(log: LogGroup[], sprints: { slug: string; status: string }[], current: string | undefined): LogBlock[] {
+export function logBlocks(log: LogGroup[], sprints: { slug: string; status: string }[], current: { slug: string; chip: Chip } | undefined): LogBlock[] {
   const blocks: LogBlock[] = []
   for (const g of log) {
     let block = blocks.at(-1)
@@ -95,7 +96,7 @@ export function logBlocks(log: LogGroup[], sprints: { slug: string; status: stri
       block = { key: g.sprint, title: sprint ? `Sprint ${at + 1} · ${g.sprint}` : g.sprint, waves: [] }
       if (sprint) {
         block.chip =
-          sprint.status === 'done' ? { cls: 's-ok', label: 'done' } : sprint.slug === current ? { cls: 's-run', label: 'running' } : { cls: 's-idle', label: 'waiting' }
+          sprint.status === 'done' ? { cls: 's-ok', label: 'done' } : sprint.slug === current?.slug ? current.chip : { cls: 's-idle', label: 'waiting' }
       }
       blocks.push(block)
     }

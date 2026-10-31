@@ -116,8 +116,8 @@ describe('tab panels', () => {
     // chess-web has one sprint, ladder, with three waves.
     expect(blocks).toHaveLength(1)
     const [, id, body] = blocks[0]!
-    // The heading names the block and its table; the sprint's state sits beside it.
-    expect(body).toMatch(new RegExp(`<h3 class="log-sprint-name" id="${id}">Sprint 1 · ladder</h3><span class="chip s-run">running</span>`))
+    // The heading names the block and its table; the sprint's state sits beside it (the run's: it asks for you).
+    expect(body).toMatch(new RegExp(`<h3 class="log-sprint-name" id="${id}">Sprint 1 · ladder</h3><span class="chip s-you">needs you</span>`))
     expect(body).toMatch(new RegExp(`<table class="slice-log" aria-labelledby="${id}">`))
     // One row group per wave: a `Wave N` header with its status, then its slices.
     const waves = [...body!.matchAll(/<tbody class="log-wave"><tr class="grp"><th scope="rowgroup">([^<]*)<\/th><td><span class="chip [^"]*">([^<]*)<\/span><\/td><\/tr>([\s\S]*?)<\/tbody>/g)]

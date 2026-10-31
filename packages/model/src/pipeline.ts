@@ -207,15 +207,30 @@ export function waveHandedPr(repo: BoardRepo, plan: PlanModel, s: SprintModel, w
 export const finalWaitingPr = (repo: BoardRepo, plan: PlanModel, now: number): number | undefined =>
   isRun(repo, plan, now) ? pendingHandBack(repo, plan) : undefined
 
+/** A plan run's state, as the runs list shows it. */
+export type PlanState = 'blocked' | 'needs-you' | 'running' | 'idle'
+
+/** First match wins: blocked → needs-you (an ask, or a wave PR waiting on you) → running → idle. */
+export function planState(repo: BoardRepo, plan: PlanModel, now: number): PlanState {
+  const current = plan.sprints.find((s) => s.slug === plan.currentSprint)
+  const slices = current?.waves.flatMap((w) => w.slices) ?? []
+  if (isHalted(plan) || slices.some(isBlockedSlice)) return 'blocked'
+  if (plan.queue.some((e) => e.needsYou) || current?.waves.some((w) => waveWaitingPr(repo, plan, current, w, now) !== undefined)) return 'needs-you'
+  const wave = current?.waves.find((w) => w.wave === current.currentWave)
+  if (planAgentRunning(repo, plan, now) || wave?.slices.some((s) => s.status === 'pushed')) return 'running'
+  return 'idle'
+}
+
 // ---- The pipeline ----
 
-type Ctx = { repo: BoardRepo; plan: PlanModel; now: number; agents: { a: AgentRun; role: AgentRole; live: boolean }[] }
+type Ctx = { repo: BoardRepo; plan: PlanModel; now: number; agents: { a: AgentRun; role: AgentRole; live: boolean }[]; state: PlanState }
 
 /** The plan's pipeline stages and slice log; undefined for a plan the repo doesn't have. Never throws. */
 export function buildPipeline(repo: BoardRepo, planSlug: string, now: number): Pipeline | undefined {
   const plan = repo.model.plans.find((p) => p.slug === planSlug)
   if (!plan) return undefined
-  const ctx: Ctx = { repo, plan, now, agents: repo.agents.map((a) => ({ a, role: roleOf(a, plan), live: isRunning(a, now) })) }
+  const agents = repo.agents.map((a) => ({ a, role: roleOf(a, plan), live: isRunning(a, now) }))
+  const ctx: Ctx = { repo, plan, now, agents, state: planState(repo, plan, now) }
   const n = plan.sprints.length
   const stages: Stage[] = [
     {
@@ -397,8 +412,11 @@ function logStatus(ctx: Ctx, s: SprintModel, w: WaveModel): string {
   if (w.slices.every(isSliceDone)) return numbered === undefined ? 'merged' : `merged PR #${numbered}`
   const open = w.slices.find((x) => x.pr.state === 'open' && x.pr.number !== undefined)?.pr.number
   if (open !== undefined) return `PR #${open} open`
-  return isWaveLive(ctx, s, w) ? 'running' : 'planned'
+  // The wave in progress says what the run does, as the runs list does: running only while it runs.
+  return isWaveLive(ctx, s, w) ? IN_PROGRESS[ctx.state] : 'planned'
 }
+
+const IN_PROGRESS: Record<PlanState, string> = { blocked: 'blocked', 'needs-you': 'needs you', running: 'running', idle: 'waiting' }
 
 const NO_CONFIDENCE = new Set(['', '—', '-'])
 

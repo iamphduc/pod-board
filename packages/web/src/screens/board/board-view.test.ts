@@ -212,7 +212,8 @@ describe('shown sprint', () => {
     expect(b.caption).toBe('Sprint 2 of 3 · s2')
     expect(b.columns.map((c) => [c.wave, c.status, c.cards.map((k) => k.code)])).toEqual([
       [1, 'merged PR #7', ['B1']],
-      [2, 'running', ['B2']],
+      // Nothing runs and nothing asks: the wave in progress waits, as the runs list says (idle).
+      [2, 'waiting', ['B2']],
     ])
     expect(card(b, 'B1').row).toMatchObject({ code: 'B1', title: 'Title B1' })
     expect(card(b, 'B1').slice).toMatchObject({ code: 'B1', branch: 's2-B1' })

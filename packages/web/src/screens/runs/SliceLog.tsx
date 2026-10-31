@@ -2,13 +2,13 @@ import { useId } from 'react'
 import type { LogGroup } from '@pod-board/model'
 import { Chip } from './Chip.tsx'
 import { DocTitle } from './DocTitle.tsx'
-import { logBlocks, rowFigures } from './view.ts'
+import { logBlocks, rowFigures, type Chip as ChipView } from './view.ts'
 
-type Props = { log: LogGroup[]; sprints: { slug: string; status: string }[]; current: string | undefined }
+type Props = { log: LogGroup[]; sprints: { slug: string; status: string }[]; current: { slug: string; chip: ChipView } | undefined }
 
 /**
  * The slice log: one faint block per sprint, named by its heading (`Sprint N · <slug>`, its state beside
- * it), with one table whose row groups are the waves (`Wave N` and its status, then its slices).
+ * it; the current sprint's is the run's own chip), with one table whose row groups are the waves (`Wave N` and its status, then its slices).
  */
 export function SliceLog({ log, sprints, current }: Props) {
   const id = useId()

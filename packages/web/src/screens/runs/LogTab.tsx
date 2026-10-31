@@ -5,7 +5,7 @@ import { ActionLog } from './ActionLog.tsx'
 import { Chip } from './Chip.tsx'
 import { OtherActivity } from './OtherActivity.tsx'
 import { SliceLog } from './SliceLog.tsx'
-import { agentChip, agentLogRows } from './view.ts'
+import { agentChip, agentLogRows, runChip } from './view.ts'
 import './tabs.css'
 
 type Props = { repo: BoardRepo; run: RunSummary; pipeline?: Pipeline; fixPipeline?: FixPipeline; agent?: string; now: number; actions: ActionEntry[] }
@@ -24,7 +24,9 @@ export function LogTab({ repo, run, pipeline, fixPipeline, agent, now, actions }
 /** A plan's slice log, with the plan's sprints for their numbers and states. */
 function PlanLog({ repo, run, pipeline }: { repo: BoardRepo; run: RunSummary; pipeline: Pipeline }) {
   const plan = repo.model.plans.find((p) => p.slug === run.plan)
-  return <SliceLog log={pipeline.log} sprints={plan?.sprints ?? []} current={plan?.currentSprint} />
+  // The current sprint wears the run's own chip, the one the runs list shows.
+  const current = plan?.currentSprint === undefined ? undefined : { slug: plan.currentSprint, chip: runChip(run.state) }
+  return <SliceLog log={pipeline.log} sprints={plan?.sprints ?? []} current={current} />
 }
 
 /** A fix run's agent log, and the open engineer's view below it. */
