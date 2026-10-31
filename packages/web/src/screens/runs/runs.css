@@ -758,7 +758,7 @@
 }
 
 .slice-log td:last-child {
-  width: var(--log-rail);
+  width: calc(var(--log-rail) + 16px);
   padding-left: 16px;
   text-align: left;
 }
