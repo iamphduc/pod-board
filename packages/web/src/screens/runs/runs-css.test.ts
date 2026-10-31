@@ -494,4 +494,9 @@ describe('runs.css waiting rows', () => {
     expect(stylesAt(1280).get('.wait-more')?.['min-height']).toBeUndefined()
     expect(stylesAt(1280).get('.wait-toggle[aria-expanded="true"] .wait-more svg')?.['transform']).toBe('rotate(180deg)')
   })
+
+  it('the Next step card shows the kind like the rows, and its dot never breathes', () => {
+    expect(stylesAt(1280).get('.next-kind .wait-kind::before')?.['animation']).toBe('none')
+    expect(stylesAt(1280).get('.next-kind')?.['font-size']).toBe('var(--size-micro)')
+  })
 })

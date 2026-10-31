@@ -8,7 +8,7 @@ import { haltGate, isAnswerable, waitingPrs, type BoardRepo, type QueueItem, typ
 import { KIND_ORDER } from './entry-kind.ts'
 import { waitingEntries, waitingRows, type WaitingRow } from './queue-view.ts'
 import { replyPanel, type ReplyPanelView } from './reply-view.ts'
-import { emptyMessage } from './view.ts'
+import { emptyMessage, type Chip } from './view.ts'
 
 export type NextStatus = 'blocked' | 'needs-you' | 'ready' | 'running' | 'idle'
 export type NextAction =
@@ -29,6 +29,8 @@ export type NextItem = {
   detail?: string
   /** Queue items: the Waiting on you row. */
   entry?: WaitingRow
+  /** A pending or blocked entry's kind as a dot and word (kindChip); none for `other`. */
+  kind?: Chip
   action: NextAction
 }
 /** `card` is the first action item; `rest` is every other item (the Waiting tab's count is its length). */
