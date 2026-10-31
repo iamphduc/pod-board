@@ -29,8 +29,12 @@ const MARKS: Record<StepState, FlowMark> = { done: 'check', live: 'dot', you: 'a
 const HIGHLIGHT = new Set<StepState>(['live', 'you', 'blocked'])
 /** Steps not reached yet, not recorded, or not taken: dim. */
 const DIM = new Set<StepState>(['wait', 'unknown', 'skipped'])
-/** Step keys (plan and fix run) that only run if the review fails. */
-const OPTIONAL = new Set(['fix', 'fix-pass'])
+/**
+ * Optional steps (only run if a review fails), by full flow key (`<column>:<step>`), and the review
+ * step each branches off: a plan's Fix pass after the Final review, a fix run's after Round 1. Full
+ * keys, so a sprint slugged `fix` or `review` in the Sprint column is never taken for one.
+ */
+const DETOURS: Record<string, string> = { 'check:fix': 'check:review', 'build:fix-pass': 'review:round-1' }
 /** Steps the strip counts as done once a later step started: the board can't see them happen. */
 const UNSEEN = new Set<StepState>(['unknown', 'skipped'])
 
@@ -50,7 +54,7 @@ export function flowColumns(stages: Stage[]): FlowColumn[] {
         mark: MARKS[step.state],
         highlight: HIGHLIGHT.has(step.state),
         dim: DIM.has(step.state),
-        optional: OPTIONAL.has(step.key),
+        optional: `${stage.key}:${step.key}` in DETOURS,
       })),
     }))
 }
@@ -107,11 +111,6 @@ export function runHeader(run: RunSummary | undefined, repo: BoardRepo | undefin
 /** One connector of the flow's path, between two steps by key. `back` runs to an earlier column. */
 export type FlowEdge = { from: string; to: string; kind: 'down' | 'across' | 'back'; walked: boolean; dashed: boolean }
 
-/**
- * Optional steps (only run if a review fails), by raw step key, and the review step they branch off:
- * a plan's Fix pass after the Final review, a fix run's after Round 1.
- */
-const DETOURS: Record<string, string> = { fix: 'review', 'fix-pass': 'round-1' }
 /** States that show a step actually ran. */
 const RAN = new Set<StepState>(['done', 'live', 'you', 'blocked'])
 
@@ -123,11 +122,11 @@ const RAN = new Set<StepState>(['done', 'live', 'you', 'blocked'])
  * current; only up to the review step while the fix pass runs); a detour only once its step ran.
  */
 export function flowEdges(columns: FlowColumn[]): FlowEdge[] {
-  const all = columns.flatMap((c, col) => c.steps.map((s) => ({ s, col, raw: s.key.slice(s.key.indexOf(':') + 1) })))
+  const all = columns.flatMap((c, col) => c.steps.map((s) => ({ s, col })))
   type At = (typeof all)[number]
   const kind = (a: At, b: At): FlowEdge['kind'] => (a.col === b.col ? 'down' : a.col < b.col ? 'across' : 'back')
   const main = all.filter((x) => !x.s.optional)
-  const branchOf = (o: At) => main.findIndex((m) => m.raw === DETOURS[o.raw])
+  const branchOf = (o: At) => main.findIndex((m) => m.s.key === DETOURS[o.s.key])
 
   let reached = currentIndex(main.map((x) => x.s.state))
   if (reached < 0) reached = main.length
