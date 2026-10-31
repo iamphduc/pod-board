@@ -495,7 +495,8 @@ describe('runs.css log tab', () => {
   it('puts every status on one rail: a fixed-width, left-aligned column, the same in the sprint header and the tables', () => {
     const wide = stylesAt(1280)
     expect(wide.get('.slice-log')?.['table-layout']).toBe('fixed')
-    expect(wide.get('.slice-log td:last-child')?.['width']).toBe('var(--log-rail)')
+    // A fixed table's column width counts the cell's padding, so the cell adds its 16 px gap to the rail.
+    expect(wide.get('.slice-log td:last-child')?.['width']).toBe('calc(var(--log-rail) + 16px)')
     expect(wide.get('.slice-log td:last-child')?.['padding-left']).toBe('16px')
     expect(wide.get('.slice-log td:last-child')?.['text-align']).toBe('left')
     expect(wide.get('.log-sprint')?.['grid-template-columns']).toBe('minmax(0, 1fr) var(--log-rail)')
