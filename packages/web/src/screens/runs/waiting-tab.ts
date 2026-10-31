@@ -106,3 +106,6 @@ export function toggleGroup(flipped: ReadonlySet<string>, g: WaitGroup, keys: re
   if (g.items.some((i) => anchors.includes(i.key))) return flipped
   return toggleOpen(flipped, g.key, keys)
 }
+
+export const moreLabel = (_open: boolean, _clamped: boolean): string | undefined => 'x'
+export const isClamped = (_scroll: number, _client: number): boolean => true

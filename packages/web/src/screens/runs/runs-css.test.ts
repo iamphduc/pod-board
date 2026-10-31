@@ -455,13 +455,13 @@ describe('runs.css waiting rows', () => {
   const ACTIONS = `${ROW} > .inplace-actions`
   const HEAD = `${ROW} > .wait-toggle`
 
-  it('puts Answer at the right end of the row, top-aligned with the meta line, on desktop', () => {
+  it('puts Answer at the right end of the row, centred on the entry, on desktop', () => {
     for (const width of [1280, 821]) {
       const s = stylesAt(width)
       expect(s.get(ROW)?.['grid-template-columns'], `row at ${width} px`).toMatch(/^minmax\(0,\s*1fr\)\s+auto$/)
       expect(s.get(ACTIONS)?.['grid-column'], `actions at ${width} px`).toBe('2')
       expect(s.get(ACTIONS)?.['grid-row'], `actions at ${width} px`).toBe('1')
-      expect(s.get(ACTIONS)?.['align-self'], `actions at ${width} px`).toBe('start')
+      expect(s.get(ACTIONS)?.['align-self'], `actions at ${width} px`).toBe('center')
       expect(s.get(HEAD)?.['grid-column'], `entry at ${width} px`).toBe('1')
       expect(s.get(HEAD)?.['grid-row'], `entry at ${width} px`).toBe('1')
       // The open form, your answer, and a reply panel take the row's full text width under it.
@@ -487,5 +487,11 @@ describe('runs.css waiting rows', () => {
     expect(stylesAt(375).get('.wait-group-toggle')?.['min-height']).toBe('44px')
     expect(stylesAt(480).get('.wait-group-toggle')?.['min-height']).toBe('44px')
     expect(stylesAt(1280).get('.wait-group-toggle')?.['min-height']).toBeUndefined()
+  })
+
+  it('Show more is a 44 px touch target on phones, and its chevron turns for Show less', () => {
+    expect(stylesAt(375).get('.wait-more')?.['min-height']).toBe('44px')
+    expect(stylesAt(1280).get('.wait-more')?.['min-height']).toBeUndefined()
+    expect(stylesAt(1280).get('.wait-toggle[aria-expanded="true"] .wait-more svg')?.['transform']).toBe('rotate(180deg)')
   })
 })

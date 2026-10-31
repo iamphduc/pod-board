@@ -4,7 +4,7 @@ import type { MergeState } from './merge-flow.ts'
 import type { NextItem } from './next-step.ts'
 import type { WaitingRow } from './queue-view.ts'
 import type { EntryKind } from './entry-kind.ts'
-import { answerAnchor, groupOpen, kindChip, toggleGroup, keepOpen, mergeAnchor, replyGhost, replySeen, rowMeta, toggleOpen, waitGroups } from './waiting-tab.ts'
+import { answerAnchor, groupOpen, isClamped, kindChip, moreLabel, toggleGroup, keepOpen, mergeAnchor, replyGhost, replySeen, rowMeta, toggleOpen, waitGroups } from './waiting-tab.ts'
 
 const row = (line: string, over: Partial<WaitingRow> = {}): WaitingRow => ({
   key: `0:${line}`,
@@ -175,5 +175,22 @@ describe('waiting tab', () => {
     expect(groupOpen(someday, clicked, [])).toBe(true)
     // With the form closed, the click closes it again; an anchor elsewhere doesn't hold it.
     expect(groupOpen(someday, toggleGroup(opened, someday, keys, [undefined, 'end', 'entry:d']), [])).toBe(false)
+  })
+
+  it('Show more shows only on a clamped body, and Show less while it is open', () => {
+    expect(moreLabel(false, true)).toBe('Show more')
+    expect(moreLabel(true, true)).toBe('Show less')
+    // A body that fits in two lines gets neither, open or closed.
+    expect(moreLabel(false, false)).toBeUndefined()
+    expect(moreLabel(true, false)).toBeUndefined()
+  })
+
+  it('a body is clamped when its text is taller than its box', () => {
+    expect(isClamped(63, 42)).toBe(true)
+    expect(isClamped(42, 42)).toBe(false)
+    // Sub-pixel rounding is not overflow.
+    expect(isClamped(43, 42)).toBe(false)
+    // Not laid out yet (hidden tab): no control.
+    expect(isClamped(0, 0)).toBe(false)
   })
 })
