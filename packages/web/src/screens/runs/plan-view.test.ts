@@ -18,6 +18,26 @@ const manual = (files: Record<string, string>) => {
   // The plan doc and the sprint doc both carry pod's autopilot line.
   for (const doc of [PLAN, LADDER]) files[doc] = files[doc]!.replace(/^<!-- autopilot-run.*-->\r?\n/m, '')
 }
+/** Three sprints: `warmup` done (two merged waves), `ladder` current as in the fixture, `rematch` named but not drafted. */
+const threeSprints = (files: Record<string, string>, first = 'warmup', last = 'rematch') => {
+  files[PLAN] = files[PLAN]!.replace(/^(\| ladder \|.*\| active \| )— \|$/m, (_row, head: string) =>
+    [`| ${first} | Warm up | done | — |`, `${head}${first} |`, `| ${last} | Rematch | planned | ladder |`].join('\n'),
+  )
+  files[`pod-docs/sprints/${first}.md`] = [
+    '# Sprint: Warm up',
+    '',
+    `_From plan: pod-docs/plans/sparring-ladder.md · Slug: ${first} · Status: done · Generated: 2026-10-17_`,
+    '',
+    '## Status board',
+    '',
+    '| Wave | Slice | Title | Branch | PR | Status | Confidence | Depends on |',
+    '|------|-------|-------|--------|----|--------|------------|------------|',
+    '| 1 | A1 | First | warmup-A1 | #70 | merged | high | — |',
+    '| 2 | B1 | Second | warmup-B1 | #71 | merged | high | A1 |',
+    '',
+  ].join('\n')
+}
+
 const runOf = (repo: BoardRepo, plan?: string) => listRuns({ generatedAt: NOW, gh: 'ok', repos: [repo] }, NOW).find((r) => r.plan === plan)
 const ladderRun = { repoId: 'chess', repo: 'chess-web', plan: 'sparring-ladder', where: 'x', state: 'idle' } satisfies RunSummary
 
@@ -74,7 +94,8 @@ describe('plan view', () => {
     const code = flowColumns(buildPipeline(chess(manual), 'sparring-ladder', NOW)!.stages)
     expect(code.map((c) => [c.caption, c.steps.map((s) => `${s.label} ${s.word}`)])).toEqual([
       ['Plan', ['Plan done', 'Go unknown']],
-      ['Sprint 1 of 1', ['Wave 1 done', 'Wave 2 done', 'Wave 3 running']],
+      // The fixture's queue asks for you and no engineer runs: the wave in progress needs you.
+      ['Sprint 1 of 1', ['Wave 1 done', 'Wave 2 done', 'Wave 3 needs you']],
       ['Check', ['Final review waiting', 'Fix pass waiting']],
       ['Ship', ['Final PR waiting']],
     ])
@@ -97,7 +118,7 @@ describe('plan view', () => {
       // The fixture has no research report, and its Look section is empty (scrubbed).
       ['Research skipped', 'Plan interview done'],
       ['Look picked unknown', 'Replied go unknown'],
-      ['Wave 1 done', 'Wave 2 done', 'Wave 3 running'],
+      ['Wave 1 done', 'Wave 2 done', 'Wave 3 needs you'],
       ['Final review waiting', 'Fix pass waiting'],
       ['Final PR waiting'],
     ])
@@ -113,8 +134,8 @@ describe('plan view', () => {
     // Everything done: the last step.
     expect(foldLine(cols(['done', 'done']))).toMatchObject({ label: 'Step 1', mark: 'check', state: 'done' })
     expect(foldLine([])).toBeUndefined()
-    // The real run: wave 3, running.
-    expect(foldLine(flowColumns(buildFlow(chess(), 'sparring-ladder', NOW) ?? []))).toMatchObject({ label: 'Wave 3', detail: '1 slice', state: 'live' })
+    // The real run: wave 3, which needs you (the queue asks, no engineer runs).
+    expect(foldLine(flowColumns(buildFlow(chess(), 'sparring-ladder', NOW) ?? []))).toMatchObject({ label: 'Wave 3', detail: '1 slice', state: 'you', mark: 'alert' })
   })
 
   it('run header', () => {
@@ -162,6 +183,7 @@ describe('plan view', () => {
 describe('flow edges', () => {
   const step = (key: string, state: Step['state'], label = key): Step => ({ key, label, state, detail: `${key} detail` })
   const stage = (key: string, caption: string, steps: Step[]): Stage => ({ key, caption, steps })
+  const edges2 = (cols: ReturnType<typeof flowColumns>) => flowEdges(cols).map((e) => `${e.from}>${e.to} ${e.kind}${e.walked ? ' W' : ''}${e.dashed ? ' D' : ''}`)
   const edges = (stages: Stage[]) => flowEdges(flowColumns(stages)).map((e) => `${e.from}>${e.to} ${e.kind}${e.walked ? ' W' : ''}${e.dashed ? ' D' : ''}`)
   const plan = (review: Step['state'], fix: Step['state'], finalPr: Step['state']) => [
     stage('think', 'Think', [step('research', 'skipped'), step('interview', 'done')]),
@@ -234,6 +256,58 @@ describe('flow edges', () => {
       'review:round-1>build:fix-pass back W D',
       'build:fix-pass>review:round-2 across W D',
     ])
+  })
+
+  it('several sprints share one column: the path runs down through them in order, walked only up to the current wave', () => {
+    const cols = flowColumns(buildFlow(chess((f) => (manual(f), threeSprints(f))), 'sparring-ladder', NOW) ?? [])
+    expect(cols.map((c) => c.caption)).toEqual(['Think', 'You', 'Sprint 2 of 3', 'Check', 'Ship'])
+    expect(edges2(cols)).toEqual([
+      'think:research>think:interview down W',
+      'think:interview>you:look across W',
+      'you:look>you:go down W',
+      'you:go>sprint:warmup across W',
+      'sprint:warmup>sprint:ladder/wave-1 down W',
+      'sprint:ladder/wave-1>sprint:ladder/wave-2 down W',
+      'sprint:ladder/wave-2>sprint:ladder/wave-3 down W',
+      // Rematch hasn't run: no walked line past the live wave.
+      'sprint:ladder/wave-3>sprint:rematch down',
+      'sprint:rematch>check:review across',
+      'check:review>ship:final-pr across',
+      'check:review>check:fix down D',
+      'check:fix>ship:final-pr across D',
+    ])
+  })
+
+  it('a sprint slugged like a flow step stays a plain sprint card: the detour still runs Final review → Fix pass → Final PR', () => {
+    const cols = flowColumns([
+      stage('sprint', 'Sprint 2 of 2', [step('review', 'done', 'review'), step('fix', 'done', 'fix'), step('ladder/wave-1', 'live', 'Wave 1')]),
+      stage('check', 'Check', [step('review', 'wait', 'Final review'), step('fix', 'wait', 'Fix pass')]),
+      stage('ship', 'Ship', [step('final-pr', 'wait', 'Final PR')]),
+    ])
+    // Only the Check column's Fix pass is optional, not a sprint named `fix`.
+    expect(cols.flatMap((c) => c.steps).filter((s) => s.optional).map((s) => s.key)).toEqual(['check:fix'])
+    expect(edges2(cols)).toEqual([
+      'sprint:review>sprint:fix down W',
+      'sprint:fix>sprint:ladder/wave-1 down W',
+      'sprint:ladder/wave-1>check:review across',
+      'check:review>ship:final-pr across',
+      'check:review>check:fix down D',
+      'check:fix>ship:final-pr across D',
+    ])
+  })
+
+  it('sprints slugged review and fix leave Final review and Fix pass waiting: no walked line or done segment past the live wave', () => {
+    const repo = chess((f) => (manual(f), threeSprints(f, 'review', 'fix')))
+    const cols = flowColumns(buildFlow(repo, 'sparring-ladder', NOW) ?? [])
+    expect(cols[3]?.steps.map((s) => `${s.label} ${s.word} ${s.detail}`)).toEqual(['Final review waiting not started', 'Fix pass waiting only if review fails'])
+    expect(edges2(cols).filter((e) => e.startsWith('check:') || e.includes('>check:'))).toEqual([
+      'sprint:fix>check:review across',
+      'check:review>ship:final-pr across',
+      'check:review>check:fix down D',
+      'check:fix>ship:final-pr across D',
+    ])
+    // The strip: Research, Plan interview, Look, Go, the review sprint, Wave 1, Wave 2 done; Wave 3 current; the rest not reached.
+    expect(runHeader(runOf(repo, 'sparring-ladder'), repo, NOW)?.segments).toEqual(['done', 'done', 'done', 'done', 'done', 'done', 'done', 'current', 'rest', 'rest', 'rest', 'rest'])
   })
 
   it('with no optional step: one path, walked up to the first waiting step, or all of it when done', () => {

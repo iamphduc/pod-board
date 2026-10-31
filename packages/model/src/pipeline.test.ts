@@ -115,9 +115,11 @@ describe('buildPipeline', () => {
     expect(steps(p, 'sprint:s1')).toEqual([['s1', 'done', '2 waves']])
     expect(stage(p, 'sprint:s2').steps.map((s) => [s.label, s.state])).toEqual([
       ['Wave 1', 'done'],
-      ['Wave 2', 'live'],
+      // The wave in progress, with no engineer of its own at work: it waits (only its engineer makes it run).
+      ['Wave 2', 'wait'],
       ['Wave 3', 'wait'],
     ])
+    expect(stage(p, 'sprint:s2').steps[1]?.detail).not.toMatch(/planned/)
     expect(stage(p, 'sprint:s2').steps[2]?.detail).toBe('2 slices planned')
     expect(steps(p, 'sprint:s3')).toEqual([['s3', 'wait', 'not drafted']])
     expect(steps(p, 'check')).toEqual([
@@ -166,14 +168,14 @@ describe('buildPipeline', () => {
     // W4: pushed with its PR open and nothing running is handed back to you to merge.
     expect(stepStates(build(r), 'sprint:one')).toEqual(['blocked', 'done', 'done', 'you', 'live', 'wait', 'blocked', 'you', 'wait', 'you'])
 
-    // The current wave is live on its own, with nothing pushed and no engineer.
+    // The current wave with nothing pushed and no engineer is not running: it waits, as the idle run does.
     const fresh = repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'X1', '—', 'pending'], [2, 'X2', '—', 'pending']] } }))
-    expect(stepStates(build(fresh), 'sprint:one')).toEqual(['live', 'wait'])
+    expect(stepStates(build(fresh), 'sprint:one')).toEqual(['wait', 'wait'])
     // A stale engineer doesn't make a later wave live.
     const stale = repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'X1', '—', 'pending'], [2, 'X2', '—', 'pending']] } }), {
       agents: [agent({ sprint: 'one', slice: 'X2', startedAt: T0, lastAt: T0 })],
     })
-    expect(stepStates(build(stale), 'sprint:one')).toEqual(['live', 'wait'])
+    expect(stepStates(build(stale), 'sprint:one')).toEqual(['wait', 'wait'])
   })
 
   it('wave time and tokens', () => {
@@ -326,6 +328,7 @@ describe('buildPipeline', () => {
       ['s1', 1, 'Sprint 1 · wave 1', 'merged PR #41'],
       ['s1', 2, 'Sprint 1 · wave 2', 'merged'],
       ['s2', 1, 'Sprint 2 · wave 1', 'PR #50 open'],
+      // B4 blocks the run, but B2's engineer is at work: its wave still reads running.
       ['s2', 2, 'Sprint 2 · wave 2', 'running'],
       ['s2', 3, 'Sprint 2 · wave 3', 'planned'],
       ['s2', 4, 'Sprint 2 · wave 4', 'blocked'],
@@ -336,6 +339,50 @@ describe('buildPipeline', () => {
     expect(log[3]?.rows).toEqual([{ code: 'B2', title: 'Title B2', model: 'opus', minutes: 14, tokens: 500, live: true }])
     expect(log[4]?.rows).toEqual([{ code: 'B3', title: 'Title B3', confidence: 'medium', live: false }])
     expect(log[4]?.rows[0]).not.toHaveProperty('model')
+  })
+
+  it("the in-progress wave's log status follows the run's state, as the runs list shows it", () => {
+    const docs = { one: [[1, 'A1', `${pr(40)} merged`, 'done'], [2, 'B1', '—', 'pending'], [3, 'C1', '—', 'pending']] as BoardRow[] }
+    const at = (q: string[], agents: AgentRun[] = []) => {
+      const r = repo(files({ sprints: [['one', 'active']], docs, queue: q }), { agents })
+      const run = model.listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).find((x) => x.plan === 'alpha')!
+      return [run.state, build(r).log.map((g) => g.status)]
+    }
+    // Halted: an autopilot gate BLOCKED to you.
+    expect(at([queueLine('BLOCKED', 'orchestrator → human', 'plan: alpha', 'gate 1: B1 is blocked')])).toEqual(['blocked', ['merged PR #40', 'blocked', 'planned']])
+    // An ask for you.
+    expect(at([queueLine('PENDING', 'engineer → human', 'sprint: one · slice: B1', 'Pick one')])).toEqual(['needs-you', ['merged PR #40', 'needs you', 'planned']])
+    // Nothing runs and nothing asks: waiting, not running.
+    expect(at([])).toEqual(['idle', ['merged PR #40', 'waiting', 'planned']])
+    // An engineer at work on the wave: running.
+    expect(at([], [running({ sprint: 'one', slice: 'B1' })])).toEqual(['running', ['merged PR #40', 'running', 'planned']])
+    // An engineer at work on the wave reads running even when the run is blocked by another wave's slice
+    // (the sprint's chip, the run's own, says blocked).
+    const blockedElsewhere = { one: [[1, 'A1', `${pr(40)} merged`, 'done'], [2, 'B1', '—', 'pending'], [3, 'C1', '—', 'blocked']] as BoardRow[] }
+    const r = repo(files({ sprints: [['one', 'active']], docs: blockedElsewhere }), { agents: [running({ sprint: 'one', slice: 'B1' })] })
+    expect(model.listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).find((x) => x.plan === 'alpha')?.state).toBe('blocked')
+    expect(build(r).log.map((g) => g.status)).toEqual(['merged PR #40', 'running', 'blocked'])
+  })
+
+  it("the flow's wave in progress is running only while its own engineer runs; otherwise it takes the run's state", () => {
+    const docs = (b1: string) => ({ one: [[1, 'A1', `${pr(40)} merged`, 'done'], [2, 'B1', '—', b1], [3, 'C1', '—', 'pending']] as BoardRow[] })
+    const at = (q: string[], agents: AgentRun[] = [], b1 = 'pending') => {
+      const r = repo(files({ sprints: [['one', 'active']], docs: docs(b1), queue: q }), { agents })
+      const run = model.listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).find((x) => x.plan === 'alpha')!
+      const p = build(r)
+      return { run: run.state, flow: steps(p, 'sprint:one').map(([label, state, detail]) => `${label} ${state} ${detail}`), log: p.log.map((g) => g.status) }
+    }
+    // Halted: red blocked.
+    expect(at([queueLine('BLOCKED', 'orchestrator → human', 'plan: alpha', 'gate 1: B1 is blocked')])).toMatchObject({ run: 'blocked', flow: ['Wave 1 done 1 slice', 'Wave 2 blocked 1 slice', 'Wave 3 wait 1 slice planned'] })
+    // A plan-level ask for you: amber needs you.
+    expect(at([queueLine('PENDING', 'orchestrator → human', 'plan: alpha', 'Pick a look')])).toMatchObject({ run: 'needs-you', flow: ['Wave 1 done 1 slice', 'Wave 2 you 1 slice', 'Wave 3 wait 1 slice planned'] })
+    // Idle: dim waiting, and not called planned, since it is the wave in progress.
+    expect(at([])).toMatchObject({ run: 'idle', flow: ['Wave 1 done 1 slice', 'Wave 2 wait 1 slice', 'Wave 3 wait 1 slice planned'], log: ['merged PR #40', 'waiting', 'planned'] })
+    // Its own engineer at work: blue running.
+    expect(at([], [running({ sprint: 'one', slice: 'B1' })]).flow[1]).toMatch(/^Wave 2 live 1 engineer/)
+    // The run runs (a pushed slice) though no engineer of this wave does: running, in the flow and the log,
+    // as the runs list says.
+    expect(at([], [], 'pushed')).toMatchObject({ run: 'running', flow: ['Wave 1 done 1 slice', 'Wave 2 live 1 slice', 'Wave 3 wait 1 slice planned'], log: ['merged PR #40', 'running', 'planned'] })
   })
 
   it('unknown plan and empty repo', () => {
@@ -385,7 +432,7 @@ describe('buildPipeline', () => {
     const live = wave(pushed(rows, { agents: [running({ sprint: 'one', slice: 'B1' })] }), 2)
     expect(live?.state).toBe('live')
     expect(live).not.toHaveProperty('merge')
-    // gh says merged or closed: as today (live from the pushed slice), no merge.
+    // gh says merged or closed: the pushed slice keeps the run running, so the wave reads running; no merge.
     const status = (state: PrStatus['state']): PrStatus => ({ number: 7, state, checks: 'pass', checkedAt: NOW })
     for (const s of ['merged', 'closed'] as const) {
       expect(wave(pushed(rows, { prs: [status(s)] }), 2)).toEqual({ key: 'one/wave-2', label: 'Wave 2', state: 'live', detail: '2 slices' })

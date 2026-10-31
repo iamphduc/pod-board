@@ -89,7 +89,7 @@ const read = (r: BoardRepo, key: string) => {
 }
 
 describe('buildFlow', () => {
-  it('columns: Think, You, a column per sprint, Check, Ship', () => {
+  it('columns: Think, You, one Sprint column, Check, Ship', () => {
     const stages = flow(repo({ research: ['alpha'], decisions: STAGING_DECISION }))
     expect(stages.map((s) => s.caption)).toEqual(['Think', 'You', 'Sprint 1 of 1', 'Check', 'Ship'])
     expect(stages.map((s) => s.steps.map((x) => x.label))).toEqual([
@@ -217,6 +217,83 @@ describe('buildFlow', () => {
       const prs = [gh(80, 'merged', 'alpha', 'alpha-staging'), gh(91, 'open', 'alpha-staging', 'main'), gh(92, 'open', 'pod-staging', 'main')]
       expect(read(repo({ decisions: STAGING_DECISION, prs }), 'staging')).toEqual({ state: 'you', detail: 'PR #91 · you merge' })
     })
+  })
+})
+
+/** A plan with three sprints: `zero`, `one`, `two`, with these statuses in the plan's table. */
+function threeSprints(statuses: [string, string, string], over: Partial<BoardRepo> = {}, [first, , last]: [string, 'one', string] = ['zero', 'one', 'two']): BoardRepo {
+  const rows = [first, 'one', last].map((slug, i) => `| ${slug} | goal | ${statuses[i]} | — |`)
+  const plan = planDoc().replace(/^\| one \| goal \| active \| — \|$/m, rows.join('\n'))
+  const zero = SPRINT.replaceAll('one', first).replace(`| 2 | B1 | Title B1 | ${first}-B1 | — | pending |`, `| 2 | B1 | Title B1 | ${first}-B1 | #6 | merged |`)
+  const files: RepoFiles = { 'pod-docs/README.md': README, 'pod-docs/plans/alpha.md': plan, [`pod-docs/sprints/${first}.md`]: zero, 'pod-docs/sprints/one.md': SPRINT }
+  return { id: 'r', name: 'r', path: '/r', source: 'registered', model: buildRepoModel(files), agents: [], prs: [], claims: [], ...over }
+}
+const sprintColumn = (stages: Stage[]) => {
+  expect(stages.map((s) => s.caption)).toHaveLength(5)
+  const col = stages[2]!
+  return { caption: col.caption, cards: col.steps.map((s) => [s.label, s.state, s.detail]) }
+}
+
+describe('buildFlow: every sprint in one column', () => {
+  it('a done sprint folds to one card, the current one shows its waves, a future one waits by name', () => {
+    const stages = flow(threeSprints(['done', 'active', 'planned']))
+    expect(stages.map((s) => s.caption)).toEqual(['Think', 'You', 'Sprint 2 of 3', 'Check', 'Ship'])
+    expect(sprintColumn(stages)).toEqual({
+      caption: 'Sprint 2 of 3',
+      cards: [
+        ['zero', 'done', '2 waves'],
+        ['Wave 1', 'done', expect.any(String)],
+        // Idle (no engineer at work): the wave in progress waits.
+        ['Wave 2', 'wait', expect.any(String)],
+        ['two', 'wait', 'not drafted'],
+      ],
+    })
+    // Keys stay unique, so each card keeps its place.
+    const keys = stages[2]!.steps.map((s) => s.key)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('the first sprint current: Sprint 1 of 3, the later two waiting', () => {
+    const stages = flow(threeSprints(['active', 'planned', 'planned']))
+    const col = sprintColumn(stages)
+    expect(col.caption).toBe('Sprint 1 of 3')
+    expect(col.cards.map((c) => c[0])).toEqual(['Wave 1', 'Wave 2', 'one', 'two'])
+    expect(col.cards.slice(2).map((c) => c[1])).toEqual(['wait', 'wait'])
+  })
+
+  it('every sprint done: Sprint 3 of 3, three folded cards', () => {
+    const col = sprintColumn(flow(threeSprints(['done', 'done', 'done'])))
+    expect(col.caption).toBe('Sprint 3 of 3')
+    expect(col.cards).toEqual([
+      ['zero', 'done', '2 waves'],
+      ['one', 'done', '2 waves'],
+      ['two', 'done', 'done'],
+    ])
+  })
+
+  it('a sprint slugged like a pipeline step never supplies that step: each step is read from its own stage', () => {
+    // A done sprint slugged `review`, a planned one slugged `fix`.
+    const stages = flow(threeSprints(['done', 'active', 'planned'], {}, ['review', 'one', 'fix']))
+    expect(sprintColumn(stages).cards.map((c) => c[0])).toEqual(['review', 'Wave 1', 'Wave 2', 'fix'])
+    const check = stages[3]!.steps.map((s) => [s.key, s.state, s.detail])
+    expect(check).toEqual([
+      ['review', 'wait', 'not started'],
+      ['fix', 'wait', 'only if review fails'],
+    ])
+    // A done sprint slugged `final-pr`, a planned one slugged `go`.
+    const other = flow(threeSprints(['done', 'active', 'planned'], {}, ['final-pr', 'one', 'go']))
+    expect(stepOf(other.slice(3), 'final-pr')).toMatchObject({ state: 'wait', detail: 'not open yet' })
+    expect(stepOf(other.slice(0, 2), 'go')).toMatchObject({ state: 'unknown', detail: 'not recorded yet' })
+    // Staging reads the Ship stage's Final PR too: not shipped, so it waits for the final PR.
+    const staged = flow(threeSprints(['done', 'active', 'planned'], { model: { ...threeSprints(['done', 'active', 'planned'], {}, ['final-pr', 'one', 'go']).model, staging: 'pod-staging' } }, ['final-pr', 'one', 'go']))
+    expect(stepOf(staged, 'staging')).toMatchObject({ state: 'wait', detail: 'after the final PR' })
+  })
+
+  it('an archived plan has no current sprint: M of M', () => {
+    const r = threeSprints(['done', 'active', 'planned'])
+    const plan = r.model.plans[0]!
+    const archived: BoardRepo = { ...r, model: { ...r.model, plans: [{ ...plan, status: 'archived', currentSprint: undefined }] } }
+    expect(sprintColumn(flow(archived)).caption).toBe('Sprint 3 of 3')
   })
 })
 
