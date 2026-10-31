@@ -239,6 +239,36 @@ describe('next step', () => {
     expect(nextSteps({ ...runOf(chess()), repoId: 'other' }, chess(), NOW)).toBeUndefined()
   })
 
+  it('the staging → main PR is a Merge card once the final PR merged', () => {
+    // The ladder sprint done, the plan claimed; final PR #80 merged into pod-staging, staging PR #91 open into main.
+    const sprintDone: Edit = (f) => {
+      const doc = 'pod-docs/plans/sparring-ladder.md'
+      f[doc] = f[doc]!.replace(/(\| ladder \|.*\| )active( \| — \|)/, '$1done$2')
+    }
+    const claims: Claim[] = [{ portBase: 3100, repoPath: '/c', plan: PLAN }]
+    const final = gh(80, 'merged', { branch: PLAN, base: 'pod-staging', mergedAt: NOW - 60 * MIN })
+    const staging = gh(91, 'open', { branch: 'pod-staging', base: 'main', url: 'https://github.com/o/r/pull/91' })
+    const repo = chess([manual, sprintDone, onlyQueue()], { claims, prs: [final, staging] })
+    expect(runOf(repo).state).toBe('needs-you')
+    const s = steps(repo)
+    expect(s.card).toEqual<NextItem>({
+      key: 'pr:91',
+      tier: 'merge',
+      status: 'needs-you',
+      title: 'Merge PR #91',
+      detail: 'The staging → main PR waits for you.',
+      action: { kind: 'merge', repoId: 'chess', number: 91 },
+    })
+    // A blocked entry still comes first; the staging PR waits in the rest.
+    const blocked = steps(chess([manual, sprintDone, onlyQueue(HALT)], { claims, prs: [final, staging] }))
+    expect(blocked.card.tier).toBe('blocked')
+    expect(blocked.rest.map((i) => i.key)).toContain('pr:91')
+    // Closed, or merged: nothing to merge.
+    for (const pr of [gh(91, 'closed', { branch: 'pod-staging', base: 'main' }), gh(91, 'merged', { branch: 'pod-staging', base: 'main', mergedAt: NOW - MIN })]) {
+      expect(order(steps(chess([manual, sprintDone, onlyQueue()], { claims, prs: [final, pr] })))).not.toContain('merge pr:91')
+    }
+  })
+
   it('autopilot', () => {
     // Not halted: the wave PR is pod's to merge, so a run with nothing else has nothing to do, running.
     const working = chess([onlyQueue(), t1Pushed], { prs: [gh(78, 'open')] })
