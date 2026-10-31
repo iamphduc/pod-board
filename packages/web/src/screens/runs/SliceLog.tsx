@@ -2,7 +2,7 @@ import { useId } from 'react'
 import type { LogGroup } from '@pod-board/model'
 import { Chip } from './Chip.tsx'
 import { DocTitle } from './DocTitle.tsx'
-import { logBlocks, rowFigures, type Chip as ChipView } from './view.ts'
+import { confidenceTag, logBlocks, rowFigures, type Chip as ChipView } from './view.ts'
 
 type Props = { log: LogGroup[]; sprints: { slug: string; status: string }[]; current: { slug: string; chip: ChipView } | undefined }
 
@@ -37,6 +37,7 @@ export function SliceLog({ log, sprints, current }: Props) {
                     <td>
                       <span className="code">{row.code}</span> · <DocTitle text={row.title} />
                       {row.model && <span className="muted"> · {row.model}</span>}
+                      {confidenceTag(row) && <span className="chip tag">{confidenceTag(row)}</span>}
                     </td>
                     <td>
                       {row.live && <Chip chip={{ cls: 's-run', label: 'running' }} />}

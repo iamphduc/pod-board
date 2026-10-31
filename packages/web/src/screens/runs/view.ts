@@ -108,10 +108,12 @@ export function logBlocks(log: LogGroup[], sprints: { slug: string; status: stri
   return blocks
 }
 
-/** `high · 22 min · 248k tok`, leaving out what isn't known. Zero tokens never show. */
+/** A slice's confidence as a tag after its title (`high confidence`); none when the board has none. */
+export const confidenceTag = (row: LogRow): string | undefined => (row.confidence ? `${row.confidence.toLowerCase()} confidence` : undefined)
+
+/** `22 min · 248k tok`, leaving out what isn't known. Zero tokens never show. Confidence is a tag (`confidenceTag`). */
 export function rowFigures(row: LogRow): string {
   const parts: string[] = []
-  if (row.confidence) parts.push(row.confidence)
   if (row.minutes !== undefined) parts.push(`${row.minutes} min`)
   if (row.tokens) parts.push(`${formatTokens(row.tokens)} tok`)
   return parts.join(' · ')

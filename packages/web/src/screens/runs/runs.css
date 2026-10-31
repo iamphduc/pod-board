@@ -565,6 +565,16 @@
   margin-top: 40px;
 }
 
+/* The tab labels share the Log blocks' and the Action log's 16 px text inset. */
+.main > .tabs .tab {
+  padding-inline: 16px;
+}
+
+.main > .tabs .tab[aria-expanded="true"]::after {
+  left: 16px;
+  right: 16px;
+}
+
 .back {
   margin: 0 0 24px;
   font-size: var(--size-dense);
@@ -577,8 +587,10 @@
 
 .log-frame {
   position: relative;
+  /* The status rail: wide enough for `● merged PR #1234` on one line. */
+  --log-rail: 176px;
   display: grid;
-  gap: 12px;
+  gap: 16px;
   overflow-x: auto;
   min-width: 0;
 }
@@ -697,25 +709,30 @@
 /* Slice log */
 
 /*
- * One faint block per sprint (the Action log row's fill, 8 px corners, no border, 12 px padding on every
- * side so its text lines up with the tabs and the Action log), 12 px apart. Inside: the sprint's name and
- * state, then its waves, 8 px apart, each a `Wave N` row and its slices: 20 px lines with 2 px a side
- * (rows about 24 px, a wave 4 px above its first slice). No dividers. Sprint > wave > slice: the sprint
- * semibold, the wave regular and muted.
+ * One faint block per sprint (the Action log row's fill, 8 px corners, no border), 16 px apart. Padding is
+ * 12 px by 16 px: wider than tall, since the lines carry vertical air; its 16 px text inset matches the
+ * tabs and the Action log. Inside: the sprint's name and state, then its waves, 8 px apart, each a
+ * `Wave N` row and its slices: 20 px lines with 2 px a side (rows about 24 px, a wave 4 px above its first
+ * slice). No dividers. Sprint > wave > slice: the sprint semibold, the wave regular and muted. Every
+ * status sits on one rail: a fixed-width, left-aligned last column (`--log-rail`), so the dots line up.
  */
 .log-group {
   min-width: 560px;
-  padding: 12px;
+  padding: 12px 16px;
   border-radius: var(--radius-md);
   background: var(--surface);
 }
 
 .log-sprint {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--log-rail);
+  column-gap: 16px;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
   margin-bottom: 4px;
+}
+
+.log-sprint > .chip {
+  justify-self: start;
 }
 
 .log-sprint-name {
@@ -727,6 +744,7 @@
 
 .slice-log {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: var(--size-dense);
   line-height: 20px;
@@ -740,8 +758,14 @@
 }
 
 .slice-log td:last-child {
+  width: var(--log-rail);
   padding-left: 16px;
-  text-align: right;
+  text-align: left;
+}
+
+/* Confidence is an attribute, not a state: a quiet tag after the title. */
+.slice-log .chip.tag {
+  margin-left: 6px;
   white-space: nowrap;
 }
 
@@ -816,7 +840,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 4px 12px;
-  padding: 6px 12px;
+  padding: 6px 16px;
   border-radius: var(--radius-sm);
   background: var(--surface);
   font-size: var(--size-small);
@@ -1144,9 +1168,16 @@
   }
 
   .slice-log td:last-child {
+    width: auto;
     padding-left: 0;
     text-align: left;
     white-space: normal;
+  }
+
+  .log-sprint {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
   }
 
   .slice-log tr:not(.grp) td:last-child:not(:empty)::before {
