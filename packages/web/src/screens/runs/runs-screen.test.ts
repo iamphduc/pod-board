@@ -30,6 +30,26 @@ const manual: Edit = (f) => {
 const t1Pushed: Edit = (f) => {
   f[LADDER] = f[LADDER]!.replace('| ladder-T1 | — | pending | — |', '| ladder-T1 | #78 | pushed | medium |')
 }
+/** Three sprints: `warmup` done (two merged waves), `ladder` current as in the fixture, `rematch` named but not drafted. */
+const threeSprints: Edit = (f) => {
+  const plan = 'pod-docs/plans/sparring-ladder.md'
+  f[plan] = f[plan]!.replace(/^(\| ladder \|.*\| active \| )— \|$/m, (_row, head: string) =>
+    ['| warmup | Warm up | done | — |', `${head}warmup |`, '| rematch | Rematch | planned | ladder |'].join('\n'),
+  )
+  f['pod-docs/sprints/warmup.md'] = [
+    '# Sprint: Warm up',
+    '',
+    '_From plan: pod-docs/plans/sparring-ladder.md · Slug: warmup · Status: done · Generated: 2026-10-17_',
+    '',
+    '## Status board',
+    '',
+    '| Wave | Slice | Title | Branch | PR | Status | Confidence | Depends on |',
+    '|------|-------|-------|--------|----|--------|------------|------------|',
+    '| 1 | A1 | First | warmup-A1 | #70 | merged | high | — |',
+    '| 2 | B1 | Second | warmup-B1 | #71 | merged | high | A1 |',
+    '',
+  ].join('\n')
+}
 const gh = (number: number, state: PrStatus['state'], over: Partial<PrStatus> = {}): PrStatus => ({ number, state, checks: 'pass', checkedAt: NOW, ...over })
 
 function chess(edits: Edit[] = [], extra: Partial<BoardRepo> = {}): BoardRepo {
@@ -237,6 +257,20 @@ describe('run flow', () => {
     expect(link![0]).toMatch(/aria-label="Open the wave board"/)
     expect(link![1]).toBe('<span class="board-link-long">Open the wave board</span><span class="board-link-short">Wave board</span>')
     expect(header.indexOf('board-link')).toBeLessThan(header.indexOf('aria-label="Menu"'))
+  })
+
+  it('several sprints stack in one Sprint column: five columns whatever the sprint count', () => {
+    const flow = flowOf(render({ repo: chess([onlyQueue(), threeSprints]) }).html)
+    expect(flow.captions).toEqual(['Think', 'You', 'Sprint 2 of 3', 'Check', 'Ship'])
+    // The Sprint column is the tallest: warmup, three waves, rematch.
+    expect(flow.markup).toMatch(/<div class="flow" style="--flow-cols:5;--flow-rows:5">/)
+    const labels = ['Research', 'Plan interview', 'Look picked', 'warmup', 'Wave 1', 'Wave 2', 'Wave 3', 'rematch', 'Final review', 'Fix pass', 'Final PR']
+    expect(flow.cards).toHaveLength(labels.length)
+    flow.cards.forEach((c, i) => expect(c.text.startsWith(labels[i]!), c.text).toBe(true))
+    // The finished sprint folds to one done card; the future one is one dim waiting card.
+    expect(flow.cards[3]!.cls).toMatch(/\bdone\b/)
+    expect(flow.cards[3]!.text).toMatch(/2 waves/)
+    expect(flow.cards[7]!.cls).toMatch(/\bwait\b.*\bdim\b/)
   })
 
   it('an autopilot run has no Go card, and its live wave is highlighted', () => {

@@ -18,6 +18,26 @@ const manual = (files: Record<string, string>) => {
   // The plan doc and the sprint doc both carry pod's autopilot line.
   for (const doc of [PLAN, LADDER]) files[doc] = files[doc]!.replace(/^<!-- autopilot-run.*-->\r?\n/m, '')
 }
+/** Three sprints: `warmup` done (two merged waves), `ladder` current as in the fixture, `rematch` named but not drafted. */
+const threeSprints = (files: Record<string, string>) => {
+  files[PLAN] = files[PLAN]!.replace(/^(\| ladder \|.*\| active \| )— \|$/m, (row, head: string) =>
+    ['| warmup | Warm up | done | — |', `${head}warmup |`, '| rematch | Rematch | planned | ladder |'].join('\n'),
+  )
+  files['pod-docs/sprints/warmup.md'] = [
+    '# Sprint: Warm up',
+    '',
+    '_From plan: pod-docs/plans/sparring-ladder.md · Slug: warmup · Status: done · Generated: 2026-10-17_',
+    '',
+    '## Status board',
+    '',
+    '| Wave | Slice | Title | Branch | PR | Status | Confidence | Depends on |',
+    '|------|-------|-------|--------|----|--------|------------|------------|',
+    '| 1 | A1 | First | warmup-A1 | #70 | merged | high | — |',
+    '| 2 | B1 | Second | warmup-B1 | #71 | merged | high | A1 |',
+    '',
+  ].join('\n')
+}
+
 const runOf = (repo: BoardRepo, plan?: string) => listRuns({ generatedAt: NOW, gh: 'ok', repos: [repo] }, NOW).find((r) => r.plan === plan)
 const ladderRun = { repoId: 'chess', repo: 'chess-web', plan: 'sparring-ladder', where: 'x', state: 'idle' } satisfies RunSummary
 
@@ -162,6 +182,7 @@ describe('plan view', () => {
 describe('flow edges', () => {
   const step = (key: string, state: Step['state'], label = key): Step => ({ key, label, state, detail: `${key} detail` })
   const stage = (key: string, caption: string, steps: Step[]): Stage => ({ key, caption, steps })
+  const edges2 = (cols: ReturnType<typeof flowColumns>) => flowEdges(cols).map((e) => `${e.from}>${e.to} ${e.kind}${e.walked ? ' W' : ''}${e.dashed ? ' D' : ''}`)
   const edges = (stages: Stage[]) => flowEdges(flowColumns(stages)).map((e) => `${e.from}>${e.to} ${e.kind}${e.walked ? ' W' : ''}${e.dashed ? ' D' : ''}`)
   const plan = (review: Step['state'], fix: Step['state'], finalPr: Step['state']) => [
     stage('think', 'Think', [step('research', 'skipped'), step('interview', 'done')]),
@@ -233,6 +254,26 @@ describe('flow edges', () => {
       'review:round-2>ship:pr across',
       'review:round-1>build:fix-pass back W D',
       'build:fix-pass>review:round-2 across W D',
+    ])
+  })
+
+  it('several sprints share one column: the path runs down through them in order, walked only up to the current wave', () => {
+    const cols = flowColumns(buildFlow(chess((f) => (manual(f), threeSprints(f))), 'sparring-ladder', NOW) ?? [])
+    expect(cols.map((c) => c.caption)).toEqual(['Think', 'You', 'Sprint 2 of 3', 'Check', 'Ship'])
+    expect(edges2(cols)).toEqual([
+      'think:research>think:interview down W',
+      'think:interview>you:look across W',
+      'you:look>you:go down W',
+      'you:go>sprint:warmup across W',
+      'sprint:warmup>sprint:ladder/wave-1 down W',
+      'sprint:ladder/wave-1>sprint:ladder/wave-2 down W',
+      'sprint:ladder/wave-2>sprint:ladder/wave-3 down W',
+      // Rematch hasn't run: no walked line past the live wave.
+      'sprint:ladder/wave-3>sprint:rematch down',
+      'sprint:rematch>check:review across',
+      'check:review>ship:final-pr across',
+      'check:review>check:fix down D',
+      'check:fix>ship:final-pr across D',
     ])
   })
 
