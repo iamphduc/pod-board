@@ -155,8 +155,11 @@ const EDGE = DAY
 
 /**
  * When the run started, as words. A fix run: its earliest agent (engineers and reviewers), else nothing.
- * A plan: the earliest of its autopilot stamp and its earliest agent start, the agent only when clearly
- * inside the transcript window; with neither, its `Generated:` date, as a date (`Oct 12`); else nothing.
+ * A plan: every agent the board read has a true start; the window only hides older ones it didn't read.
+ * With an autopilot stamp, the earliest of the stamp and every read agent start (the stamp covers any
+ * older unread agent). With no stamp, the earliest read agent while it is clearly inside the window;
+ * near or past its edge (older agents may be unread), the `Generated:` date, else that agent's day.
+ * A start clearly inside the window reads `N ago`; any older one reads as a date, never `N days ago`.
  */
 function startedText(run: RunSummary, repo: BoardRepo, now: number, transcriptDays: number): string | undefined {
   if (run.fix !== undefined) {
@@ -165,11 +168,13 @@ function startedText(run: RunSummary, repo: BoardRepo, now: number, transcriptDa
   }
   const plan = repo.model.plans.find((p) => p.slug === run.plan)
   if (!plan) return undefined
+  const inside = (at: number) => now - at < transcriptDays * DAY - EDGE
+  const shown = (at: number) => (inside(at) ? startedAgo(at, now) : dateText(at, now))
   const agent = earliest(repo.agents.filter((a) => isPlanAgent(a, plan)))
-  const trusted = agent !== undefined && now - agent < transcriptDays * DAY - EDGE ? agent : undefined
-  const at = earliest([{ startedAt: trusted }, { startedAt: plan.autopilotStartedAt }])
-  if (at !== undefined) return startedAgo(at, now)
-  return plan.generated === undefined ? undefined : dayText(plan.generated, now)
+  if (plan.autopilotStartedAt !== undefined) return shown(Math.min(plan.autopilotStartedAt, agent ?? Infinity))
+  if (agent !== undefined && inside(agent)) return startedAgo(agent, now)
+  if (plan.generated !== undefined) return dayText(plan.generated, now)
+  return agent === undefined ? undefined : dateText(agent, now)
 }
 
 const earliest = (agents: { startedAt?: number | undefined }[]): number | undefined => {
@@ -178,6 +183,13 @@ const earliest = (agents: { startedAt?: number | undefined }[]): number | undefi
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** A time as its local day: `Oct 2`, with `, 2025` when it isn't now's year. */
+function dateText(at: number, now: number): string {
+  const d = new Date(at)
+  const text = `${MONTHS[d.getMonth()]} ${d.getDate()}`
+  return d.getFullYear() === new Date(now).getFullYear() ? text : `${text}, ${d.getFullYear()}`
+}
 
 /**
  * A `YYYY-MM-DD` day as `Oct 12`, with `, 2025` when it isn't now's year. Read from the text, not through
