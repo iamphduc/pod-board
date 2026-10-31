@@ -155,11 +155,10 @@ const EDGE = DAY
 
 /**
  * When the run started, as words. A fix run: its earliest agent (engineers and reviewers), else nothing.
- * A plan: every agent the board read has a true start; the window only hides older ones it didn't read.
- * With an autopilot stamp, the earliest of the stamp and every read agent start (the stamp covers any
- * older unread agent). With no stamp, the earliest read agent while it is clearly inside the window;
- * near or past its edge (older agents may be unread), the `Generated:` date, else that agent's day.
- * A start clearly inside the window reads `N ago`; any older one reads as a date, never `N days ago`.
+ * A plan: the earliest of these candidates: the autopilot stamp (if any) and every read agent's start;
+ * with no stamp and no agent clearly inside the window (none at all, or the earliest near or past its
+ * edge, so older agents may be unread), the `Generated:` day too. A time more than a day inside the
+ * transcript window reads `N ago`; any other reads as a date (a time's local day, the `Generated:` day as written).
  */
 function startedText(run: RunSummary, repo: BoardRepo, now: number, transcriptDays: number): string | undefined {
   if (run.fix !== undefined) {
@@ -169,12 +168,20 @@ function startedText(run: RunSummary, repo: BoardRepo, now: number, transcriptDa
   const plan = repo.model.plans.find((p) => p.slug === run.plan)
   if (!plan) return undefined
   const inside = (at: number) => now - at < transcriptDays * DAY - EDGE
-  const shown = (at: number) => (inside(at) ? startedAgo(at, now) : dateText(at, now))
   const agent = earliest(repo.agents.filter((a) => isPlanAgent(a, plan)))
-  if (plan.autopilotStartedAt !== undefined) return shown(Math.min(plan.autopilotStartedAt, agent ?? Infinity))
-  if (agent !== undefined && inside(agent)) return startedAgo(agent, now)
-  if (plan.generated !== undefined) return dayText(plan.generated, now)
-  return agent === undefined ? undefined : dateText(agent, now)
+  const times = [plan.autopilotStartedAt, agent].filter((x) => x !== undefined)
+  const time = times.length > 0 ? Math.min(...times) : undefined
+  const generated = plan.autopilotStartedAt === undefined && (agent === undefined || !inside(agent)) ? plan.generated : undefined
+  const day = generated === undefined ? undefined : localDay(generated)
+  if (generated !== undefined && day !== undefined && (time === undefined || day <= time)) return dayText(generated, now)
+  if (time === undefined) return undefined
+  return inside(time) ? startedAgo(time, now) : dateText(time, now)
+}
+
+/** A `YYYY-MM-DD` day's local midnight, to compare with a time. */
+function localDay(day: string): number | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day)
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime() : undefined
 }
 
 const earliest = (agents: { startedAt?: number | undefined }[]): number | undefined => {
