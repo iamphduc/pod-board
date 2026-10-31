@@ -1,4 +1,3 @@
-import { Fragment } from 'react'
 import type { LogGroup } from '@pod-board/model'
 import { Chip } from './Chip.tsx'
 import { DocTitle } from './DocTitle.tsx'
@@ -8,10 +7,11 @@ export function SliceLog({ log }: { log: LogGroup[] }) {
   if (log.length === 0) return <p className="muted note">No slice log yet. It fills in once a sprint is drafted.</p>
   return (
     <div className="log-frame" role="region" aria-label="Slice log" tabIndex={0}>
-      <table className="slice-log">
-        <tbody>
-          {log.map((g) => (
-            <Fragment key={`${g.sprint}/${g.wave}`}>
+      {/* One block per wave: a faint fill groups its header and its slices, with no lines between rows. */}
+      {log.map((g) => (
+        <div className="log-group" key={`${g.sprint}/${g.wave}`}>
+          <table className="slice-log">
+            <tbody>
               <tr className="grp">
                 <th scope="rowgroup">{g.label}</th>
                 <td>
@@ -26,14 +26,14 @@ export function SliceLog({ log }: { log: LogGroup[] }) {
                   </td>
                   <td>
                     {row.live && <Chip chip={{ cls: 's-run', label: 'running' }} />}
-                    <span className="figures">{rowFigures(row)}</span>
+                    {rowFigures(row) && <span className="figures">{rowFigures(row)}</span>}
                   </td>
                 </tr>
               ))}
-            </Fragment>
-          ))}
-        </tbody>
-      </table>
+            </tbody>
+          </table>
+        </div>
+      ))}
     </div>
   )
 }

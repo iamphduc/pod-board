@@ -39,23 +39,25 @@ function FixLog({ repo, run, pipeline, agent, now }: { repo: BoardRepo; run: Run
         <p className="muted note">No agent has started on this fix yet.</p>
       ) : (
         <div className="log-frame" role="region" aria-label="Agent log" tabIndex={0}>
-          <table className="slice-log agent-log">
-            <tbody>
-              <tr className="grp">
-                <th scope="rowgroup">Agents</th>
-                <td />
-              </tr>
-              {rows.map((r) => (
-                <tr key={r.key} aria-current={r.agentId === open?.agentId ? 'true' : undefined}>
-                  <td>{r.href ? <a href={r.href}>{r.label}</a> : r.label}</td>
-                  <td>
-                    <Chip chip={r.chip} />
-                    <span className="figures">{r.time}</span>
-                  </td>
+          <div className="log-group">
+            <table className="slice-log agent-log">
+              <tbody>
+                <tr className="grp">
+                  <th scope="rowgroup">Agents</th>
+                  <td />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+                {rows.map((r) => (
+                  <tr key={r.key} aria-current={r.agentId === open?.agentId ? 'true' : undefined}>
+                    <td>{r.href ? <a href={r.href}>{r.label}</a> : r.label}</td>
+                    <td>
+                      <Chip chip={r.chip} />
+                      <span className="figures">{r.time}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
       {open && (
