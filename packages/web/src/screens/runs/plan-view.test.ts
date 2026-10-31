@@ -19,14 +19,14 @@ const manual = (files: Record<string, string>) => {
   for (const doc of [PLAN, LADDER]) files[doc] = files[doc]!.replace(/^<!-- autopilot-run.*-->\r?\n/m, '')
 }
 /** Three sprints: `warmup` done (two merged waves), `ladder` current as in the fixture, `rematch` named but not drafted. */
-const threeSprints = (files: Record<string, string>) => {
-  files[PLAN] = files[PLAN]!.replace(/^(\| ladder \|.*\| active \| )— \|$/m, (row, head: string) =>
-    ['| warmup | Warm up | done | — |', `${head}warmup |`, '| rematch | Rematch | planned | ladder |'].join('\n'),
+const threeSprints = (files: Record<string, string>, first = 'warmup', last = 'rematch') => {
+  files[PLAN] = files[PLAN]!.replace(/^(\| ladder \|.*\| active \| )— \|$/m, (_row, head: string) =>
+    [`| ${first} | Warm up | done | — |`, `${head}${first} |`, `| ${last} | Rematch | planned | ladder |`].join('\n'),
   )
-  files['pod-docs/sprints/warmup.md'] = [
+  files[`pod-docs/sprints/${first}.md`] = [
     '# Sprint: Warm up',
     '',
-    '_From plan: pod-docs/plans/sparring-ladder.md · Slug: warmup · Status: done · Generated: 2026-10-17_',
+    `_From plan: pod-docs/plans/sparring-ladder.md · Slug: ${first} · Status: done · Generated: 2026-10-17_`,
     '',
     '## Status board',
     '',
@@ -293,6 +293,20 @@ describe('flow edges', () => {
       'check:review>check:fix down D',
       'check:fix>ship:final-pr across D',
     ])
+  })
+
+  it('sprints slugged review and fix leave Final review and Fix pass waiting: no walked line or done segment past the live wave', () => {
+    const repo = chess((f) => (manual(f), threeSprints(f, 'review', 'fix')))
+    const cols = flowColumns(buildFlow(repo, 'sparring-ladder', NOW) ?? [])
+    expect(cols[3]?.steps.map((s) => `${s.label} ${s.word} ${s.detail}`)).toEqual(['Final review waiting not started', 'Fix pass waiting only if review fails'])
+    expect(edges2(cols).filter((e) => e.startsWith('check:') || e.includes('>check:'))).toEqual([
+      'sprint:fix>check:review across',
+      'check:review>ship:final-pr across',
+      'check:review>check:fix down D',
+      'check:fix>ship:final-pr across D',
+    ])
+    // The strip: Research, Plan interview, Look, Go, the review sprint, Wave 1, Wave 2 done; Wave 3 current; the rest not reached.
+    expect(runHeader(runOf(repo, 'sparring-ladder'), repo, NOW)?.segments).toEqual(['done', 'done', 'done', 'done', 'done', 'done', 'done', 'current', 'rest', 'rest', 'rest', 'rest'])
   })
 
   it('with no optional step: one path, walked up to the first waiting step, or all of it when done', () => {
