@@ -107,5 +107,14 @@ export function toggleGroup(flipped: ReadonlySet<string>, g: WaitGroup, keys: re
   return toggleOpen(flipped, g.key, keys)
 }
 
-export const moreLabel = (_open: boolean, _clamped: boolean): string | undefined => 'x'
-export const isClamped = (_scroll: number, _client: number): boolean => true
+export const SHOW_MORE = 'Show more'
+export const SHOW_LESS = 'Show less'
+
+/**
+ * The words under an entry's body: `Show more` while it is cut to two lines, `Show less` while open.
+ * `clamped` is whether the closed body overflows; a body that fits gets neither.
+ */
+export const moreLabel = (open: boolean, clamped: boolean): string | undefined => (!clamped ? undefined : open ? SHOW_LESS : SHOW_MORE)
+
+/** Whether a clamped body hides text: its full height is over its box by more than a pixel of rounding. */
+export const isClamped = (scrollHeight: number, clientHeight: number): boolean => scrollHeight - clientHeight > 1

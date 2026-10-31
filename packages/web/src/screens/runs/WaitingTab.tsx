@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { BoardRepo, RunSummary } from '@pod-board/model'
 import { Icon } from '../../theme/icons.tsx'
 import { AnswerForm } from './AnswerForm.tsx'
@@ -11,9 +11,11 @@ import {
   NOTHING_ELSE,
   answerAnchor,
   groupOpen,
+  isClamped,
   keepOpen,
   kindChip,
   mergeAnchor,
+  moreLabel,
   replyGhost,
   replySeen,
   rowMeta,
@@ -25,6 +27,44 @@ import {
 import './tabs.css'
 
 type Props = { repo: BoardRepo; run: RunSummary; items: NextItem[] }
+
+/**
+ * An entry as one toggle: the meta line, the body (cut to two lines until opened), and `Show more` or
+ * `Show less` under it when the body is long. One button, so text and words open the same way.
+ */
+function EntryToggle({ row, open, onToggle }: { row: WaitingRow; open: boolean; onToggle: () => void }) {
+  const body = useRef<HTMLSpanElement>(null)
+  // Measured only while closed (an open body never overflows); kept while open, so Show less stays.
+  const [clamped, setClamped] = useState(false)
+  useLayoutEffect(() => {
+    const el = body.current
+    if (!el || open) return
+    const measure = () => setClamped(isClamped(el.scrollHeight, el.clientHeight))
+    measure()
+    const watch = new ResizeObserver(measure)
+    watch.observe(el)
+    return () => watch.disconnect()
+  }, [open, row.text])
+  const more = moreLabel(open, clamped)
+  return (
+    // The kind's dot and word lead the meta line: `decision · engineer → human · 2026-10-30`.
+    <button className="wait-toggle" type="button" aria-expanded={open} onClick={onToggle}>
+      <span className="wait-meta mono">
+        <KindTag row={row} />
+        {rowMeta(row) && ` · ${rowMeta(row)}`}
+      </span>
+      <span ref={body} className={open ? 'wait-body' : 'wait-body clamp'}>
+        {row.text}
+      </span>
+      {more && (
+        <span className="wait-more">
+          {more}
+          <Icon name="chevron-down" />
+        </span>
+      )}
+    </button>
+  )
+}
 
 function KindTag({ row }: { row: WaitingRow }) {
   const k = kindChip(row)
@@ -85,14 +125,7 @@ export function WaitingTab({ repo, run, items }: Props) {
     return (
       <li key={item.key} className={`wait-row t-${item.tier}`}>
         {e ? (
-          // The kind's dot and word lead the meta line: `decision · engineer → human · 2026-10-30`.
-          <button className="wait-toggle" type="button" aria-expanded={isOpen} onClick={() => setOpen((o) => toggleOpen(o, item.key, keys))}>
-            <span className="wait-meta mono">
-              <KindTag row={e} />
-              {rowMeta(e) && ` · ${rowMeta(e)}`}
-            </span>
-            <span className={isOpen ? 'wait-body' : 'wait-body clamp'}>{e.text}</span>
-          </button>
+          <EntryToggle row={e} open={isOpen} onToggle={() => setOpen((o) => toggleOpen(o, item.key, keys))} />
         ) : (
           <div className="wait-head">
             <span className="wait-title">{item.title}</span>

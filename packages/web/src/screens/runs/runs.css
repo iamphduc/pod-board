@@ -1147,7 +1147,7 @@
 
 /*
  * Waiting tab rows (row styles are in tabs.css). The entry takes the first column and its one action
- * (Answer or Merge) the right end, top-aligned with the meta line; the open form, your answer and a
+ * (Answer or Merge) the right end, centred on the entry; the open form, your answer and a
  * reply panel take the full width under it. At 820 px and below the action goes back under the text.
  */
 .waiting-tab .wait-row {
@@ -1168,7 +1168,7 @@
 .waiting-tab .wait-row > .inplace-actions {
   grid-column: 2;
   grid-row: 1;
-  align-self: start;
+  align-self: center;
 }
 
 /* The kind leads the meta line as a dot and a word, in the line's own mono face. */
@@ -1238,9 +1238,38 @@
   }
 }
 
-/* Phone: the group header is a 44 px touch target, like the other controls. */
+/*
+ * Show more / Show less under a long body: part of the entry's toggle, so one control. A 14 px label and
+ * a 16 px chevron; the chevron's ink starts 3.5 px into its box, so a 4 px gap reads as about 7.5 px.
+ */
+.wait-more {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 4px;
+  font-size: var(--size-dense);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.wait-more svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.wait-toggle:hover .wait-more {
+  color: var(--fg);
+}
+
+.wait-toggle[aria-expanded="true"] .wait-more svg {
+  transform: rotate(180deg);
+}
+
+/* Phone: the group header and Show more are 44 px touch targets, like the other controls. */
 @media (max-width: 480px) {
-  .wait-group-toggle {
+  .wait-group-toggle,
+  .wait-more {
     min-height: 44px;
   }
 }
