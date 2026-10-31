@@ -67,6 +67,7 @@ flowchart LR
 - After Answer saved from the card, the card moves on, so focus lands on `body`.
 - An answer doesn't clear `needs-you`: the row reads answered until pod resolves the entry.
 - The flow's Go card reads `unknown · not recorded yet`, dim, even after later steps start (queue, someday).
+- The flow's Sprint stage is keyed `sprint` (steps `sprint:<slug>` and `sprint:<slug>/wave-N` after `flowColumns`), while `buildPipeline` keeps one `sprint:<slug>` stage per sprint for the wave board and the Log tab. Look a step up by the flow's keys when testing the flow.
 - Each `.flow-step` keeps `position: relative`: it holds its `.sr-only` word. Measure the connectors against `.flow`, not `.flow-scroll` (2 px padding, and only the visible width on phones).
 - The flow's scroll box (`.flow-scroll`) is the positioned parent of the cards' `.sr-only` words; without `position: relative` they escape it and widen the page (828 px at 375 px).
 - `Flow` and `NextStepCard` are siblings: key them differently (`flow:<run>` and `<run>`). A shared key left the last run's flow on screen after a run switch.
