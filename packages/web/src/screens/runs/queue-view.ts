@@ -4,7 +4,7 @@
 
 import { isAnswerable, type BoardRepo, type QueueItem, type RunSummary } from '@pod-board/model'
 import type { AnswerState } from './answer-flow.ts'
-import type { EntryKind } from './entry-kind.ts'
+import { entryKind, type EntryKind } from './entry-kind.ts'
 import type { Chip, ChipClass } from './view.ts'
 
 /** A plan run's note: its Continue resumes /pod:code, which reads the answer. */
@@ -65,15 +65,17 @@ export function waitingEntries(repo: BoardRepo | undefined, selected: RunSummary
 
 export function waitingRows(repo: BoardRepo | undefined, selected: RunSummary | undefined): WaitingRow[] {
   return waitingEntries(repo, selected).map((e, i) => {
+    const body = plain(e.body)
+    const kind = entryKind(body)
     const row: WaitingRow = {
       key: `${i}:${e.line}`,
       line: e.line,
       chip: typeChip(e.type),
       route: e.route.trim(),
-      body: plain(e.body),
-      kind: 'other',
-      kindLabel: 'other',
-      text: plain(e.body),
+      body,
+      kind: kind.kind,
+      kindLabel: kind.label,
+      text: kind.text,
       answerable: isAnswerable(e),
     }
     if (e.date !== undefined) row.date = e.date

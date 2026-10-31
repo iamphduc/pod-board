@@ -6,7 +6,8 @@ import type { MergeState } from './merge-flow.ts'
 import type { NextItem } from './next-step.ts'
 import type { RunTarget } from './resume-flow.ts'
 import { formAnchor, type WaitingRow } from './queue-view.ts'
-import type { Chip } from './view.ts'
+import type { Chip, ChipClass } from './view.ts'
+import { KIND_ORDER, type EntryKind } from './entry-kind.ts'
 
 export const NOTHING_ELSE = 'Nothing else waits on you.'
 
@@ -59,7 +60,40 @@ export function replySeen(items: NextItem[]): ReplySeen | undefined {
 export const replyGhost = (items: NextItem[], last: ReplySeen | undefined): ReplySeen | undefined =>
   last && !items.some((i) => i.key === last.key) ? last : undefined
 
+const KIND_CLS: Record<EntryKind, ChipClass> = { now: 's-you', before: 's-you', decision: 's-run', other: 's-idle', someday: 's-idle' }
+
+/** The row's kind as a status dot and word; a BLOCKED entry with no kind word reads `blocked`. */
+export function kindChip(row: WaitingRow): Chip {
+  if (row.kind === 'other' && row.chip.label === 'BLOCKED') return { cls: 's-bad', label: 'blocked' }
+  return { cls: KIND_CLS[row.kind], label: row.kindLabel }
+}
+
+/**
+ * A run of rows in the tab. `group:top` (blocked, merge, reply) has no header and is always open; each
+ * pending kind and `group:info` (answered, or not yours to answer) have a header with a count.
+ */
 export type WaitGroup = { key: string; label?: string; items: NextItem[]; startsOpen: boolean }
-export const kindChip = (_row: WaitingRow): Chip => ({ cls: 's-idle', label: '' })
-export const waitGroups = (_items: NextItem[]): WaitGroup[] => []
-export const groupOpen = (_g: WaitGroup, _flipped: ReadonlySet<string>, _anchors: readonly (string | undefined)[]): boolean => true
+
+const KIND_LABEL: Record<EntryKind, string> = { now: 'Now', decision: 'Decisions', before: 'Before a step', other: 'Other', someday: 'Someday' }
+export const INFO_LABEL = 'No answer needed'
+
+/** The items in groups, list order kept inside each; empty groups left out. */
+export function waitGroups(items: NextItem[]): WaitGroup[] {
+  const groups: WaitGroup[] = [{ key: 'group:top', items: items.filter((i) => i.tier !== 'pending' && i.tier !== 'info'), startsOpen: true }]
+  for (const kind of KIND_ORDER) {
+    const of = items.filter((i) => i.tier === 'pending' && (i.entry?.kind ?? 'other') === kind)
+    groups.push({ key: `group:${kind}`, label: KIND_LABEL[kind], items: of, startsOpen: kind !== 'someday' })
+  }
+  groups.push({ key: 'group:info', label: INFO_LABEL, items: items.filter((i) => i.tier === 'info'), startsOpen: true })
+  return groups.filter((g) => g.items.length > 0)
+}
+
+/**
+ * Whether a group's rows show: its start state, flipped when its key is in `flipped` (kept with toggleOpen
+ * and keepOpen, like the rows). A group holding an anchor (the open answer form or merge confirm) shows,
+ * so an open form is never hidden.
+ */
+export function groupOpen(g: WaitGroup, flipped: ReadonlySet<string>, anchors: readonly (string | undefined)[]): boolean {
+  if (g.items.some((i) => anchors.includes(i.key))) return true
+  return g.startsOpen !== flipped.has(g.key)
+}

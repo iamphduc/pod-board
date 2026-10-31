@@ -1,9 +1,11 @@
 // The Next step card and the Waiting tab: the selected run's most urgent item and its one action,
 // then everything else that waits on you. Picks from the model's rules only (the queue entries,
-// waitingPrs, the reply panel), in the plan's order: blocked → merge → reply → pending → info.
+// waitingPrs, the reply panel), in the plan's order: blocked → merge → reply → pending → info,
+// the pending tier sorted by kind (entry-kind.ts).
 // Pure; the card and the tab only render these.
 
 import { haltGate, isAnswerable, waitingPrs, type BoardRepo, type QueueItem, type RunSummary, type WaitingPr } from '@pod-board/model'
+import { KIND_ORDER } from './entry-kind.ts'
 import { waitingEntries, waitingRows, type WaitingRow } from './queue-view.ts'
 import { replyPanel, type ReplyPanelView } from './reply-view.ts'
 import { emptyMessage } from './view.ts'
@@ -48,6 +50,13 @@ function short(text: string): string {
 
 const ACTION_TIERS = new Set<NextItem['tier']>(['blocked', 'merge', 'reply', 'pending'])
 const TIER_ORDER: NextItem['tier'][] = ['blocked', 'merge', 'reply', 'pending', 'info']
+
+/** Tier first; inside the pending tier, by the entry's kind (now → decision → before → other → someday). */
+function byTier(a: NextItem, b: NextItem): number {
+  const tier = TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier)
+  if (tier !== 0 || a.tier !== 'pending') return tier
+  return KIND_ORDER.indexOf(a.entry?.kind ?? 'other') - KIND_ORDER.indexOf(b.entry?.kind ?? 'other')
+}
 
 /** Keys by line, a repeat numbered in list order, so a row's key never depends on where it sits. */
 function entryKeys(rows: WaitingRow[]): string[] {
@@ -118,8 +127,8 @@ export function nextSteps(run: RunSummary | undefined, repo: BoardRepo | undefin
   const panel = replyPanel(run, repo, now)
   const reply = panel && replyItem(panel)
   if (reply) items.push(reply)
-  // A stable sort: list order holds within a tier.
-  const sorted = items.sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier))
+  // A stable sort: list order holds within a tier, and within a kind in the pending tier.
+  const sorted = items.sort(byTier)
   const first = sorted[0]
   if (first && ACTION_TIERS.has(first.tier)) return { card: first, rest: sorted.slice(1) }
   return { card: nothingCard(run, repo), rest: sorted }

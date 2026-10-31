@@ -431,7 +431,8 @@ describe('breathing running dot', () => {
   })
 
   it('animates only the running mark in the flow and the fold line, never the card or its text', () => {
-    const animated = runsRules().filter((r) => !r.media && 'animation' in decls(r.body))
+    // `animation: none` stops one (the Waiting tab's kind dot), so it doesn't count.
+    const animated = runsRules().filter((r) => !r.media && 'animation' in decls(r.body) && decls(r.body)['animation'] !== 'none')
     expect(animated.flatMap((r) => r.selectors).sort()).toEqual([...LIVE_MARKS].sort())
     for (const r of animated) expect(decls(r.body)['animation']).toBe('breathe 2s ease-in-out infinite')
   })
@@ -448,7 +449,6 @@ describe('breathing running dot', () => {
     expect(off(rules(baseCss())).sort()).toEqual([...RUN_DOTS].sort())
   })
 })
-
 
 describe('runs.css waiting rows', () => {
   const ROW = '.waiting-tab .wait-row'

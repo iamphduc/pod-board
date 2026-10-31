@@ -340,9 +340,9 @@ describe('next step', () => {
     expect(noBlock.card.key).toBe(entryKey(NOW_))
     // The card keeps the whole body, kind word included, as its title.
     expect(noBlock.card.title).toBe('now (product choice): the title line.')
-    // Answered entries are info, not pending: they stay after every pending kind.
+    // Answered entries are info, not pending: they stay after every pending kind (the answer brings a continue reply).
     const answered = `${SOMEDAY_OLD.replace('trim', 'cut')} **Answer (human):** later`
-    expect(order(steps(chess([onlyQueue(answered, SOMEDAY_NEW)])))).toEqual([`pending ${entryKey(SOMEDAY_NEW)}`, `info ${entryKey(answered)}`])
+    expect(order(steps(chess([onlyQueue(answered, SOMEDAY_NEW)])))).toEqual([`reply reply:${PLAN}`, `pending ${entryKey(SOMEDAY_NEW)}`, `info ${entryKey(answered)}`])
   })
 
   it('stable keys', () => {
