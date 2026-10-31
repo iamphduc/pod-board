@@ -6,6 +6,7 @@
  * Text inside the card and the Waiting rows stops near 72 characters.
  * Tokens and L1's classes only; no colour literals (pwa.test.ts checks).
  * At 820px and below the sidebar stacks above the main column.
+ * Wider screens can drag the sidebar from 200 to 400 px (sidebar-width.ts).
  */
 
 .screen {
@@ -33,7 +34,8 @@
 
 .screen-body {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  /* The width comes from the resize handle (an inline --side-width); 260 px until it is set. */
+  grid-template-columns: var(--side-width, 260px) minmax(0, 1fr);
   align-items: start;
   padding: 0;
 }
@@ -41,6 +43,8 @@
 /* Sidebar: the title and the connection status while lost, the runs, then Add repo at the bottom. */
 
 .side {
+  grid-column: 1;
+  grid-row: 1;
   position: sticky;
   top: 0;
   height: 100vh;
@@ -53,6 +57,54 @@
   padding: 20px 16px;
   background: var(--bg);
   border-right: 1px solid var(--border);
+}
+
+/*
+ * The resize handle: an 8 px strip over the sidebar's right border, in the sidebar's own cell so it
+ * stays in view as the page scrolls. Its 2 px line shows on hover, on focus, and while dragging.
+ */
+.side-handle {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: 8px;
+  height: 100vh;
+  height: 100dvh;
+  margin-right: -4px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.side-handle::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+.side-handle:hover::after,
+.side-handle:focus-visible::after,
+[data-resizing] .side-handle::after {
+  background: var(--focus);
+}
+
+.side-handle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 0;
+}
+
+/* While dragging: the resize cursor everywhere, and no text gets selected. */
+[data-resizing],
+[data-resizing] * {
+  cursor: col-resize;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .side-head {
@@ -181,13 +233,23 @@
   overflow-wrap: anywhere;
 }
 
-/* The label, then under it a kind tag (`fix`) for a /pod:fix run. */
+/* The run's name, then under it its repo, muted, and a kind tag (`fix`) for a /pod:fix run. */
 .run-head {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
   min-width: 0;
+}
+
+.run-head b {
+  flex-basis: 100%;
+}
+
+.run-repo {
+  min-width: 0;
+  font-size: var(--size-micro);
+  overflow-wrap: anywhere;
 }
 
 .run .status {
@@ -197,6 +259,8 @@
 /* Main column */
 
 .main {
+  grid-column: 2;
+  grid-row: 1;
   display: grid;
   align-content: start;
   min-width: 0;
@@ -1072,7 +1136,14 @@
     overflow: visible;
   }
 
+  /* The sidebar stacks, so there is no edge to drag. */
+  .side-handle {
+    display: none;
+  }
+
   .main {
+    grid-column: 1;
+    grid-row: 2;
     width: calc(100% - 40px);
     padding: 24px 20px 40px;
   }

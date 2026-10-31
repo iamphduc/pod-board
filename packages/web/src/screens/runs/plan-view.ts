@@ -97,12 +97,18 @@ function waveText(run: RunSummary, repo: BoardRepo): string | undefined {
   return `Wave ${sprint.currentWave ?? last.wave} of ${last.wave}`
 }
 
-/** The header above the flow; undefined with no run or repo, or a run of another repo. */
-export function runHeader(run: RunSummary | undefined, repo: BoardRepo | undefined, now: number): RunHeader | undefined {
+/** POD_BOARD_TRANSCRIPT_DAYS when the Board doesn't say. */
+export const TRANSCRIPT_DAYS = 30
+
+/**
+ * The header above the flow; undefined with no run or repo, or a run of another repo. `transcriptDays`:
+ * the Board's transcript window, which decides whether the earliest agent start can be trusted.
+ */
+export function runHeader(run: RunSummary | undefined, repo: BoardRepo | undefined, now: number, transcriptDays = TRANSCRIPT_DAYS): RunHeader | undefined {
   if (!run || !repo || run.repoId !== repo.id) return undefined
   // A fix run's claim name and a repo row name no plan, so they have no flow and no strip.
   const flow = run.fix === undefined && run.plan !== undefined ? buildFlow(repo, run.plan, now) : undefined
-  const header: RunHeader = { title: runTitle(run, repo), meta: runMeta(run, repo, now), segments: flow ? segments(flow.flatMap((s) => s.steps)) : [] }
+  const header: RunHeader = { title: runName(run, repo), meta: runMeta(run, repo, now, transcriptDays), segments: flow ? segments(flow.flatMap((s) => s.steps)) : [] }
   const wave = run.fix === undefined && run.plan !== undefined ? waveText(run, repo) : undefined
   if (wave !== undefined) header.wave = wave
   return header
@@ -116,36 +122,73 @@ const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 /** `sprint-column` → `Sprint column`. */
 const readable = (slug: string) => capital(slug.replace(/[-_]+/g, ' ').trim())
 
-/** The run's human name: the plan's title; a fix run's PR title without its prefix, else its slug made readable; a repo row's repo. */
-function runTitle(run: RunSummary, repo: BoardRepo): string {
+/**
+ * The run's human name, the same in the run header and its sidebar card: the plan's title; a fix run's
+ * PR title without its prefix, kept as written, else its slug made readable; a repo row's repo. With no
+ * repo (not on the Board yet), what the run summary alone says.
+ */
+export function runName(run: RunSummary, repo: BoardRepo | undefined): string {
   if (run.fix !== undefined) {
-    const pr = run.plan !== undefined ? fixPr(repo, run.plan)?.title?.replace(COMMIT_PREFIX, '').trim() : undefined
-    return pr ? capital(pr) : readable(run.fix)
+    const pr = repo && run.plan !== undefined ? fixPr(repo, run.plan)?.title?.replace(COMMIT_PREFIX, '').trim() : undefined
+    return pr || readable(run.fix)
   }
   if (run.plan === undefined) return run.repo
-  return run.title ?? repo.model.plans.find((p) => p.slug === run.plan)?.title ?? readable(run.plan)
+  return run.title ?? repo?.model.plans.find((p) => p.slug === run.plan)?.title ?? readable(run.plan)
 }
 
 /** `<repo> · <Plan|Fix> · started <when>`; a part that isn't known is left out. */
-function runMeta(run: RunSummary, repo: BoardRepo, now: number): string {
+function runMeta(run: RunSummary, repo: BoardRepo, now: number, transcriptDays: number): string {
   if (run.plan === undefined) return ''
-  const started = startedAt(run, repo, now)
-  return [run.repo, run.fix !== undefined ? 'Fix' : 'Plan', started === undefined ? undefined : `started ${startedAgo(started, now)}`]
-    .filter((x) => x !== undefined)
-    .join(' · ')
-}
-
-/** The earliest start among the run's own agents (a plan's by isPlanAgent, a fix run's engineers and reviewers). */
-function startedAt(run: RunSummary, repo: BoardRepo, now: number): number | undefined {
-  const plan = run.fix === undefined ? repo.model.plans.find((p) => p.slug === run.plan) : undefined
-  const agents = run.fix !== undefined ? fixRunAgents(repo, run.plan!, now) : plan ? repo.agents.filter((a) => isPlanAgent(a, plan)) : []
-  const starts = agents.flatMap((a) => (a.startedAt === undefined ? [] : [a.startedAt]))
-  return starts.length > 0 ? Math.min(...starts) : undefined
+  const started = startedText(run, repo, now, transcriptDays)
+  return [run.repo, run.fix !== undefined ? 'Fix' : 'Plan', started === undefined ? undefined : `started ${started}`].filter((x) => x !== undefined).join(' · ')
 }
 
 const MIN = 60_000
 const HOUR = 60 * MIN
 const DAY = 24 * HOUR
+
+/**
+ * An agent start this close to the window's far edge isn't trusted: the plan's earlier agents may have
+ * aged out of the window, so the earliest one left would read later than the plan really started.
+ */
+const EDGE = DAY
+
+/**
+ * When the run started, as words. A fix run: its earliest agent (engineers and reviewers), else nothing.
+ * A plan: its earliest agent when that start is clearly inside the transcript window; else the plan's
+ * autopilot stamp; else its `Generated:` date, as a date (`Oct 12`); else nothing.
+ */
+function startedText(run: RunSummary, repo: BoardRepo, now: number, transcriptDays: number): string | undefined {
+  if (run.fix !== undefined) {
+    const at = earliest(fixRunAgents(repo, run.plan!, now))
+    return at === undefined ? undefined : startedAgo(at, now)
+  }
+  const plan = repo.model.plans.find((p) => p.slug === run.plan)
+  if (!plan) return undefined
+  const at = earliest(repo.agents.filter((a) => isPlanAgent(a, plan)))
+  if (at !== undefined && now - at < transcriptDays * DAY - EDGE) return startedAgo(at, now)
+  if (plan.autopilotStartedAt !== undefined) return startedAgo(plan.autopilotStartedAt, now)
+  return plan.generated === undefined ? undefined : dayText(plan.generated, now)
+}
+
+const earliest = (agents: { startedAt?: number }[]): number | undefined => {
+  const starts = agents.flatMap((a) => (a.startedAt === undefined ? [] : [a.startedAt]))
+  return starts.length > 0 ? Math.min(...starts) : undefined
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * A `YYYY-MM-DD` day as `Oct 12`, with `, 2025` when it isn't now's year. Read from the text, not through
+ * `Date`, so the day never shifts with the time zone.
+ */
+function dayText(day: string, now: number): string | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day)
+  const month = m && MONTHS[Number(m[2]) - 1]
+  if (!m || !month) return undefined
+  const text = `${month} ${Number(m[3])}`
+  return Number(m[1]) === new Date(now).getFullYear() ? text : `${text}, ${m[1]}`
+}
 
 /** `just now` (under a minute, or ahead of now), `N min ago`, `N h ago`, or `N day(s) ago`, rounded down. */
 export function startedAgo(at: number, now: number): string {

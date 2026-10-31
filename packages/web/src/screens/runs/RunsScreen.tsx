@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type CSSProperties } from 'react'
 import { buildFixPipeline, buildFlow, buildPipeline, type Board, type RunSummary } from '@pod-board/model'
 import type { StreamState } from '../../board-stream.ts'
 import { hashFor, type View } from '../../selection.ts'
@@ -15,6 +15,8 @@ import { runHeader } from './plan-view.ts'
 import { switchView } from './resume-flow.ts'
 import { RunHeader } from './RunHeader.tsx'
 import { RunsList } from './RunsList.tsx'
+import { SideHandle } from './SideHandle.tsx'
+import { readWidth, saveWidth } from './sidebar-width.ts'
 import { readTab, saveTab, shownTab, type Tab, type TabStorage } from './tab-memory.ts'
 import { WaitingTab } from './WaitingTab.tsx'
 import { banners, connectionStatus, tabPress } from './view.ts'
@@ -50,13 +52,14 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
   const store = useRef(storage ?? pageStorage())
   const [stored, setStored] = useState<Tab | undefined>(() => readTab(store.current))
   const [picking, setPicking] = useState(false)
+  const [sideWidth, setSideWidth] = useState(() => readWidth(store.current))
   const repoButton = useRef<HTMLButtonElement>(null)
 
   const repo = selected && board?.repos.find((r) => r.id === selected.repoId)
   const isFix = selected?.fix !== undefined
   const fixPipeline = repo && isFix && selected?.plan !== undefined ? buildFixPipeline(repo, selected.plan, now) : undefined
   const pipeline = repo && !isFix && selected?.plan !== undefined ? buildPipeline(repo, selected.plan, now) : undefined
-  const header = runHeader(selected, repo, now)
+  const header = runHeader(selected, repo, now, board?.transcriptDays)
   const steps = nextSteps(selected, repo, now)
   const shown = shownTab(stored, { view })
   const notices = banners(board, stream)
@@ -71,6 +74,10 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
     saveTab(store.current, next.save)
     setStored(next.save)
     if (next.leave && selected) window.location.hash = hashFor(selected)
+  }
+  const commitWidth = (w: number) => {
+    setSideWidth(w)
+    saveWidth(store.current, w)
   }
   const closePicker = () => {
     setPicking(false)
@@ -87,8 +94,8 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
 
   return (
     <div className="screen">
-      <div className="screen-body">
-        <aside className="side">
+      <div className="screen-body" style={{ '--side-width': `${sideWidth}px` } as CSSProperties}>
+        <aside className="side" id="side">
           <div className="side-head">
             <span className="logo">
               <i aria-hidden="true" />
@@ -100,7 +107,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
               </span>
             )}
           </div>
-          <RunsList runs={runs} selected={selected} />
+          <RunsList runs={runs} selected={selected} repos={board?.repos ?? []} />
           <div className="side-foot">
             <button ref={repoButton} className="btn lead add-repo" type="button" aria-haspopup="dialog" onClick={() => setPicking(true)}>
               <Icon name="plus" />
@@ -108,6 +115,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
             </button>
           </div>
         </aside>
+        <SideHandle width={sideWidth} onResize={setSideWidth} onCommit={commitWidth} />
         <main className={view === 'board' ? 'main wide' : 'main'}>
           {notices.length > 0 && (
             <div className="banners">
