@@ -144,7 +144,8 @@ describe('plan view', () => {
     const auto = chess()
     expect(runHeader(runOf(auto, 'sparring-ladder'), auto, NOW)).toEqual({
       title: 'Sparring ladder to Liem',
-      meta: 'chess-web · Plan',
+      // No agents on the Board: the plan's autopilot stamp (2026-10-18T10:31Z) says when it started.
+      meta: 'chess-web · Plan · started 2 days ago',
       segments: ['done', 'done', 'done', 'done', 'done', 'current', 'rest', 'rest', 'rest'],
       wave: 'Wave 3 of 3',
     })
@@ -188,6 +189,51 @@ describe('plan view', () => {
     expect(runHeader(runOf(repo, 'sparring-ladder'), repo, NOW)?.meta).toBe('chess-web · Plan · started 2 days ago')
   })
 
+  describe('run header: started falls back from the agents to the stamp to the Generated date', () => {
+    const D = 24 * 3_600_000
+    const agent = (id: string, startedAt: number): AgentRun => ({ id, session: 's', type: 'pod:engineer', tokens: 0, ended: true, startedAt, plan: 'sparring-ladder' })
+    const meta = (repo: BoardRepo, days?: number) => runHeader(runOf(repo, 'sparring-ladder'), repo, NOW, days)?.meta
+    /** No autopilot stamp; `generated` replaces the doc's `Generated:` date (none: the field goes). */
+    const noStamp = (generated?: string) => (f: Record<string, string>) => {
+      manual(f)
+      f[PLAN] = f[PLAN]!.replace(/Generated: 2026-10-17 · /, generated === undefined ? '' : `Generated: ${generated} · `)
+    }
+
+    it('an agent start clearly inside the window wins over the stamp', () => {
+      // The stamp says 2 days ago; the agent, 5 hours ago.
+      expect(meta(chess(() => {}, { agents: [agent('a', NOW - 5 * 3_600_000)] }))).toBe('chess-web · Plan · started 5 h ago')
+    })
+
+    it('an agent start near or past the window edge is not trusted: earlier transcripts may have aged out', () => {
+      // A day short of the 30-day window is the last trusted start; exactly 29 days back is not.
+      expect(meta(chess(() => {}, { agents: [agent('a', NOW - 29 * D + 60_000)] }))).toBe('chess-web · Plan · started 28 days ago')
+      expect(meta(chess(() => {}, { agents: [agent('a', NOW - 29 * D)] }))).toBe('chess-web · Plan · started 2 days ago')
+      // The Board's own window counts: with 7 days, a start 6.5 days back falls back to the stamp too.
+      const repo = chess(noStamp(), { agents: [agent('a', NOW - 6.5 * D)] })
+      expect(meta(repo, 7)).toBe('chess-web · Plan')
+      expect(meta(repo, 30)).toBe('chess-web · Plan · started 6 days ago')
+    })
+
+    it('no stamp: the Generated date, as a date, never as N days ago', () => {
+      expect(meta(chess(noStamp('2026-10-12')))).toBe('chess-web · Plan · started Oct 12')
+      expect(meta(chess(noStamp('2026-01-05')))).toBe('chess-web · Plan · started Jan 5')
+      // Another year names it.
+      expect(meta(chess(noStamp('2025-12-01')))).toBe('chess-web · Plan · started Dec 1, 2025')
+      // An old agent outside the window doesn't beat the date.
+      expect(meta(chess(noStamp('2026-08-01'), { agents: [agent('a', NOW - 40 * D)] }))).toBe('chess-web · Plan · started Aug 1')
+    })
+
+    it('no trusted agent, no stamp, and no Generated date: no started part', () => {
+      expect(meta(chess(noStamp()))).toBe('chess-web · Plan')
+    })
+
+    it('the Board passes its window through runHeader; missing means 30 days', () => {
+      const repo = chess(() => {}, { agents: [agent('a', NOW - 10 * D)] })
+      expect(meta(repo)).toBe('chess-web · Plan · started 10 days ago')
+      expect(meta(repo, 10)).toBe('chess-web · Plan · started 2 days ago')
+    })
+  })
+
   it('run header for a fix run: the PR title without its prefix, else the slug made readable', () => {
     const name = 'fix-sprint-column'
     const claim: Claim = { portBase: 3100, repoPath: '/c', plan: name }
@@ -199,10 +245,12 @@ describe('plan view', () => {
     expect(runHeader(fix, chess(() => {}, { claims: [claim] }), NOW)).toEqual({ title: 'Sprint column', meta: 'chess-web · Fix', segments: [] })
     // A PR whose title gh didn't give: the slug too.
     expect(titleWith(undefined)).toBe('Sprint column')
-    // The conventional-commit prefix goes, with any scope and breaking mark; the rest starts with a capital.
-    expect(titleWith("fix(runs): the log's rail holds only a status")).toBe("The log's rail holds only a status")
-    expect(titleWith('feat!: drop the strip')).toBe('Drop the strip')
-    expect(titleWith('refactor(model, web)!:   tidy the flow')).toBe('Tidy the flow')
+    // The conventional-commit prefix goes, with any scope and breaking mark; the rest keeps its case as written.
+    expect(titleWith("fix(runs): the log's rail holds only a status")).toBe("the log's rail holds only a status")
+    expect(titleWith('fix(server): gh pr list times out')).toBe('gh pr list times out')
+    expect(titleWith('fix: iOS drag sticks')).toBe('iOS drag sticks')
+    expect(titleWith('feat!: drop the strip')).toBe('drop the strip')
+    expect(titleWith('refactor(model, web)!:   tidy the flow')).toBe('tidy the flow')
     expect(titleWith('FEAT(runs): Calm header')).toBe('Calm header')
     // A title with no prefix stays as it is; a word that isn't a commit type isn't a prefix.
     expect(titleWith('Calm the run header')).toBe('Calm the run header')
@@ -217,6 +265,9 @@ describe('plan view', () => {
     const engineer: AgentRun = { id: 'e1', session: 's', type: 'pod:engineer', branch: name, startedAt: NOW - 5 * 60_000, tokens: 0, ended: false }
     const started = chess(() => {}, { claims: [claim], agents: [engineer] })
     expect(runHeader(fix, started, NOW)?.meta).toBe('chess-web · Fix · started 5 min ago')
+    // A fix run has no plan doc to fall back on, so its earliest agent counts whatever the window.
+    const old = chess(() => {}, { claims: [claim], agents: [{ ...engineer, startedAt: NOW - 40 * 24 * 3_600_000 }] })
+    expect(runHeader(fix, old, NOW, 30)?.meta).toBe('chess-web · Fix · started 40 days ago')
   })
 
   it('run header for a repo row, a plan the repo lacks, and no run', () => {
