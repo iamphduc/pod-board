@@ -37,12 +37,11 @@ export function SliceLog({ log, sprints, current }: Props) {
                     <td>
                       <span className="code">{row.code}</span> · <DocTitle text={row.title} />
                       {row.model && <span className="muted"> · {row.model}</span>}
+                      {rowFigures(row) && <span className="figures"> · {rowFigures(row)}</span>}
                       {confidenceTag(row) && <span className="chip tag">{confidenceTag(row)}</span>}
                     </td>
-                    <td>
-                      {row.live && <Chip chip={{ cls: 's-run', label: 'running' }} />}
-                      {rowFigures(row) && <span className="figures">{rowFigures(row)}</span>}
-                    </td>
+                    {/* The status rail: a state only, never figures, so it never wraps. */}
+                    <td>{row.live && <Chip chip={{ cls: 's-run', label: 'running' }} />}</td>
                   </tr>
                 ))}
               </tbody>

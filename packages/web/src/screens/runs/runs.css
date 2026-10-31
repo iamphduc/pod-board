@@ -761,11 +761,12 @@
   width: calc(var(--log-rail) + 16px);
   padding-left: 16px;
   text-align: left;
+  white-space: nowrap;
 }
 
 /* Confidence is an attribute, not a state: a quiet tag after the title. */
 .slice-log .chip.tag {
-  margin-left: 6px;
+  margin-left: 8px;
   white-space: nowrap;
 }
 
@@ -775,17 +776,17 @@
   font-variant-numeric: tabular-nums;
 }
 
-.slice-log td:last-child .chip + .figures {
-  margin-left: 8px;
-}
-
 .slice-log tr.grp th {
   font-weight: 400;
   color: var(--muted);
 }
 
+.log-wave tr:last-child > * {
+  padding-bottom: 0;
+}
+
 .log-wave + .log-wave tr.grp > * {
-  padding-top: 10px;
+  padding-top: 8px;
 }
 
 .slice-log .code {
@@ -840,7 +841,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 4px 12px;
-  padding: 6px 16px;
+  padding: 8px 16px;
   border-radius: var(--radius-sm);
   background: var(--surface);
   font-size: var(--size-small);
@@ -1124,15 +1125,19 @@
   }
 }
 
-/* Phone: the blocks fill the width; each slice is one line, its figures after the title (`… · opus · medium`). */
+/* Phone: the blocks fill the width; each slice is one line where it fits, its status after the title. */
 
 @media (max-width: 560px) {
   .log-group {
     min-width: 0;
   }
 
-  .log-wave + .log-wave {
-    margin-top: 8px;
+  .log-wave tr:last-child {
+    padding-bottom: 0;
+  }
+
+  .log-wave + .log-wave tr.grp {
+    padding-top: 8px;
   }
 
   .log-wave + .log-wave tr.grp > * {

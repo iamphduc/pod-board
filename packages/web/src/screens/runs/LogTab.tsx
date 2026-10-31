@@ -58,10 +58,12 @@ function FixLog({ repo, run, pipeline, agent, now }: { repo: BoardRepo; run: Run
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.key} aria-current={r.agentId === open?.agentId ? 'true' : undefined}>
-                    <td>{r.href ? <a href={r.href}>{r.label}</a> : r.label}</td>
+                    <td>
+                      {r.href ? <a href={r.href}>{r.label}</a> : r.label}
+                      <span className="figures"> · {r.time}</span>
+                    </td>
                     <td>
                       <Chip chip={r.chip} />
-                      <span className="figures">{r.time}</span>
                     </td>
                   </tr>
                 ))}
