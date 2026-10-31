@@ -1323,6 +1323,16 @@
   align-self: center;
 }
 
+/*
+ * The rows, the group headers and the empty line share the tab labels' and the Log blocks' 16 px text
+ * inset. The rows' hairlines still span the column, as the tab bar's line and the Log blocks do.
+ */
+.waiting-tab .wait-row,
+.waiting-tab .wait-group-head,
+.waiting-tab > .tab-empty {
+  padding-inline: 16px;
+}
+
 /* The kind leads the meta line as a dot and a word, in the line's own mono face; the card's kind too. */
 .next-kind {
   margin: 0 0 8px;
@@ -1334,7 +1344,6 @@
 .waiting-tab .wait-meta .wait-kind {
   font-family: inherit;
   font-size: inherit;
-  gap: 8px;
   vertical-align: baseline;
 }
 

@@ -526,6 +526,27 @@ describe('runs.css waiting rows', () => {
     }
   })
 
+  it('insets the rows, the group headers and the empty line like the tab labels and the Log blocks, at every width', () => {
+    for (const width of [1280, 821, 820, 480, 375]) {
+      const st = stylesAt(width)
+      const tab = st.get('.main > .tabs .tab')?.['padding-inline']
+      expect(tab, `tab label inset at ${width} px`).toBe('16px')
+      // The Log blocks' text inset: the second value of their padding.
+      expect(/^\S+\s+(\S+)$/.exec(st.get('.log-group')?.['padding'] ?? '')?.[1], `Log inset at ${width} px`).toBe(tab)
+      for (const sel of [ROW, '.waiting-tab .wait-group-head', '.waiting-tab > .tab-empty']) {
+        expect(st.get(sel)?.['padding-inline'], `${sel} at ${width} px`).toBe(tab)
+      }
+    }
+  })
+
+  it("the kind's dot and word keep the base .status gap, with no gap of their own", () => {
+    const base = rules(stripComments(readFileSync(join(here, '../../theme/base.css'), 'utf8'))).filter((r) => !r.media && r.selectors.includes('.status'))
+    expect(Object.assign({}, ...base.map((r) => decls(r.body)))['gap']).toBe('8px')
+    for (const sel of ['.next-kind .wait-kind', '.waiting-tab .wait-meta .wait-kind']) {
+      for (const width of [1280, 375]) expect(stylesAt(width).get(sel)?.['gap'], `${sel} at ${width} px`).toBeUndefined()
+    }
+  })
+
   it('the kind dot never breathes: a decision is not running', () => {
     expect(stylesAt(1280).get('.waiting-tab .wait-meta .wait-kind::before')?.['animation']).toBe('none')
   })
