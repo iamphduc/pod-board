@@ -44,3 +44,8 @@ export function backPath(from: Box, to: Box, origin: Box): string {
   const m = (x1 + x2) / 2
   return `M${n(x1)} ${n(y1)} C${n(m)} ${n(y1)} ${n(m)} ${n(y2)} ${n(x2)} ${n(y2)}`
 }
+
+/** Not built yet. */
+export function stepPath(_from: Box, _to: Box, _origin: Box): string {
+  return ''
+}

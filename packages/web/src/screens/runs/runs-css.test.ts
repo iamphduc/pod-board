@@ -376,6 +376,11 @@ describe('runs.css flow rows and lines', () => {
     expect(flow?.['grid-template-columns']).toBe('repeat(var(--flow-cols), minmax(152px, 1fr))')
     expect(flow?.['grid-template-rows']).toBe('auto repeat(var(--flow-rows), auto)')
     expect(flow?.['min-width']).toBe('calc(var(--flow-cols) * 152px + (var(--flow-cols) - 1) * 32px)')
+    // The same room between cards both ways, so every connector and its arrowhead has space.
+    expect(flow?.['row-gap']).toBe('32px')
+    expect(flow?.['column-gap']).toBe('32px')
+    // The heading sits 16 px above its first card: it gives back half the row gap.
+    expect(styles.get('.flow-cap')?.['margin-bottom']).toBe('-16px')
     // Columns and their step lists share the flow's rows.
     expect(styles.get('.flow-col')?.['grid-template-rows']).toBe('subgrid')
     expect(styles.get('.flow-steps')?.['grid-template-rows']).toBe('subgrid')

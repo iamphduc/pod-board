@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { backPath, downPath, edgePath, headPath } from './geometry.ts'
+import { backPath, downPath, edgePath, headPath, stepPath } from './geometry.ts'
 
 describe('edge path', () => {
   const origin = { left: 100, top: 50, right: 900, bottom: 650 }
@@ -35,14 +35,39 @@ describe('down path and heads', () => {
   })
 })
 
+describe('step path', () => {
+  const origin = { left: 100, top: 50, right: 900, bottom: 650 }
+  // Source right edge at x 230, target left edge at x 262: a 32 px gap, its middle at x 246.
+  const from = (top: number, bottom: number) => ({ left: 10, top, right: 330, bottom })
+  const to = (top: number, bottom: number) => ({ left: 362, top, right: 600, bottom })
+
+  it('leaves the source mid-line, turns down in the middle of the gap with 6 px rounded corners, and enters the target mid-line', () => {
+    // y1 = (60 + 140) / 2 - 50 = 50; y2 = (170 + 250) / 2 - 50 = 160
+    expect(stepPath(from(60, 140), to(170, 250), origin)).toBe('M230 50 L240 50 Q246 50 246 56 L246 154 Q246 160 252 160 L262 160')
+  })
+
+  it('turns up the same way when the target sits higher', () => {
+    // y1 = 190 - 50 = 140; y2 = 100 - 50 = 50
+    expect(stepPath(from(150, 230), to(60, 140), origin)).toBe('M230 140 L240 140 Q246 140 246 134 L246 56 Q246 50 252 50 L262 50')
+  })
+
+  it('is a straight line when both share a mid-line, and keeps small corners inside a small step', () => {
+    expect(stepPath(from(60, 140), to(60, 140), origin)).toBe('M230 50 L262 50')
+    expect(stepPath(from(60, 140), to(60.3, 140.3), origin)).toBe('M230 50 L262 50.3')
+    // A 4 px step: the corner radius shrinks to half of it, 2 px.
+    expect(stepPath(from(60, 140), to(64, 144), origin)).toBe('M230 50 L244 50 Q246 50 246 52 L246 52 Q246 54 248 54 L262 54')
+  })
+})
+
 describe('back path', () => {
   const origin = { left: 100, top: 50, right: 900, bottom: 650 }
 
-  it('runs from the left edge of a card back to the right edge of one in an earlier column, a third of the way down', () => {
+  it('runs the same step route back to an earlier column: from two thirds down the left edge to a third down the right edge', () => {
+    // From x 370 (left edge) back to x 330 (right edge): gap middle 350 (x 250 in the box).
     const from = { left: 370, top: 60, right: 590, bottom: 120 }
     const to = { left: 110, top: 150, right: 330, bottom: 210 }
-    // x1 = 270, y1 = 40, x2 = 230, y2 = 150 + 20 - 50 = 120, m = 250
-    expect(backPath(from, to, origin)).toBe('M270 40 C250 40 250 120 230 120')
+    // x1 = 270, y1 = 60 + 40 - 50 = 50; x2 = 230, y2 = 150 + 20 - 50 = 120
+    expect(backPath(from, to, origin)).toBe('M270 50 L256 50 Q250 50 250 56 L250 114 Q250 120 244 120 L230 120')
     expect(headPath(230, 120, 'left')).toBe('M235 116 L230 120 L235 124')
   })
 })
