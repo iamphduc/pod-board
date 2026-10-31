@@ -463,16 +463,27 @@ describe('runs.css log tab', () => {
     }
   })
 
-  it('separates wave groups with space instead: tight inside a group, wide between groups', () => {
-    // Inside a group: 20 px lines and 2 px above and below each cell, so rows are about 24 px tall and
-    // a wave header sits 4 px above its first slice; a phone row 2 px each way.
+  it("sets each wave group on one faint block: the Action log row's fill, 8 px corners, no border, 8 px apart", () => {
+    for (const width of [1280, 375]) {
+      const group = stylesAt(width).get('.log-group')
+      expect(group?.['background'], `fill at ${width} px`).toBe(stylesAt(width).get('.other-list li')?.['background'])
+      expect(group?.['background']).toBe('var(--surface)')
+      expect(group?.['border-radius']).toBe('8px')
+      expect(group?.['padding']).toBe('8px 12px')
+      expect(group?.['border']).toBeUndefined()
+      expect(stylesAt(width).get('.log-frame')?.['gap']).toBe('8px')
+    }
+    // Tight inside a block: 20 px lines, 2 px above and below each cell, so a header sits 4 px above its first slice.
     expect(stylesAt(1280).get('.slice-log')?.['line-height']).toBe('20px')
-    expect(stylesAt(1280).get('.slice-log td')?.['padding']).toBe('2px 10px')
-    expect(stylesAt(375).get('.slice-log tr')?.['padding']).toBe('2px 0')
-    // Between groups: 24 px above each wave header, at least three times the gap inside.
-    expect(stylesAt(1280).get('.slice-log tr.grp th')?.['padding-top']).toBe('24px')
-    expect(stylesAt(375).get('.slice-log tr.grp')?.['padding-top']).toBe('24px')
-    // The first group sits close under the tab bar.
-    expect(stylesAt(1280).get('.slice-log tr.grp:first-child th')?.['padding-top']).toBe('4px')
+    expect(stylesAt(1280).get('.slice-log td')?.['padding']).toBe('2px 0')
+    // No extra space above a header: the blocks' gap does that now.
+    expect(stylesAt(1280).get('.slice-log tr.grp th')?.['padding-top']).toBeUndefined()
+    expect(stylesAt(375).get('.slice-log tr.grp')?.['padding-top']).toBeUndefined()
+  })
+
+  it('on a phone a slice is one line: its figures follow the title after a middle dot', () => {
+    const phone = stylesAt(375)
+    expect(phone.get('.slice-log tr:not(.grp) td')?.['display']).toBe('inline')
+    expect(phone.get('.slice-log tr:not(.grp) td:last-child:not(:empty)::before')?.['content']).toBe('" · "')
   })
 })

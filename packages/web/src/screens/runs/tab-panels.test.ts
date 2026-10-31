@@ -107,6 +107,33 @@ describe('tab panels', () => {
     expect(html).not.toMatch(/class="inplace reply-panel"/)
   })
 
+  it("log groups: each wave (and a fix run's agents) is one block holding its header and its rows", () => {
+    const repo = chess()
+    const run = runOf(repo)
+    const pipeline = buildPipeline(repo, PLAN, NOW)!
+    const plan = renderToStaticMarkup(createElement(LogTab, { repo, run, pipeline, now: NOW, actions: [] }))
+    const blocks = [...plan.matchAll(/<div class="log-group"><table class="slice-log">([\s\S]*?)<\/table><\/div>/g)].map((m) => m[1]!)
+    // One block per wave of the log, in order, each with its row-group header and only its own slices.
+    expect(blocks.map((b) => /<th scope="rowgroup">([^<]*)<\/th>/.exec(b)?.[1])).toEqual(pipeline.log.map((g) => g.label))
+    blocks.forEach((b, i) => expect(b.match(/<tr>/g)?.length ?? 0, pipeline.log[i]!.label).toBe(pipeline.log[i]!.rows.length))
+    expect(plan).toMatch(/<div class="log-frame" role="region" aria-label="Slice log" tabindex="0"><div class="log-group">/)
+
+    // A fix run's agent log follows the same rule: one block for its agents.
+    const eng: AgentRun = { id: 'e1', session: 's', type: 'pod:engineer', tokens: 0, ended: false, branch: 'fix-scroll', startedAt: NOW - 10 * MIN, lastAt: NOW - MIN }
+    const fixRepo: BoardRepo = {
+      id: 'web',
+      name: 'web',
+      path: '/r/web',
+      source: 'claim',
+      model: buildRepoModel({ 'pod-docs/README.md': '# pod docs\n\npod docs: 2\n' }),
+      agents: [eng],
+      prs: [],
+      claims: [{ portBase: 3100, repoPath: '/r/web', plan: 'fix-scroll' }],
+    }
+    const fix = renderToStaticMarkup(createElement(LogTab, { repo: fixRepo, run: runOf(fixRepo, 'fix-scroll'), fixPipeline: buildFixPipeline(fixRepo, 'fix-scroll', NOW)!, now: NOW, actions: [] }))
+    expect(fix).toMatch(/aria-label="Agent log" tabindex="0"><div class="log-group"><table class="slice-log agent-log"><tbody><tr class="grp"><th scope="rowgroup">Agents<\/th>/)
+  })
+
   it('log sections', () => {
     const other: AgentRun = { id: 'o1', session: 's', type: 'general-purpose', tokens: 0, ended: true, startedAt: NOW - 20 * MIN, lastAt: NOW - 10 * MIN }
     const at = (html: string, label: string) => {
