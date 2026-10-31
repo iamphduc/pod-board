@@ -701,10 +701,10 @@
   font-size: var(--size-dense);
 }
 
-/* No row dividers: wave groups are set apart by space alone (20 px above each header). */
+/* No row dividers: proximity groups the rows. Tight inside a wave group (4 px a side), 24 px above each header. */
 .slice-log th,
 .slice-log td {
-  padding: 7px 10px;
+  padding: 4px 10px;
   text-align: left;
   vertical-align: middle;
 }
@@ -727,7 +727,7 @@
 .slice-log tr.grp th,
 .slice-log tr.grp td {
   font-weight: 600;
-  padding-top: 20px;
+  padding-top: 24px;
 }
 
 .slice-log tr.grp:first-child th,
@@ -1086,7 +1086,7 @@
   }
 
   .slice-log tr {
-    padding: 7px 0;
+    padding: 3px 0;
   }
 
   .slice-log tr.grp {
@@ -1094,7 +1094,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding-top: 20px;
+    padding-top: 24px;
   }
 
   .slice-log tr.grp:first-child {
