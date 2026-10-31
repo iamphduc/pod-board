@@ -142,6 +142,27 @@ describe('tab panels', () => {
     expect(agents, 'the Agents block').not.toBeNull()
   })
 
+  it("the Log never disagrees with the runs list: the current sprint and its in-progress wave take the run's state", () => {
+    const chipOf = (html: string) => /<h3 class="log-sprint-name"[^>]*>Sprint 1 · ladder<\/h3><span class="chip ([^"]+)">([^<]*)<\/span>/.exec(html)?.slice(1)
+    const waveOf = (html: string, n: number) => new RegExp(`<th scope="rowgroup">Wave ${n}</th><td><span class="chip ([^"]+)">([^<]*)</span>`).exec(html)?.slice(1)
+    const logOf = (repo: BoardRepo) => {
+      const run = runOf(repo)
+      return { run, html: renderToStaticMarkup(createElement(LogTab, { repo, run, pipeline: buildPipeline(repo, PLAN, NOW)!, now: NOW, actions: [] })) }
+    }
+    // Halted: gate 3 BLOCKED to you.
+    const halted = logOf(chess([addQueue(entry('BLOCKED', 'orchestrator → human', `plan: ${PLAN}`, 'gate 3 auto-merge-fail: PR #78 has no passing CI'))]))
+    expect(halted.run.state).toBe('blocked')
+    expect(chipOf(halted.html)).toEqual(['s-bad', 'blocked'])
+    expect(waveOf(halted.html, 3)).toEqual(['s-bad', 'blocked'])
+    // The fixture as it is: asks for you, no agents.
+    const asks = logOf(chess())
+    expect(asks.run.state).toBe('needs-you')
+    expect(chipOf(asks.html)).toEqual(['s-you', 'needs you'])
+    expect(waveOf(asks.html, 3)).toEqual(['s-you', 'needs you'])
+    // Done waves keep their merged status.
+    expect(waveOf(asks.html, 1)?.[1]).toMatch(/^merged/)
+  })
+
   it('log sections', () => {
     const other: AgentRun = { id: 'o1', session: 's', type: 'general-purpose', tokens: 0, ended: true, startedAt: NOW - 20 * MIN, lastAt: NOW - 10 * MIN }
     const at = (html: string, label: string) => {

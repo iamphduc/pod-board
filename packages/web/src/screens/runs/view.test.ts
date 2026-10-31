@@ -272,7 +272,7 @@ describe('log blocks', () => {
       group('ladder', 2, 1, 'merged PR #76', ['L1']),
       group('ladder', 2, 2, 'running', ['U1']),
     ]
-    const blocks = logBlocks(log, sprints, 'ladder')
+    const blocks = logBlocks(log, sprints, { slug: 'ladder', chip: runChip('running') })
     expect(blocks.map((b) => [b.key, b.title, b.chip])).toEqual([
       ['warmup', 'Sprint 1 · warmup', { cls: 's-ok', label: 'done' }],
       ['ladder', 'Sprint 2 · ladder', { cls: 's-run', label: 'running' }],
@@ -290,8 +290,18 @@ describe('log blocks', () => {
   it("a sprint's number comes from the plan; a later sprint waits; an unknown one has no state", () => {
     // The first sprint has no log (no doc): the second keeps its number.
     expect(logBlocks([group('ladder', 2, 1, 'planned', ['L1'])], sprints, undefined)[0]).toMatchObject({ title: 'Sprint 2 · ladder', chip: { cls: 's-idle', label: 'waiting' } })
-    expect(logBlocks([group('gone', 4, 1, 'planned', ['X1'])], sprints, 'ladder')[0]).toMatchObject({ title: 'gone' })
-    expect(logBlocks([group('gone', 4, 1, 'planned', ['X1'])], sprints, 'ladder')[0]).not.toHaveProperty('chip')
-    expect(logBlocks([], sprints, 'ladder')).toEqual([])
+    const cur = { slug: 'ladder', chip: runChip('running') }
+    expect(logBlocks([group('gone', 4, 1, 'planned', ['X1'])], sprints, cur)[0]).toMatchObject({ title: 'gone' })
+    expect(logBlocks([group('gone', 4, 1, 'planned', ['X1'])], sprints, cur)[0]).not.toHaveProperty('chip')
+    expect(logBlocks([], sprints, cur)).toEqual([])
+  })
+
+  it("the current sprint's chip is the run's own chip, as the runs list shows it; the in-progress wave matches", () => {
+    const log = [group('ladder', 2, 3, 'blocked', ['T1'])]
+    expect(logBlocks(log, sprints, { slug: 'ladder', chip: runChip('blocked') })[0]).toMatchObject({ chip: { cls: 's-bad', label: 'blocked' } })
+    const asks = logBlocks([group('ladder', 2, 3, 'needs you', ['T1'])], sprints, { slug: 'ladder', chip: runChip('needs-you') })[0]!
+    expect(asks.chip).toEqual({ cls: 's-you', label: 'needs you' })
+    expect(asks.waves[0]!.chip).toEqual({ cls: 's-you', label: 'needs you' })
+    expect(groupChip('waiting')).toEqual({ cls: 's-idle', label: 'waiting' })
   })
 })

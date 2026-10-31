@@ -326,7 +326,8 @@ describe('buildPipeline', () => {
       ['s1', 1, 'Sprint 1 · wave 1', 'merged PR #41'],
       ['s1', 2, 'Sprint 1 · wave 2', 'merged'],
       ['s2', 1, 'Sprint 2 · wave 1', 'PR #50 open'],
-      ['s2', 2, 'Sprint 2 · wave 2', 'running'],
+      // B4 is blocked, so the run is blocked, and its in-progress wave says so, as the runs list does.
+      ['s2', 2, 'Sprint 2 · wave 2', 'blocked'],
       ['s2', 3, 'Sprint 2 · wave 3', 'planned'],
       ['s2', 4, 'Sprint 2 · wave 4', 'blocked'],
     ])
@@ -336,6 +337,23 @@ describe('buildPipeline', () => {
     expect(log[3]?.rows).toEqual([{ code: 'B2', title: 'Title B2', model: 'opus', minutes: 14, tokens: 500, live: true }])
     expect(log[4]?.rows).toEqual([{ code: 'B3', title: 'Title B3', confidence: 'medium', live: false }])
     expect(log[4]?.rows[0]).not.toHaveProperty('model')
+  })
+
+  it("the in-progress wave's log status follows the run's state, as the runs list shows it", () => {
+    const docs = { one: [[1, 'A1', `${pr(40)} merged`, 'done'], [2, 'B1', '—', 'pending'], [3, 'C1', '—', 'pending']] as BoardRow[] }
+    const at = (q: string[], agents: AgentRun[] = []) => {
+      const r = repo(files({ sprints: [['one', 'active']], docs, queue: q }), { agents })
+      const run = model.listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).find((x) => x.plan === 'alpha')!
+      return [run.state, build(r).log.map((g) => g.status)]
+    }
+    // Halted: an autopilot gate BLOCKED to you.
+    expect(at([queueLine('BLOCKED', 'orchestrator → human', 'plan: alpha', 'gate 1: B1 is blocked')])).toEqual(['blocked', ['merged PR #40', 'blocked', 'planned']])
+    // An ask for you.
+    expect(at([queueLine('PENDING', 'engineer → human', 'sprint: one · slice: B1', 'Pick one')])).toEqual(['needs-you', ['merged PR #40', 'needs you', 'planned']])
+    // Nothing runs and nothing asks: waiting, not running.
+    expect(at([])).toEqual(['idle', ['merged PR #40', 'waiting', 'planned']])
+    // An engineer at work on the wave: running.
+    expect(at([], [running({ sprint: 'one', slice: 'B1' })])).toEqual(['running', ['merged PR #40', 'running', 'planned']])
   })
 
   it('unknown plan and empty repo', () => {
