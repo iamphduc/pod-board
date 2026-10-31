@@ -1,10 +1,11 @@
-// The run's flow (columns of step cards), its fold line for phones, and the run header (crumb, name,
-// progress strip, `Wave N of M`), from the model's flow. Pure; the Flow and the header only render these.
+// The run's flow (columns of step cards), its fold line for phones, and the run header (title, meta
+// line, progress strip, `Wave N of M`), from the model's flow. Pure; the Flow and the header only render these.
 
-import { buildFlow, type BoardRepo, type RunSummary, type Stage, type Step, type StepState } from '@pod-board/model'
+import { buildFlow, fixPr, fixRunAgents, isPlanAgent, type BoardRepo, type RunSummary, type Stage, type Step, type StepState } from '@pod-board/model'
 
 export type Segment = 'done' | 'current' | 'rest'
-export type RunHeader = { crumb: string; name: string; segments: Segment[]; wave?: string }
+/** `meta`: `<repo> · <Plan|Fix> · started <when>`, unknown parts left out; empty for a repo row, whose title is the repo. */
+export type RunHeader = { title: string; meta: string; segments: Segment[]; wave?: string }
 
 /** The SVG mark of each state (names in theme/icons.tsx). */
 export type FlowMark = 'check' | 'dot' | 'alert' | 'blocked' | 'circle'
@@ -99,13 +100,61 @@ function waveText(run: RunSummary, repo: BoardRepo): string | undefined {
 /** The header above the flow; undefined with no run or repo, or a run of another repo. */
 export function runHeader(run: RunSummary | undefined, repo: BoardRepo | undefined, now: number): RunHeader | undefined {
   if (!run || !repo || run.repoId !== repo.id) return undefined
-  const name = run.fix !== undefined ? `fix · ${run.fix}` : (run.plan ?? run.repo)
   // A fix run's claim name and a repo row name no plan, so they have no flow and no strip.
   const flow = run.fix === undefined && run.plan !== undefined ? buildFlow(repo, run.plan, now) : undefined
-  const header: RunHeader = { crumb: run.repo, name, segments: flow ? segments(flow.flatMap((s) => s.steps)) : [] }
+  const header: RunHeader = { title: runTitle(run, repo), meta: runMeta(run, repo, now), segments: flow ? segments(flow.flatMap((s) => s.steps)) : [] }
   const wave = run.fix === undefined && run.plan !== undefined ? waveText(run, repo) : undefined
   if (wave !== undefined) header.wave = wave
   return header
+}
+
+/** A conventional-commit prefix: a known type, an optional `(scope)`, an optional `!`, then `:`. */
+const COMMIT_PREFIX = /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]*\))?!?:\s*/i
+
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
+/** `sprint-column` → `Sprint column`. */
+const readable = (slug: string) => capital(slug.replace(/[-_]+/g, ' ').trim())
+
+/** The run's human name: the plan's title; a fix run's PR title without its prefix, else its slug made readable; a repo row's repo. */
+function runTitle(run: RunSummary, repo: BoardRepo): string {
+  if (run.fix !== undefined) {
+    const pr = run.plan !== undefined ? fixPr(repo, run.plan)?.title?.replace(COMMIT_PREFIX, '').trim() : undefined
+    return pr ? capital(pr) : readable(run.fix)
+  }
+  if (run.plan === undefined) return run.repo
+  return run.title ?? repo.model.plans.find((p) => p.slug === run.plan)?.title ?? readable(run.plan)
+}
+
+/** `<repo> · <Plan|Fix> · started <when>`; a part that isn't known is left out. */
+function runMeta(run: RunSummary, repo: BoardRepo, now: number): string {
+  if (run.plan === undefined) return ''
+  const started = startedAt(run, repo, now)
+  return [run.repo, run.fix !== undefined ? 'Fix' : 'Plan', started === undefined ? undefined : `started ${startedAgo(started, now)}`]
+    .filter((x) => x !== undefined)
+    .join(' · ')
+}
+
+/** The earliest start among the run's own agents (a plan's by isPlanAgent, a fix run's engineers and reviewers). */
+function startedAt(run: RunSummary, repo: BoardRepo, now: number): number | undefined {
+  const plan = run.fix === undefined ? repo.model.plans.find((p) => p.slug === run.plan) : undefined
+  const agents = run.fix !== undefined ? fixRunAgents(repo, run.plan!, now) : plan ? repo.agents.filter((a) => isPlanAgent(a, plan)) : []
+  const starts = agents.flatMap((a) => (a.startedAt === undefined ? [] : [a.startedAt]))
+  return starts.length > 0 ? Math.min(...starts) : undefined
+}
+
+const MIN = 60_000
+const HOUR = 60 * MIN
+const DAY = 24 * HOUR
+
+/** `just now` (under a minute, or ahead of now), `N min ago`, `N h ago`, or `N day(s) ago`, rounded down. */
+export function startedAgo(at: number, now: number): string {
+  const ago = now - at
+  if (ago < MIN) return 'just now'
+  if (ago < HOUR) return `${Math.floor(ago / MIN)} min ago`
+  if (ago < DAY) return `${Math.floor(ago / HOUR)} h ago`
+  const days = Math.floor(ago / DAY)
+  return `${days} ${days === 1 ? 'day' : 'days'} ago`
 }
 
 /** One connector of the flow's path, between two steps by key. `back` runs to an earlier column. */

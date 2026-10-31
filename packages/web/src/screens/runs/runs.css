@@ -67,7 +67,7 @@
 .logo {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font: 600 15px / 1 var(--font);
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -157,7 +157,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 12px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--fg);
@@ -186,7 +186,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -226,7 +226,7 @@
   min-width: 0;
 }
 
-/* The crumb and the name on the left, the ⋯ menu at the right end. */
+/* The title and its meta line on the left, the wave board link and the ⋯ menu at the right end. */
 .run-top {
   display: flex;
   align-items: flex-start;
@@ -255,16 +255,17 @@
   display: none;
 }
 
-.run-crumb {
-  margin: 0 0 6px;
-  font-size: var(--size-small);
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-
 .run-name {
   font-size: 24px;
   line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+/* One muted line under the title, as on a CI run page: repo · kind · started. */
+.run-sub {
+  margin: 0;
+  margin-top: 4px;
+  font-size: var(--size-small);
   overflow-wrap: anywhere;
 }
 
@@ -288,8 +289,10 @@
   position: relative;
   min-width: 0;
   overflow-x: auto;
-  /* Room for the highlighted border and the focus ring inside the scroll box. */
-  padding: 2px;
+  /* Room for the highlighted border and the focus ring (2 px + 2 px offset) inside the scroll box,
+     given back so the cards keep the column's edges. */
+  margin: -4px;
+  padding: 4px;
 }
 
 /*
@@ -373,10 +376,10 @@
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
   align-content: start;
-  gap: 2px 8px;
-  /* Room for the title and two detail lines: padding 20 + border 2 + title 20 + gap 2, then 2 lines of 1.4 × 12 px. */
-  min-height: calc(44px + 2.8 * var(--size-micro));
-  padding: 10px 12px;
+  gap: 4px 8px;
+  /* Room for the title and two detail lines: padding 24 + border 2 + title 20 + gap 4, then 2 lines of 1.4 × 12 px. */
+  min-height: calc(50px + 2.8 * var(--size-micro));
+  padding: 12px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
@@ -489,7 +492,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 16px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .run-wave {
@@ -597,7 +600,7 @@
 
 /* A quiet kind tag: an outlined chip with no state dot, so it never reads as a state. */
 .chip.tag {
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: var(--radius-pill);
   background: transparent;
   border: 1px solid var(--border);
@@ -620,9 +623,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px 10px;
+  gap: 4px 8px;
   margin: 0;
-  padding: 9px 12px;
+  padding: 8px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -640,7 +643,7 @@
 }
 
 .merge-confirm {
-  margin-top: 10px;
+  margin-top: 8px;
   max-width: 640px;
 }
 
@@ -669,7 +672,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
+  gap: 4px 8px;
   font-size: var(--size-small);
   min-width: 0;
   overflow-wrap: anywhere;
@@ -795,7 +798,7 @@
 
 /* A backticked span in a doc title. */
 .doc-code {
-  padding: 1px 4px;
+  padding: 0 4px;
   border-radius: var(--radius-sm);
   background: var(--hover);
   font: var(--size-small) / 1 var(--mono);
@@ -870,7 +873,7 @@
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .reply-row,
@@ -878,12 +881,12 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
+  gap: 4px 8px;
   min-width: 0;
 }
 
 .reply-word {
-  padding: 2px 6px;
+  padding: 2px 8px;
   border-radius: var(--radius-sm);
   background: var(--bg);
   border: 1px solid var(--border);
@@ -900,7 +903,7 @@
 
 .reply-chat {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   padding-top: 8px;
   border-top: 1px dashed var(--border);
   min-width: 0;
@@ -945,7 +948,7 @@
 /* A reply row, and the result of its Continue or Go under it. */
 .reply-item {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -962,7 +965,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
+  gap: 4px 8px;
   margin: 0;
   min-width: 0;
   font-size: var(--size-small);
@@ -973,7 +976,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
+  gap: 4px 8px;
   flex: 1 1 14rem;
   min-width: 0;
   margin: 0;
@@ -1109,7 +1112,7 @@
   }
 
   .card.next-step {
-    padding: 20px;
+    padding: 16px 20px;
   }
 
   .next-top {
@@ -1204,7 +1207,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
+  gap: 4px 8px;
   font-size: var(--size-small);
   min-width: 0;
   overflow-wrap: anywhere;

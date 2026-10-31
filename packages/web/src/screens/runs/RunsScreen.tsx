@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { activeRuns, buildFixPipeline, buildFlow, buildPipeline, type Board, type RunSummary } from '@pod-board/model'
+import { buildFixPipeline, buildFlow, buildPipeline, type Board, type RunSummary } from '@pod-board/model'
 import type { StreamState } from '../../board-stream.ts'
 import { hashFor, type View } from '../../selection.ts'
 import { Icon } from '../../theme/icons.tsx'
@@ -100,7 +100,7 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
               </span>
             )}
           </div>
-          <RunsList runs={runs} active={activeRuns(runs)} selected={selected} />
+          <RunsList runs={runs} selected={selected} />
           <div className="side-foot">
             <button ref={repoButton} className="btn lead add-repo" type="button" aria-haspopup="dialog" onClick={() => setPicking(true)}>
               <Icon name="plus" />

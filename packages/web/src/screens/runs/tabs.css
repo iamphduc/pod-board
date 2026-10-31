@@ -46,7 +46,7 @@
 /* The whole entry is the toggle: route · date, then the body, clamped to 2 lines until opened. */
 .wait-toggle {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
   min-width: 0;
   margin: 0;
