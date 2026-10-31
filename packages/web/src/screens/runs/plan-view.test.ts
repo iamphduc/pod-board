@@ -94,7 +94,8 @@ describe('plan view', () => {
     const code = flowColumns(buildPipeline(chess(manual), 'sparring-ladder', NOW)!.stages)
     expect(code.map((c) => [c.caption, c.steps.map((s) => `${s.label} ${s.word}`)])).toEqual([
       ['Plan', ['Plan done', 'Go unknown']],
-      ['Sprint 1 of 1', ['Wave 1 done', 'Wave 2 done', 'Wave 3 running']],
+      // The fixture's queue asks for you and no engineer runs: the wave in progress needs you.
+      ['Sprint 1 of 1', ['Wave 1 done', 'Wave 2 done', 'Wave 3 needs you']],
       ['Check', ['Final review waiting', 'Fix pass waiting']],
       ['Ship', ['Final PR waiting']],
     ])
@@ -117,7 +118,7 @@ describe('plan view', () => {
       // The fixture has no research report, and its Look section is empty (scrubbed).
       ['Research skipped', 'Plan interview done'],
       ['Look picked unknown', 'Replied go unknown'],
-      ['Wave 1 done', 'Wave 2 done', 'Wave 3 running'],
+      ['Wave 1 done', 'Wave 2 done', 'Wave 3 needs you'],
       ['Final review waiting', 'Fix pass waiting'],
       ['Final PR waiting'],
     ])
@@ -133,8 +134,8 @@ describe('plan view', () => {
     // Everything done: the last step.
     expect(foldLine(cols(['done', 'done']))).toMatchObject({ label: 'Step 1', mark: 'check', state: 'done' })
     expect(foldLine([])).toBeUndefined()
-    // The real run: wave 3, running.
-    expect(foldLine(flowColumns(buildFlow(chess(), 'sparring-ladder', NOW) ?? []))).toMatchObject({ label: 'Wave 3', detail: '1 slice', state: 'live' })
+    // The real run: wave 3, which needs you (the queue asks, no engineer runs).
+    expect(foldLine(flowColumns(buildFlow(chess(), 'sparring-ladder', NOW) ?? []))).toMatchObject({ label: 'Wave 3', detail: '1 slice', state: 'you', mark: 'alert' })
   })
 
   it('run header', () => {

@@ -243,7 +243,8 @@ describe('buildFlow: every sprint in one column', () => {
       cards: [
         ['zero', 'done', '2 waves'],
         ['Wave 1', 'done', expect.any(String)],
-        ['Wave 2', 'live', expect.any(String)],
+        // Idle (no engineer at work): the wave in progress waits.
+        ['Wave 2', 'wait', expect.any(String)],
         ['two', 'wait', 'not drafted'],
       ],
     })

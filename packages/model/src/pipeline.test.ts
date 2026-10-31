@@ -115,9 +115,11 @@ describe('buildPipeline', () => {
     expect(steps(p, 'sprint:s1')).toEqual([['s1', 'done', '2 waves']])
     expect(stage(p, 'sprint:s2').steps.map((s) => [s.label, s.state])).toEqual([
       ['Wave 1', 'done'],
-      ['Wave 2', 'live'],
+      // The wave in progress, with no engineer of its own at work: it waits (only its engineer makes it run).
+      ['Wave 2', 'wait'],
       ['Wave 3', 'wait'],
     ])
+    expect(stage(p, 'sprint:s2').steps[1]?.detail).not.toMatch(/planned/)
     expect(stage(p, 'sprint:s2').steps[2]?.detail).toBe('2 slices planned')
     expect(steps(p, 'sprint:s3')).toEqual([['s3', 'wait', 'not drafted']])
     expect(steps(p, 'check')).toEqual([
@@ -166,14 +168,14 @@ describe('buildPipeline', () => {
     // W4: pushed with its PR open and nothing running is handed back to you to merge.
     expect(stepStates(build(r), 'sprint:one')).toEqual(['blocked', 'done', 'done', 'you', 'live', 'wait', 'blocked', 'you', 'wait', 'you'])
 
-    // The current wave is live on its own, with nothing pushed and no engineer.
+    // The current wave with nothing pushed and no engineer is not running: it waits, as the idle run does.
     const fresh = repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'X1', '—', 'pending'], [2, 'X2', '—', 'pending']] } }))
-    expect(stepStates(build(fresh), 'sprint:one')).toEqual(['live', 'wait'])
+    expect(stepStates(build(fresh), 'sprint:one')).toEqual(['wait', 'wait'])
     // A stale engineer doesn't make a later wave live.
     const stale = repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'X1', '—', 'pending'], [2, 'X2', '—', 'pending']] } }), {
       agents: [agent({ sprint: 'one', slice: 'X2', startedAt: T0, lastAt: T0 })],
     })
-    expect(stepStates(build(stale), 'sprint:one')).toEqual(['live', 'wait'])
+    expect(stepStates(build(stale), 'sprint:one')).toEqual(['wait', 'wait'])
   })
 
   it('wave time and tokens', () => {
@@ -429,10 +431,10 @@ describe('buildPipeline', () => {
     const live = wave(pushed(rows, { agents: [running({ sprint: 'one', slice: 'B1' })] }), 2)
     expect(live?.state).toBe('live')
     expect(live).not.toHaveProperty('merge')
-    // gh says merged or closed: as today (live from the pushed slice), no merge.
+    // gh says merged or closed: in progress (the pushed slice) with no engineer at work, so it waits; no merge.
     const status = (state: PrStatus['state']): PrStatus => ({ number: 7, state, checks: 'pass', checkedAt: NOW })
     for (const s of ['merged', 'closed'] as const) {
-      expect(wave(pushed(rows, { prs: [status(s)] }), 2)).toEqual({ key: 'one/wave-2', label: 'Wave 2', state: 'live', detail: '2 slices' })
+      expect(wave(pushed(rows, { prs: [status(s)] }), 2)).toEqual({ key: 'one/wave-2', label: 'Wave 2', state: 'wait', detail: '2 slices' })
     }
     // Done still beats you: a done wave reads done, with no merge.
     expect(wave(pushed(rows), 1)).toEqual({ key: 'one/wave-1', label: 'Wave 1', state: 'done', detail: '1 slice' })

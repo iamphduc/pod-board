@@ -75,6 +75,9 @@ export function groupChip(status: string): Chip {
   return { cls, label: status }
 }
 
+/** The current sprint's chip in the Log: the run's own chip, except an idle run reads `waiting`. */
+export const logRunChip = (state: RunState): Chip => (state === 'idle' ? { cls: 's-idle', label: 'waiting' } : runChip(state))
+
 /** One wave of a sprint's log block: `Wave N`, its status, and its slices. */
 export type LogWave = { key: string; label: string; chip: Chip; rows: LogRow[] }
 /** One sprint's log block: `Sprint N · <slug>`, its state when the plan knows the sprint, and its waves. */

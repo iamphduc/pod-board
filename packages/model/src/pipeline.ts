@@ -262,8 +262,9 @@ function sprintSteps(ctx: Ctx, s: SprintModel): Step[] {
       const step: Step = { key: `${s.slug}/wave-${w.wave}`, label: `Wave ${w.wave}`, state, detail: waveDetail(ctx, s, w, state) }
       const n = state === 'you' ? waveWaitingPr(ctx.repo, ctx.plan, s, w, ctx.now) : undefined
       if (n !== undefined) return Object.assign(step, { detail: `PR #${n} · ${waitingWords(ctx.plan)}`, merge: { number: n } })
-      // Autopilot, not halted: the PR is pod's to merge. No merge, and the wave reads live, not you.
-      const auto = state === 'live' && isAutopilot(ctx.plan) ? waveHandedPr(ctx.repo, ctx.plan, s, w, ctx.now) : undefined
+      // Autopilot, not stopped at this wave: the PR is pod's to merge. No merge here; the card's state is
+      // the wave's own (running while its engineer works, else the run's), and its detail says pod merges.
+      const auto = state !== 'done' && isAutopilot(ctx.plan) && isWaveLive(ctx, s, w) ? waveHandedPr(ctx.repo, ctx.plan, s, w, ctx.now) : undefined
       if (auto !== undefined) step.detail = `PR #${auto} · autopilot merges`
       return step
     })
@@ -297,8 +298,13 @@ function waveState(ctx: Ctx, s: SprintModel, w: WaveModel): StepState {
   const open = new Set(w.slices.filter((x) => !isSliceDone(x)).map((x) => x.code))
   const asks = ctx.plan.queue.some((e) => e.needsYou && e.slice !== undefined && open.has(e.slice) && (e.sprint === undefined || e.sprint === s.slug))
   if (asks || waveWaitingPr(ctx.repo, ctx.plan, s, w, ctx.now) !== undefined) return 'you'
-  return isWaveLive(ctx, s, w) ? 'live' : 'wait'
+  if (!isWaveLive(ctx, s, w)) return 'wait'
+  // The wave in progress: running only while one of its own engineers runs; otherwise the run's state.
+  return waveAgents(ctx, s, w).some((x) => x.live) ? 'live' : IN_PROGRESS_STEP[ctx.state]
 }
+
+/** The flow's wave in progress with no engineer of its own at work, by the run's state. */
+const IN_PROGRESS_STEP: Record<PlanState, StepState> = { blocked: 'blocked', 'needs-you': 'you', running: 'wait', idle: 'wait' }
 
 /** The current wave of the current sprint, a pushed slice, or one of the wave's engineers running. */
 function isWaveLive(ctx: Ctx, s: SprintModel, w: WaveModel): boolean {
@@ -350,7 +356,8 @@ function joinedLength(spans: [number, number][]): number {
 }
 
 function waveDetail(ctx: Ctx, s: SprintModel, w: WaveModel, state: StepState): string {
-  if (state === 'wait') return `${count(w.slices.length, 'slice')} planned`
+  // A wave not reached yet; the wave in progress keeps its plain count while it waits.
+  if (state === 'wait' && !isWaveLive(ctx, s, w)) return `${count(w.slices.length, 'slice')} planned`
   const agents = waveAgents(ctx, s, w)
   if (agents.length === 0) return count(w.slices.length, 'slice')
   const live = state === 'live'
@@ -414,11 +421,11 @@ function logStatus(ctx: Ctx, s: SprintModel, w: WaveModel): string {
   if (open !== undefined) return `PR #${open} open`
   if (!isWaveLive(ctx, s, w)) return 'planned'
   // An engineer at work on this wave is a fact about it: running. Otherwise the wave in progress says
-  // what the run does, as the runs list does (blocked, needs you, or waiting).
+  // what the run does (blocked, needs you), or waiting, as the flow's wave card does.
   return waveAgents(ctx, s, w).some((x) => x.live) ? 'running' : IN_PROGRESS[ctx.state]
 }
 
-const IN_PROGRESS: Record<PlanState, string> = { blocked: 'blocked', 'needs-you': 'needs you', running: 'running', idle: 'waiting' }
+const IN_PROGRESS: Record<PlanState, string> = { blocked: 'blocked', 'needs-you': 'needs you', running: 'waiting', idle: 'waiting' }
 
 const NO_CONFIDENCE = new Set(['', '—', '-'])
 

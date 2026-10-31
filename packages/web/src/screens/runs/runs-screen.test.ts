@@ -273,14 +273,20 @@ describe('run flow', () => {
     expect(flow.cards[7]!.cls).toMatch(/\bwait\b.*\bdim\b/)
   })
 
-  it('an autopilot run has no Go card, and its live wave is highlighted', () => {
+  it('an autopilot run has no Go card; its wave runs (highlighted) only while its own engineer works', () => {
     const flow = flowOf(render({ repo: chess([onlyQueue()]) }).html)
     expect(flow.captions).toEqual(['Think', 'You', 'Sprint 1 of 1', 'Check', 'Ship'])
     expect(flow.cards.some((c) => c.text.startsWith('Replied go'))).toBe(false)
-    const wave3 = flow.cards.find((c) => c.text.startsWith('Wave 3'))!
-    expect(wave3.cls).toMatch(/\blive\b/)
-    expect(wave3.cls).toMatch(/\bhi\b/)
-    expect(wave3.text).toMatch(/running/)
+    // Nothing runs and nothing asks: the wave in progress waits, dim.
+    const idle = flow.cards.find((c) => c.text.startsWith('Wave 3'))!
+    expect(idle.cls).toMatch(/\bwait\b.*\bdim\b/)
+    expect(idle.text).toMatch(/waiting/)
+    // T1's engineer at work: running, highlighted.
+    const engineer = { id: 'e1', session: 's', type: 'pod:engineer', tokens: 0, ended: false, sprint: 'ladder', slice: 'T1', startedAt: NOW - 10 * 60_000, lastAt: NOW - 60_000 }
+    const busy = flowOf(render({ repo: chess([onlyQueue()], { agents: [engineer] }) }).html).cards.find((c) => c.text.startsWith('Wave 3'))!
+    expect(busy.cls).toMatch(/\blive\b/)
+    expect(busy.cls).toMatch(/\bhi\b/)
+    expect(busy.text).toMatch(/running/)
   })
 
   it('a fix run shows Build, Review and Ship, with no wave board link', () => {
