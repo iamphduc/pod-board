@@ -449,3 +449,24 @@ describe('breathing running dot', () => {
   })
 })
 
+
+describe('runs.css log tab', () => {
+  // The slice log (and a fix run's agent log, the same table) reads calm: no line under every row.
+  it('draws no divider between rows or under a wave header, at any width', () => {
+    for (const width of [1280, 375]) {
+      for (const r of runsRules().filter((x) => appliesAt(x.media, width) && x.selectors.some((s) => s.startsWith('.slice-log')))) {
+        const d = decls(r.body)
+        for (const side of ['border', 'border-top', 'border-bottom']) {
+          expect(d[side] === undefined || d[side] === '0', `${r.selectors.join(', ')} ${side} at ${width} px`).toBe(true)
+        }
+      }
+    }
+  })
+
+  it('separates wave groups with space instead', () => {
+    expect(stylesAt(1280).get('.slice-log tr.grp th')?.['padding-top']).toBe('20px')
+    expect(stylesAt(375).get('.slice-log tr.grp')?.['padding-top']).toBe('20px')
+    // The first group sits close under the tab bar.
+    expect(stylesAt(1280).get('.slice-log tr.grp:first-child th')?.['padding-top']).toBe('4px')
+  })
+})
