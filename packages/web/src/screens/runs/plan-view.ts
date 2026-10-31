@@ -155,8 +155,8 @@ const EDGE = DAY
 
 /**
  * When the run started, as words. A fix run: its earliest agent (engineers and reviewers), else nothing.
- * A plan: its earliest agent when that start is clearly inside the transcript window; else the plan's
- * autopilot stamp; else its `Generated:` date, as a date (`Oct 12`); else nothing.
+ * A plan: the earliest of its autopilot stamp and its earliest agent start, the agent only when clearly
+ * inside the transcript window; with neither, its `Generated:` date, as a date (`Oct 12`); else nothing.
  */
 function startedText(run: RunSummary, repo: BoardRepo, now: number, transcriptDays: number): string | undefined {
   if (run.fix !== undefined) {
@@ -165,13 +165,14 @@ function startedText(run: RunSummary, repo: BoardRepo, now: number, transcriptDa
   }
   const plan = repo.model.plans.find((p) => p.slug === run.plan)
   if (!plan) return undefined
-  const at = earliest(repo.agents.filter((a) => isPlanAgent(a, plan)))
-  if (at !== undefined && now - at < transcriptDays * DAY - EDGE) return startedAgo(at, now)
-  if (plan.autopilotStartedAt !== undefined) return startedAgo(plan.autopilotStartedAt, now)
+  const agent = earliest(repo.agents.filter((a) => isPlanAgent(a, plan)))
+  const trusted = agent !== undefined && now - agent < transcriptDays * DAY - EDGE ? agent : undefined
+  const at = earliest([{ startedAt: trusted }, { startedAt: plan.autopilotStartedAt }])
+  if (at !== undefined) return startedAgo(at, now)
   return plan.generated === undefined ? undefined : dayText(plan.generated, now)
 }
 
-const earliest = (agents: { startedAt?: number }[]): number | undefined => {
+const earliest = (agents: { startedAt?: number | undefined }[]): number | undefined => {
   const starts = agents.flatMap((a) => (a.startedAt === undefined ? [] : [a.startedAt]))
   return starts.length > 0 ? Math.min(...starts) : undefined
 }
