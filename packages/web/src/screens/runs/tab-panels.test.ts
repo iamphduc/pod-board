@@ -122,6 +122,9 @@ describe('tab panels', () => {
     // One row group per wave: a `Wave N` header with its status, then its slices.
     const waves = [...body!.matchAll(/<tbody class="log-wave"><tr class="grp"><th scope="rowgroup">([^<]*)<\/th><td><span class="chip [^"]*">([^<]*)<\/span><\/td><\/tr>([\s\S]*?)<\/tbody>/g)]
     expect(waves.map((w) => [w[1], w[2], w[3]!.match(/<tr>/g)?.length])).toEqual(pipeline.log.map((g) => [`Wave ${g.wave}`, g.status, g.rows.length]))
+    // Confidence is a quiet tag after the title and model; the status column holds no confidence.
+    expect(plan).toMatch(/<span class="code">L1<\/span>[^]*?<span class="muted"> · opus<\/span><span class="chip tag">medium confidence<\/span><\/td><td><\/td><\/tr>/)
+    expect(plan).not.toMatch(/class="figures">[^<]*(high|medium|low)/)
     // A slice with no figures yet (T1, pending) leaves its figures cell empty, so a phone shows no stray middle dot.
     expect(plan).toMatch(/<span class="code">T1<\/span>[\s\S]*?<\/td><td><\/td><\/tr>/)
 

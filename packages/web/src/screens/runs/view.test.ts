@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildRepoModel, type Board, type BoardRepo, type RunSummary } from '@pod-board/model'
-import { agentChip, agentLogRows, banners, connectionStatus, emptyMessage, groupChip, logBlocks, logRunChip, nextStatus, otherRows, rowFigures, runChip, runLabel, tabPress, titleParts } from './view.ts'
+import { agentChip, agentLogRows, banners, confidenceTag, connectionStatus, emptyMessage, groupChip, logBlocks, logRunChip, nextStatus, otherRows, rowFigures, runChip, runLabel, tabPress, titleParts } from './view.ts'
 
 const run = (over: Partial<RunSummary>): RunSummary => ({ repoId: 'r', repo: 'chess-web', where: 'x', state: 'idle', ...over })
 
@@ -68,7 +68,11 @@ describe('screen 1 view helpers', () => {
   })
 
   it('row figures join what is known and skip the rest', () => {
-    expect(rowFigures({ code: 'B1', title: 't', confidence: 'high', minutes: 22, tokens: 248_000, live: false })).toBe('high · 22 min · 248k tok')
+    // Confidence is an attribute (a tag after the title), not a figure.
+    expect(rowFigures({ code: 'B1', title: 't', confidence: 'high', minutes: 22, tokens: 248_000, live: false })).toBe('22 min · 248k tok')
+    expect(confidenceTag({ code: 'B1', title: 't', confidence: 'high', live: false })).toBe('high confidence')
+    expect(confidenceTag({ code: 'B1', title: 't', confidence: 'Medium', live: false })).toBe('medium confidence')
+    expect(confidenceTag({ code: 'B1', title: 't', live: false })).toBeUndefined()
     expect(rowFigures({ code: 'B1', title: 't', minutes: 14, live: true })).toBe('14 min')
     expect(rowFigures({ code: 'B1', title: 't', live: false })).toBe('')
     expect(rowFigures({ code: 'B1', title: 't', minutes: 0, tokens: 0, live: false })).toBe('0 min')

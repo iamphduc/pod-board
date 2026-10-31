@@ -463,17 +463,22 @@ describe('runs.css log tab', () => {
     }
   })
 
-  it("sets each sprint on one faint block: the Action log row's fill, 8 px corners, no border, 12 px apart, 12 px padding on every side", () => {
+  it("sets each sprint on one faint block: the Action log row's fill, 8 px corners, no border, 16 px apart, 12 px by 16 px padding", () => {
     for (const width of [1280, 375]) {
       const group = stylesAt(width).get('.log-group')
       expect(group?.['background'], `fill at ${width} px`).toBe(stylesAt(width).get('.other-list li')?.['background'])
       expect(group?.['background']).toBe('var(--surface)')
       expect(group?.['border-radius']).toBe('var(--radius-md)') // 8 px
-      expect(group?.['padding']).toBe('12px')
+      // Wider than tall, for optical balance: the lines already carry vertical air.
+      expect(group?.['padding']).toBe('12px 16px')
       expect(group?.['border']).toBeUndefined()
-      expect(stylesAt(width).get('.log-frame')?.['gap']).toBe('12px')
-      // The Action log row's text starts at the same 12 px inset, like the tabs' labels.
-      expect(stylesAt(width).get('.other-list li')?.['padding']).toBe('6px 12px')
+      // Outside space at least the inside space.
+      expect(stylesAt(width).get('.log-frame')?.['gap']).toBe('16px')
+      // The Action log rows and the tab labels share the blocks' 16 px text inset.
+      expect(stylesAt(width).get('.other-list li')?.['padding']).toBe('6px 16px')
+      expect(stylesAt(width).get('.main > .tabs .tab')?.['padding-inline']).toBe('16px')
+      expect(stylesAt(width).get('.main > .tabs .tab[aria-expanded="true"]::after')?.['left']).toBe('16px')
+      expect(stylesAt(width).get('.main > .tabs .tab[aria-expanded="true"]::after')?.['right']).toBe('16px')
     }
     // Tight inside a wave: 20 px lines, 2 px above and below each cell (24 px rows, a wave 4 px above its first slice).
     expect(stylesAt(1280).get('.slice-log')?.['line-height']).toBe('20px')
@@ -485,6 +490,25 @@ describe('runs.css log tab', () => {
     expect(stylesAt(1280).get('.log-sprint-name')?.['font-weight']).toBe('600')
     expect(stylesAt(1280).get('.slice-log tr.grp th')?.['font-weight']).toBe('400')
     expect(stylesAt(1280).get('.slice-log tr.grp th')?.['color']).toBe('var(--muted)')
+  })
+
+  it('puts every status on one rail: a fixed-width, left-aligned column, the same in the sprint header and the tables', () => {
+    const wide = stylesAt(1280)
+    expect(wide.get('.slice-log')?.['table-layout']).toBe('fixed')
+    expect(wide.get('.slice-log td:last-child')?.['width']).toBe('var(--log-rail)')
+    expect(wide.get('.slice-log td:last-child')?.['padding-left']).toBe('16px')
+    expect(wide.get('.slice-log td:last-child')?.['text-align']).toBe('left')
+    expect(wide.get('.log-sprint')?.['grid-template-columns']).toBe('minmax(0, 1fr) var(--log-rail)')
+    expect(wide.get('.log-sprint')?.['column-gap']).toBe('16px')
+    // Wide enough for `● merged PR #1234` and `● needs you` on one line.
+    expect(wide.get('.log-frame')?.['--log-rail']).toBe('176px')
+    // Phones keep the status inline after the title.
+    expect(stylesAt(375).get('.slice-log td:last-child')?.['width']).toBe('auto')
+    expect(stylesAt(375).get('.log-sprint')?.['display']).toBe('flex')
+  })
+
+  it('shows confidence as a quiet tag after the title, not in the status column', () => {
+    expect(stylesAt(1280).get('.slice-log .chip.tag')?.['margin-left']).toBe('6px')
   })
 
   it('on a phone a slice is one line: its figures follow the title after a middle dot', () => {
