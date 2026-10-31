@@ -4,7 +4,7 @@ import type { MergeState } from './merge-flow.ts'
 import type { NextItem } from './next-step.ts'
 import type { WaitingRow } from './queue-view.ts'
 import type { EntryKind } from './entry-kind.ts'
-import { answerAnchor, groupOpen, kindChip, keepOpen, mergeAnchor, replyGhost, replySeen, rowMeta, toggleOpen, waitGroups } from './waiting-tab.ts'
+import { answerAnchor, groupOpen, kindChip, toggleGroup, keepOpen, mergeAnchor, replyGhost, replySeen, rowMeta, toggleOpen, waitGroups } from './waiting-tab.ts'
 
 const row = (line: string, over: Partial<WaitingRow> = {}): WaitingRow => ({
   key: `0:${line}`,
@@ -160,5 +160,20 @@ describe('waiting tab', () => {
     const [someday] = waitGroups([kinded('s', 'someday')])
     expect(groupOpen(someday!, new Set(), ['entry:s'])).toBe(true)
     expect(groupOpen(someday!, new Set(), [undefined, 'end', 'entry:other'])).toBe(false)
+  })
+
+  it('a header click leaves a group alone while it holds the open form, so it never closes later under you', () => {
+    const items = [kinded('d', 'decision'), kinded('s', 'someday')]
+    const groups = waitGroups(items)
+    const keys = groups.map((g) => g.key)
+    const someday = groups[1]!
+    const opened = toggleGroup(new Set(), someday, keys, [])
+    expect(groupOpen(someday, opened, [])).toBe(true)
+    // The form is open in it: the click changes nothing (the same set), so Cancel leaves the group open.
+    const clicked = toggleGroup(opened, someday, keys, ['entry:s'])
+    expect(clicked).toBe(opened)
+    expect(groupOpen(someday, clicked, [])).toBe(true)
+    // With the form closed, the click closes it again; an anchor elsewhere doesn't hold it.
+    expect(groupOpen(someday, toggleGroup(opened, someday, keys, [undefined, 'end', 'entry:d']), [])).toBe(false)
   })
 })

@@ -482,4 +482,10 @@ describe('runs.css waiting rows', () => {
   it('the kind dot never breathes: a decision is not running', () => {
     expect(stylesAt(1280).get('.waiting-tab .wait-meta .wait-kind::before')?.['animation']).toBe('none')
   })
+
+  it('the group header is a 44 px touch target on phones', () => {
+    expect(stylesAt(375).get('.wait-group-toggle')?.['min-height']).toBe('44px')
+    expect(stylesAt(480).get('.wait-group-toggle')?.['min-height']).toBe('44px')
+    expect(stylesAt(1280).get('.wait-group-toggle')?.['min-height']).toBeUndefined()
+  })
 })

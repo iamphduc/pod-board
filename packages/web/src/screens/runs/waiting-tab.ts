@@ -97,3 +97,5 @@ export function groupOpen(g: WaitGroup, flipped: ReadonlySet<string>, anchors: r
   if (g.items.some((i) => anchors.includes(i.key))) return true
   return g.startsOpen !== flipped.has(g.key)
 }
+
+export const toggleGroup = (flipped: ReadonlySet<string>, _g: WaitGroup, _keys: readonly string[], _anchors: readonly (string | undefined)[]): ReadonlySet<string> => flipped
