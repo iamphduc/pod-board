@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { BoardRepo, RunSummary } from '@pod-board/model'
 import { AnswerForm } from './AnswerForm.tsx'
-import { INITIAL, createAnswerFlow, type AnswerState } from './answer-flow.ts'
+import { INITIAL, createAnswerFlow, formView, type AnswerState } from './answer-flow.ts'
 import { MergeConfirm, mergeButtonId, useMergeFlow } from './MergeConfirm.tsx'
 import type { NextItem } from './next-step.ts'
 import { answerNote } from './queue-view.ts'
@@ -24,6 +24,7 @@ export function NextStepCard({ repo, run, card }: Props) {
   const titleId = useId()
 
   const answerLine = answer.kind === 'idle' ? undefined : answer.target.line
+  const quote = formView(answer)?.entry
   // Focus goes back to the card's Answer button when the form closes, if it's still there.
   useEffect(() => {
     if (answerLine === undefined) return
@@ -59,7 +60,7 @@ export function NextStepCard({ repo, run, card }: Props) {
               type="button"
               aria-expanded={answerLine === a.line}
               disabled={answer.kind === 'saving'}
-              onClick={() => answerFlow.open({ repoId: a.repoId, line: a.line })}
+              onClick={() => answerFlow.open({ repoId: a.repoId, line: a.line, ...(card.entry ? { entry: card.entry.text } : {}) })}
             >
               Answer
             </button>
@@ -83,7 +84,8 @@ export function NextStepCard({ repo, run, card }: Props) {
           <ReplyPanel key="reply-panel" view={a.kind === 'reply' ? a.panel : undefined} target={{ repoId: repo.id, run: run.plan }} framed={false} />
         )}
       </section>
-      {answer.kind !== 'idle' && <AnswerForm state={answer} flow={answerFlow} note={answerNote(run)} {...(card.entry ? { entry: card.entry.text } : {})} />}
+      {/* The form quotes the entry it opened for, never the card's current one: the Board can move the card on. */}
+      {answer.kind !== 'idle' && <AnswerForm state={answer} flow={answerFlow} note={answerNote(run)} {...(quote === undefined ? {} : { entry: quote })} />}
       {merge.kind !== 'idle' && <MergeConfirm state={merge} flow={mergeFlow} label={`PR #${merge.target.number}`} />}
     </>
   )
