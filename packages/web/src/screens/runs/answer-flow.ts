@@ -131,10 +131,10 @@ export type FormView = {
   cancelDisabled: boolean
 }
 
-/** What the form shows; undefined while closed. */
-export function formView(s: AnswerState): FormView | undefined {
+/** What the form shows, with the run's note (see answerNote); undefined while closed. */
+export function formView(s: AnswerState, note: string = ANSWER_NOTE): FormView | undefined {
   if (s.kind === 'idle') return undefined
-  const base: FormView = { showText: true, text: s.text, canSave: true, note: ANSWER_NOTE, closeLabel: 'Cancel', cancelDisabled: false }
+  const base: FormView = { showText: true, text: s.text, canSave: true, note, closeLabel: 'Cancel', cancelDisabled: false }
   switch (s.kind) {
     case 'editing':
       return s.error === undefined ? base : { ...base, error: s.error }

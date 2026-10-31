@@ -29,6 +29,9 @@ describe('reads only pod docs', () => {
       'pod-docs/plans/archive/old-plan.md',
       'pod-docs/sprints/server-runs.md',
       'pod-docs/sprints/archive/bootstrap-model.md',
+      // The decisions (for the staging merge target) and the research reports (for the flow's Research step).
+      'pod-docs/decisions.md',
+      'pod-docs/research/folder-picker.md',
     ]
     for (const rel of wanted) await put(rel, `# ${rel}\n`)
 
@@ -44,6 +47,8 @@ describe('reads only pod docs', () => {
       'pod-docs/sprints/archive/2025/x.md',
       'pod-docs/sprints/x.markdown',
       'docs/plans/x.md',
+      'pod-docs/research/folder-picker.html',
+      'pod-docs/research/archive/old.md',
     ]
     for (const rel of unwanted) await put(rel, 'nope')
     // A folder named like a doc is not a doc.
@@ -135,6 +140,20 @@ describe('links that point outside the repo', () => {
     await linkFolder(join(outside, 'plans'), 'pod-docs/plans')
     await linkFolder(join(outside, 'archive'), 'pod-docs/sprints/archive')
     expect(await readRepoFiles(repo)).toEqual({ 'pod-docs/README.md': '# readme\n' })
+  })
+
+  test('a linked research/ folder pointing outside: its reports are skipped', async () => {
+    await put('pod-docs/README.md', '# readme\n')
+    const outside = await mkdtemp(join(tmpdir(), 'pod-board-research-out-'))
+    try {
+      await writeFile(join(outside, 'secret.md'), 'outside')
+      await mkdir(join(repo, 'pod-docs'), { recursive: true })
+      await symlink(outside, join(repo, 'pod-docs', 'research'), 'junction')
+      const files = await readRepoFiles(repo)
+      expect(Object.keys(files)).toEqual(['pod-docs/README.md'])
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
   })
 
   test('a linked doc file pointing outside is skipped', async (ctx) => {

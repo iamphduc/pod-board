@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildRepoModel, type AnswerResult, type BoardRepo, type RunSummary } from '@pod-board/model'
 import { formView, type AnswerState } from './answer-flow.ts'
-import { ANSWER_NOTE, ANSWER_WAITING, formAnchor, waitingRows } from './queue-view.ts'
+import { ANSWER_NOTE, ANSWER_NOTE_NEXT_WAVE, ANSWER_WAITING, answerNote, formAnchor, waitingRows } from './queue-view.ts'
 
 const README = '# pod docs\n\npod docs: 2\n'
 
@@ -89,13 +89,26 @@ describe('waiting on you', () => {
     expect(new Set(twice.map((r) => r.key)).size).toBe(2)
   })
 
-  it('the form says pod may not read it yet', () => {
-    expect(ANSWER_NOTE).toBe('pod reads board answers only once its pod plugin supports them. Until then, also give the answer in the chat.')
+  it('the form says to answer here, then Continue', () => {
+    expect(ANSWER_NOTE).toBe('Answer here, then press Continue. pod reads it when the run continues.')
+    expect(ANSWER_NOTE).not.toMatch(/chat/i)
     const target = { repoId: 'id-r', line: trim(ALPHA_PENDING) }
     const editing: AnswerState = { kind: 'editing', seq: 1, target, text: '' }
     expect(formView(editing)?.note).toBe(ANSWER_NOTE)
     const answered: AnswerState = { kind: 'result', seq: 2, target, text: 'x', result: { outcome: 'answered', logged: true } }
     expect(formView(answered)?.note).toBe(ANSWER_NOTE)
+  })
+
+  it('a plan run reads the answer on Continue; a fix run or repo row at the next wave', () => {
+    expect(answerNote(run())).toBe(ANSWER_NOTE)
+    // /pod:fix reads no answers and a repo row has no Continue, so the next /pod:code wave reads it.
+    expect(ANSWER_NOTE_NEXT_WAVE).toBe('Answer here. pod reads it when a /pod:code run next starts a wave.')
+    expect(ANSWER_NOTE_NEXT_WAVE).not.toMatch(/chat|Continue/i)
+    expect(answerNote(run({ plan: 'fix-x', fix: 'x' }))).toBe(ANSWER_NOTE_NEXT_WAVE)
+    expect(answerNote(run({ plan: undefined, state: 'idle' }))).toBe(ANSWER_NOTE_NEXT_WAVE)
+    // The form shows the note it is given.
+    const editing: AnswerState = { kind: 'editing', seq: 1, target: { repoId: 'id-r', line: trim(ALPHA_PENDING) }, text: '' }
+    expect(formView(editing, ANSWER_NOTE_NEXT_WAVE)?.note).toBe(ANSWER_NOTE_NEXT_WAVE)
   })
 
   it('the form stays with its row after the answer', () => {

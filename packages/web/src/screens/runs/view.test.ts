@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildRepoModel, type Board, type BoardRepo, type RunSummary } from '@pod-board/model'
-import { agentChip, agentLogRows, banners, barTitle, emptyMessage, groupChip, otherRows, rowFigures, runChip, runLine, streamChip, titleParts } from './view.ts'
+import { agentChip, agentLogRows, banners, confidenceTag, connectionStatus, emptyMessage, groupChip, logBlocks, logRunChip, nextStatus, otherRows, rowFigures, runChip, runLabel, tabPress, titleParts } from './view.ts'
 
 const run = (over: Partial<RunSummary>): RunSummary => ({ repoId: 'r', repo: 'chess-web', where: 'x', state: 'idle', ...over })
 
@@ -14,10 +14,47 @@ describe('screen 1 view helpers', () => {
     expect(runChip('error')).toEqual({ cls: 's-bad', label: 'error' })
   })
 
-  it('every stream state gets a chip', () => {
-    expect(streamChip('live')).toEqual({ cls: 's-ok', label: 'live' })
-    expect(streamChip('connecting')).toEqual({ cls: 's-idle', label: 'connecting' })
-    expect(streamChip('lost')).toEqual({ cls: 's-bad', label: 'lost · retrying' })
+  it('connection status only when lost', () => {
+    expect(connectionStatus('lost')).toEqual({ cls: 's-bad', label: 'lost · retrying' })
+    expect(connectionStatus('live')).toBeUndefined()
+    expect(connectionStatus('connecting')).toBeUndefined()
+  })
+
+  it('run row label', () => {
+    const plan = run({ repoId: 'c', plan: 'sparring-ladder' })
+    const fix = run({ repoId: 'c', plan: 'fix-scroll', fix: 'scroll' })
+    const other = run({ repoId: 'w', repo: 'watchless', plan: 'calm' })
+    // One run in its repo: the repo name alone, whatever the run is.
+    expect(runLabel(plan, [plan, other])).toBe('chess-web')
+    expect(runLabel(fix, [fix, other])).toBe('chess-web')
+    expect(runLabel(other, [plan, other])).toBe('watchless')
+    // Two runs in one repo: each adds its plan, or fix and its slug.
+    expect(runLabel(plan, [plan, fix, other])).toBe('chess-web · sparring-ladder')
+    expect(runLabel(fix, [plan, fix, other])).toBe('chess-web · fix · scroll')
+    expect(runLabel(other, [plan, fix, other])).toBe('watchless')
+    // A plan-less repo row among its repo's runs keeps the repo name.
+    const row = run({ repoId: 'c' })
+    expect(runLabel(row, [row, plan])).toBe('chess-web')
+    // Runs of another repo with the same name don't count: the id joins them.
+    const twin = run({ repoId: 'c2', plan: 'other' })
+    expect(runLabel(plan, [plan, twin])).toBe('chess-web')
+  })
+
+  it('tab press: toggles, and leaves the engineer view', () => {
+    expect(tabPress(undefined, 'waiting', 'pipeline')).toEqual({ save: 'waiting', leave: false })
+    expect(tabPress('waiting', 'waiting', 'pipeline')).toEqual({ save: undefined, leave: false })
+    expect(tabPress('waiting', 'log', 'board')).toEqual({ save: 'log', leave: false })
+    // The engineer view shows Log: pressing Log closes it and goes back to the run; another tab opens there.
+    expect(tabPress('log', 'log', 'agent')).toEqual({ save: undefined, leave: true })
+    expect(tabPress('log', 'waiting', 'agent')).toEqual({ save: 'waiting', leave: true })
+  })
+
+  it('next step status: a dot class and a word', () => {
+    expect(nextStatus('blocked')).toEqual({ cls: 's-bad', label: 'Blocked' })
+    expect(nextStatus('needs-you')).toEqual({ cls: 's-you', label: 'Needs you' })
+    expect(nextStatus('ready')).toEqual({ cls: 's-ok', label: 'Ready' })
+    expect(nextStatus('running')).toEqual({ cls: 's-run', label: 'Running' })
+    expect(nextStatus('idle')).toEqual({ cls: 's-idle', label: 'Idle' })
   })
 
   it('log group statuses map to chips', () => {
@@ -31,15 +68,14 @@ describe('screen 1 view helpers', () => {
   })
 
   it('row figures join what is known and skip the rest', () => {
-    expect(rowFigures({ code: 'B1', title: 't', confidence: 'high', minutes: 22, tokens: 248_000, live: false })).toBe('high · 22 min · 248k tok')
+    // Confidence is an attribute (a tag after the title), not a figure.
+    expect(rowFigures({ code: 'B1', title: 't', confidence: 'high', minutes: 22, tokens: 248_000, live: false })).toBe('22 min · 248k tok')
+    expect(confidenceTag({ code: 'B1', title: 't', confidence: 'high', live: false })).toBe('high confidence')
+    expect(confidenceTag({ code: 'B1', title: 't', confidence: 'Medium', live: false })).toBe('medium confidence')
+    expect(confidenceTag({ code: 'B1', title: 't', live: false })).toBeUndefined()
     expect(rowFigures({ code: 'B1', title: 't', minutes: 14, live: true })).toBe('14 min')
     expect(rowFigures({ code: 'B1', title: 't', live: false })).toBe('')
     expect(rowFigures({ code: 'B1', title: 't', minutes: 0, tokens: 0, live: false })).toBe('0 min')
-  })
-
-  it('the bar title names the repo and plan', () => {
-    expect(barTitle(run({ plan: 'board-read' }))).toBe('chess-web · board-read')
-    expect(barTitle(run({}))).toBe('chess-web')
   })
 
   it('runs with no pipeline say why, and what to do', () => {
@@ -101,7 +137,7 @@ describe('banners', () => {
       expect(b.chip.label).not.toBe('')
       expect(['s-run', 's-ok', 's-you', 's-bad', 's-idle']).toContain(b.chip.cls)
     }
-    expect(all[0]!.chip).toEqual(streamChip('lost'))
+    expect(all[0]!.chip).toEqual({ cls: 's-bad', label: 'lost · retrying' })
   })
 
   it('shows the config error alone', () => {
@@ -179,16 +215,6 @@ describe('fix runs and other activity', () => {
   const fixRun = run({ plan: 'fix-scroll', fix: 'scroll', where: 'review', state: 'running' })
   const at = (h: number, m: number) => new Date(2026, 9, 20, h, m).getTime()
 
-  it('the run line: fix · <slug> · <where>, a plan’s <plan> · <where>, else the where', () => {
-    expect(runLine(fixRun)).toBe('fix · scroll · review')
-    expect(runLine(run({ plan: 'alpha', where: 'one · wave 1/2' }))).toBe('alpha · one · wave 1/2')
-    expect(runLine(run({ where: 'no active plan' }))).toBe('no active plan')
-  })
-
-  it('the bar title of a fix run', () => {
-    expect(barTitle(fixRun)).toBe('chess-web · fix · scroll')
-  })
-
   it('agent chips', () => {
     expect(agentChip('running')).toEqual({ cls: 's-run', label: 'running' })
     expect(agentChip('ended')).toEqual({ cls: 's-ok', label: 'ended' })
@@ -231,5 +257,60 @@ describe('fix runs and other activity', () => {
       { key: 'x1', text: 'researcher', time: '09:40', chip: { cls: 's-ok', label: 'ended' } },
       { key: 'x2', text: 'engineer · fix-old', time: '11:58', chip: { cls: 's-run', label: 'running' } },
     ])
+  })
+})
+
+describe('log blocks', () => {
+  const row = (code: string) => ({ code, title: `Title ${code}`, live: false })
+  const group = (sprint: string, i: number, wave: number, status: string, codes: string[]) => ({ sprint, wave, label: `Sprint ${i} · wave ${wave}`, status, rows: codes.map(row) })
+  const sprints = [
+    { slug: 'warmup', status: 'done' as const },
+    { slug: 'ladder', status: 'active' as const },
+    { slug: 'rematch', status: 'planned' as const },
+  ]
+
+  it('one block per sprint, holding its waves in order, each wave with its slices', () => {
+    const log = [
+      group('warmup', 1, 1, 'merged PR #70', ['A1']),
+      group('warmup', 1, 2, 'merged PR #71', ['B1', 'B2']),
+      group('ladder', 2, 1, 'merged PR #76', ['L1']),
+      group('ladder', 2, 2, 'running', ['U1']),
+    ]
+    const blocks = logBlocks(log, sprints, { slug: 'ladder', chip: runChip('running') })
+    expect(blocks.map((b) => [b.key, b.title, b.chip])).toEqual([
+      ['warmup', 'Sprint 1 · warmup', { cls: 's-ok', label: 'done' }],
+      ['ladder', 'Sprint 2 · ladder', { cls: 's-run', label: 'running' }],
+    ])
+    expect(blocks[0]!.waves.map((w) => [w.key, w.label, w.chip.label, w.rows.map((r) => r.code)])).toEqual([
+      ['warmup/1', 'Wave 1', 'merged PR #70', ['A1']],
+      ['warmup/2', 'Wave 2', 'merged PR #71', ['B1', 'B2']],
+    ])
+    expect(blocks[1]!.waves.map((w) => [w.label, w.chip])).toEqual([
+      ['Wave 1', { cls: 's-ok', label: 'merged PR #76' }],
+      ['Wave 2', { cls: 's-run', label: 'running' }],
+    ])
+  })
+
+  it("a sprint's number comes from the plan; a later sprint waits; an unknown one has no state", () => {
+    // The first sprint has no log (no doc): the second keeps its number.
+    expect(logBlocks([group('ladder', 2, 1, 'planned', ['L1'])], sprints, undefined)[0]).toMatchObject({ title: 'Sprint 2 · ladder', chip: { cls: 's-idle', label: 'waiting' } })
+    const cur = { slug: 'ladder', chip: runChip('running') }
+    expect(logBlocks([group('gone', 4, 1, 'planned', ['X1'])], sprints, cur)[0]).toMatchObject({ title: 'gone' })
+    expect(logBlocks([group('gone', 4, 1, 'planned', ['X1'])], sprints, cur)[0]).not.toHaveProperty('chip')
+    expect(logBlocks([], sprints, cur)).toEqual([])
+  })
+
+  it("the current sprint's chip is the run's own chip, as the runs list shows it; the in-progress wave matches", () => {
+    const log = [group('ladder', 2, 3, 'blocked', ['T1'])]
+    expect(logBlocks(log, sprints, { slug: 'ladder', chip: runChip('blocked') })[0]).toMatchObject({ chip: { cls: 's-bad', label: 'blocked' } })
+    const asks = logBlocks([group('ladder', 2, 3, 'needs you', ['T1'])], sprints, { slug: 'ladder', chip: runChip('needs-you') })[0]!
+    expect(asks.chip).toEqual({ cls: 's-you', label: 'needs you' })
+    expect(asks.waves[0]!.chip).toEqual({ cls: 's-you', label: 'needs you' })
+    expect(groupChip('waiting')).toEqual({ cls: 's-idle', label: 'waiting' })
+    // An idle run's sprint reads waiting in the Log (the runs list keeps idle); every other state is the run's chip.
+    expect(logRunChip('idle')).toEqual({ cls: 's-idle', label: 'waiting' })
+    expect(logRunChip('blocked')).toEqual(runChip('blocked'))
+    expect(logRunChip('needs-you')).toEqual(runChip('needs-you'))
+    expect(logRunChip('running')).toEqual(runChip('running'))
   })
 })

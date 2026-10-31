@@ -1,16 +1,17 @@
 /*
- * Screen 1: the runs list beside the main view (preview "Screen 1").
+ * Screen 1: a full-height sidebar on the left (the title, the runs list, and
+ * Add repo at the bottom) beside one shared main column as wide as the run flow
+ * (1120 px at most): the run header with the wave board link and the ⋯ menu,
+ * the run's flow, the Next step card, and the tabs, all with the same edges.
+ * Text inside the card and the Waiting rows stops near 72 characters.
  * Tokens and L1's classes only; no colour literals (pwa.test.ts checks).
- * At 820px and below the runs list stacks above the main view, and the
- * pipeline and slice log scroll sideways inside their own frames.
+ * At 820px and below the sidebar stacks above the main column.
  */
 
 .screen {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
   min-height: 100vh;
   min-height: 100dvh;
-  background: var(--panel);
+  background: var(--bg);
 }
 
 .sr-only {
@@ -30,7 +31,14 @@
   color: var(--muted);
 }
 
-/* Runs list */
+.screen-body {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  align-items: start;
+  padding: 0;
+}
+
+/* Sidebar: the title and the connection status while lost, the runs, then Add repo at the bottom. */
 
 .side {
   position: sticky;
@@ -39,12 +47,12 @@
   height: 100dvh;
   overflow-y: auto;
   display: grid;
-  grid-template-rows: auto auto 1fr;
-  gap: 18px;
-  align-content: start;
-  padding: 16px 14px;
-  background: var(--panel-2);
-  border-right: 1px solid var(--line);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 24px;
+  min-width: 0;
+  padding: 20px 16px;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
 }
 
 .side-head {
@@ -53,19 +61,85 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-height: 32px;
 }
 
-.brand {
-  font: 700 var(--size-title) / 1.1 var(--display);
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font: 600 15px / 1 var(--font);
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
 
+.logo i {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  background: var(--fg);
+  clip-path: polygon(50% 8%, 96% 90%, 4% 90%);
+}
+
+.side-foot {
+  display: flex;
+  min-width: 0;
+}
+
+/* As wide as the run cards, the icon and label centred on even sides. */
+.side-foot .add-repo {
+  width: 100%;
+  justify-content: center;
+  /* Centred on the ink: the plus has about 2 px of empty space on its left. */
+  padding-left: 15px;
+  padding-right: 17px;
+}
+
+/* The Add repo dialog: a sizing box; the picker inside keeps its own frame. */
+.add-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  overflow: auto;
+}
+
+.add-dialog::backdrop {
+  background: var(--bg);
+  opacity: 0.72;
+}
+
+.add-dialog .picker {
+  max-width: none;
+}
+
+.banners {
+  margin-bottom: 24px;
+}
+
+/* Runs list */
+
+.side {
+  min-width: 0;
+}
+
 .runs {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   align-content: start;
   min-width: 0;
+  /* A long list scrolls in its own row, so Add repo stays at the bottom in view. */
+  min-height: 0;
+  overflow-y: auto;
+  /* Room for the whole focus ring (2px outline + 2px offset in base.css), which the scroll box would clip. */
+  margin: -4px;
+  padding: 4px;
+  /* The list clips its corners, so an auto row would squash it rather than scroll. */
+  grid-auto-rows: max-content;
 }
 
 .run-list {
@@ -73,165 +147,470 @@
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 6px;
+  gap: 12px;
 }
 
+/* Each run is its own card, as in the sidebar before plan calm-dashboard.
+   The status sits top right, on the name's line; the fix tag goes under the name. */
 .run {
-  display: grid;
-  justify-items: start;
-  gap: 4px;
-  padding: 10px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  border: 1px solid transparent;
   color: var(--fg);
+  font-size: var(--size-dense);
   text-decoration: none;
   min-width: 0;
 }
 
 .run:hover {
-  border-color: var(--line);
+  background: var(--hover);
+  color: var(--fg);
 }
 
 .run[aria-current="true"] {
-  background: var(--panel);
-  border-color: var(--line);
+  background: var(--hover);
+  border-color: var(--border-strong);
 }
 
 .run b {
-  font-weight: 600;
-  font-size: var(--size-dense);
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 
-.run .mono {
-  font-size: var(--size-micro);
+/* The label, then under it a kind tag (`fix`) for a /pod:fix run. */
+.run-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.run .status {
+  flex: none;
+}
+
+/* Main column */
+
+.main {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  /* One column for every part, as wide as the run flow needs (five columns). */
+  max-width: 1120px;
+  padding: 48px 48px 64px;
+  box-sizing: content-box;
+  /* Centred in the space beside the sidebar. Auto margins turn off the grid's
+     stretch, so the width is set: the cell less the side padding. */
+  width: calc(100% - 96px);
+  margin-inline: auto;
+}
+
+/* Each part of the column is 720 px at most, centred; the flow, a wide data view, takes the main box's width. */
+/* Every part spans the column, so their left and right edges line up. */
+.main:not(.wide) > * {
+  width: 100%;
+}
+
+/* The wave board takes the whole main width. */
+.main.wide {
+  max-width: none;
+}
+
+.run-header {
+  margin-bottom: 24px;
+  min-width: 0;
+}
+
+/* The crumb and the name on the left, the ⋯ menu at the right end. */
+.run-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.run-title {
+  min-width: 0;
+}
+
+.run-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.board-link {
+  white-space: nowrap;
+}
+
+/* Phones get the short label (below), so the plan name keeps one line beside the link and the menu. */
+.board-link-short {
+  display: none;
+}
+
+.run-crumb {
+  margin: 0 0 6px;
+  font-size: var(--size-small);
   color: var(--muted);
   overflow-wrap: anywhere;
 }
 
-/* The repo name, then a kind tag (`fix`) for a /pod:fix run. */
-.run-head {
+.run-name {
+  font-size: 24px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * The run's flow: a column of step cards per stage, arrows between columns.
+ * Cards keep a plain border; the status colour is on the mark, and on the border
+ * only of a highlighted card (running, needs you, blocked). Waiting cards are dim
+ * by colour, not opacity, so their text stays readable. Below its columns' minimum
+ * width the flow scrolls inside its own box.
+ */
+/* The flow: the fold line (phones only), the columns' scroll box, then the wave board link. */
+.flow-frame {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 32px;
+}
+
+.flow-scroll {
+  /* Holds the cards' absolutely placed screen-reader words, so they scroll with it instead of widening the page. */
+  position: relative;
+  min-width: 0;
+  overflow-x: auto;
+  /* Room for the highlighted border and the focus ring inside the scroll box. */
+  padding: 2px;
+}
+
+/*
+ * The flow is one grid: a heading row, then row i holds every column's i-th card. Columns and their step
+ * lists share the rows (subgrid), so the cards of a row always share one height, and a card whose detail
+ * wraps grows its whole row. Columns grow from 152 px to fill the box; below their minimum the grid
+ * keeps its width and scrolls in .flow-scroll. The lines layer (.flow-lines) spans the whole grid.
+ */
+.flow {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--flow-cols), minmax(152px, 1fr));
+  grid-template-rows: auto repeat(var(--flow-rows), auto);
+  /* The same room both ways: the column gap holds the line across, the row gap the line down. */
+  column-gap: 32px;
+  row-gap: 32px;
+  min-width: calc(var(--flow-cols) * 152px + (var(--flow-cols) - 1) * 32px);
+}
+
+.flow-cols {
+  display: contents;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.flow-col {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: 1 / -1;
+  min-width: 0;
+}
+
+.flow-steps {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: 2 / -1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* The path between the steps: quiet lines, the walked part in --fg, the line into an optional step dashed. */
+.flow-lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.flow-lines path {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.flow-lines path.walked {
+  stroke: var(--fg);
+}
+
+.flow-lines path.dashed {
+  stroke-dasharray: 4 4;
+}
+
+.flow-cap {
+  margin: 0;
+  /* The heading sits 16 px above its first card: it gives back half the row gap. */
+  margin-bottom: -16px;
+  font: 500 var(--size-micro) / 16px var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.flow-step {
+  /* Holds the screen-reader word. */
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-content: start;
+  gap: 2px 8px;
+  /* Room for the title and two detail lines: padding 20 + border 2 + title 20 + gap 2, then 2 lines of 1.4 × 12 px. */
+  min-height: calc(44px + 2.8 * var(--size-micro));
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.flow-mark {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  color: var(--muted);
+}
+
+.flow-label {
+  min-width: 0;
+  font-size: var(--size-dense);
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.flow-detail {
+  grid-column: 2;
+  min-width: 0;
+  font: var(--size-micro) / 1.4 var(--mono);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.flow-step.done .flow-mark svg,
+.flow-fold[data-state="done"] .flow-mark svg {
+  color: var(--ready);
+}
+
+.flow-step.live .flow-mark svg,
+.flow-fold[data-state="live"] .flow-mark svg {
+  color: var(--running);
+}
+
+.flow-step.you .flow-mark svg,
+.flow-fold[data-state="you"] .flow-mark svg {
+  color: var(--needs-you);
+}
+
+.flow-step.blocked .flow-mark svg,
+.flow-fold[data-state="blocked"] .flow-mark svg {
+  color: var(--blocked);
+}
+
+.flow-step.dim .flow-mark svg {
+  color: var(--faint);
+}
+
+.flow-step.dim .flow-label {
+  color: var(--muted);
+}
+
+.flow-step.hi.live {
+  border-color: var(--running);
+}
+
+.flow-step.hi.you {
+  border-color: var(--needs-you);
+}
+
+.flow-step.hi.blocked {
+  border-color: var(--blocked);
+}
+
+/* The running step's dot breathes (base.css's keyframes), in the flow and on the phone's fold line. */
+.flow-step.live .flow-mark svg,
+.flow-fold[data-state="live"] .flow-mark svg {
+  animation: breathe 2s ease-in-out infinite;
+}
+
+/* Reduced motion: the dot stays solid. */
+@media (prefers-reduced-motion: reduce) {
+  .flow-step.live .flow-mark svg,
+  .flow-fold[data-state="live"] .flow-mark svg {
+    animation: none;
+  }
+}
+
+/* The wave board link stays at the left edge while the flow scrolls. */
+
+/* The fold line: phones only (below). Desktop always shows the whole flow. */
+.flow-fold {
+  display: none;
+}
+
+.flow-fold-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.flow-fold-chevron {
+  display: flex;
+  color: var(--muted);
+}
+
+.flow-frame.open .flow-fold-chevron {
+  transform: rotate(180deg);
+}
+
+/* The progress strip: done steps white, the current one dimmed, the rest grey. */
+.run-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 8px 16px;
+  margin-top: 10px;
+}
+
+.run-wave {
+  font-size: var(--size-small);
+}
+
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.strip i {
+  width: 20px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.strip i.done {
+  background: var(--fg);
+}
+
+.strip i.current {
+  background: var(--fg);
+  opacity: 0.45;
+}
+
+/* Next step card: the base .card, plain; the dot carries the state. */
+.next-step {
+  gap: 0;
+}
+
+.next-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 16px;
+}
+
+.next-title {
+  max-width: 72ch;
+  font-size: 20px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.next-detail {
+  max-width: 72ch;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: var(--size-dense);
+  overflow-wrap: anywhere;
+}
+
+.next-acts {
+  margin-top: 24px;
+}
+
+.next-step .reply-panel {
+  margin-top: 24px;
+  min-width: 0;
+}
+
+/* The answer form or the merge confirm, in place under the card. */
+.next-step + .inplace {
+  margin-top: 16px;
+}
+
+.main > .tabs {
+  margin-top: 40px;
+}
+
+/* The tab labels share the Log blocks' and the Action log's 16 px text inset. */
+.main > .tabs .tab {
+  padding-inline: 16px;
+}
+
+.main > .tabs .tab[aria-expanded="true"]::after {
+  left: 16px;
+  right: 16px;
+}
+
+.back {
+  margin: 0 0 24px;
+  font-size: var(--size-dense);
+}
+
+.empty {
+  display: grid;
+  gap: 8px;
+}
+
+.log-frame {
+  position: relative;
+  /* The status rail: wide enough for `● merged PR #1234` on one line. */
+  --log-rail: 176px;
+  display: grid;
+  gap: 16px;
+  overflow-x: auto;
   min-width: 0;
 }
 
 /* A quiet kind tag: an outlined chip with no state dot, so it never reads as a state. */
 .chip.tag {
   padding: 2px 7px;
+  border-radius: var(--radius-pill);
   background: transparent;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--size-micro);
 }
 
 .chip.tag::before {
   display: none;
 }
 
-/* Add a repo */
-
-.add-repo {
-  display: grid;
-  gap: 8px;
-  align-self: end;
-  min-width: 0;
-}
-
-.add-row {
-  display: flex;
-  gap: 6px;
-  min-width: 0;
-}
-
-.add-row .input {
-  flex: 1;
-}
-
-.add-row .btn {
-  flex: none;
-}
-
-.add-error {
-  font-size: var(--size-small);
-  color: var(--bad-ink);
-}
-
-/* Main view */
-
-.main {
-  display: grid;
-  gap: 18px;
-  align-content: start;
-  padding: 16px;
-  min-width: 0;
-}
-
-.bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.bar .title {
-  font: 700 var(--size-title) / 1.2 var(--display);
-  margin-right: auto;
-  overflow-wrap: anywhere;
-}
-
-.seg {
-  display: inline-flex;
-}
-
-.seg .btn {
-  border-radius: 0;
-  margin-left: -1px;
-}
-
-.seg .btn:first-child {
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-  margin-left: 0;
-}
-
-.seg .btn:last-child {
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-}
-
-.seg .btn[aria-pressed="true"] {
-  position: relative;
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent-ink);
-}
-
-.tabs {
-  display: flex;
-  gap: 4px;
-  margin-top: -6px;
-  border-bottom: 1px solid var(--line);
-}
-
-.tab {
-  padding: 8px 12px;
-  margin-bottom: -1px;
-  border-bottom: 2px solid transparent;
-  font: 600 var(--size-small) / 1 var(--body);
-  color: var(--muted);
-  text-decoration: none;
-}
-
-.tab:hover {
-  color: var(--fg);
-}
-
-.tab[aria-current="page"] {
-  color: var(--accent-ink);
-  border-bottom-color: var(--accent);
-}
-
-/* Banners: what's wrong above the main view. A chip names it; the left edge carries its state. */
+/* Banners: what's wrong above the main view. A chip (dot and word) names it; the frame stays plain. */
 .banners {
   display: grid;
   gap: 8px;
@@ -244,10 +623,9 @@
   gap: 6px 10px;
   margin: 0;
   padding: 9px 12px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--idle);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--panel);
+  background: var(--surface);
   color: var(--fg);
   font-size: var(--size-small);
 }
@@ -256,175 +634,14 @@
   flex: none;
 }
 
-.banner[data-tone="s-bad"] {
-  border-left-color: var(--bad);
-}
-
-.banner[data-tone="s-you"] {
-  border-left-color: var(--warn);
-}
-
 .banner > span {
   flex: 1 1 16rem;
   min-width: 0;
 }
 
-.empty {
-  display: grid;
-  gap: 8px;
-  padding-block: 24px;
-}
-
-/* Pipeline */
-
-.pipe-frame,
-.log-frame {
-  position: relative;
-  overflow-x: auto;
-  min-width: 0;
-}
-
-.pipe {
-  list-style: none;
-  margin: 0;
-  padding: 2px;
-  display: flex;
-  align-items: stretch;
-  gap: 10px;
-  min-width: 760px;
-}
-
-.stage {
-  flex: 1 1 0;
-  display: grid;
-  gap: 6px;
-  align-content: start;
-  min-width: 136px;
-}
-
-.stage .cap {
-  font: 500 var(--size-micro) / 1 var(--mono);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-
-.arrow {
-  align-self: center;
-  color: var(--muted);
-  font-family: var(--mono);
-}
-
-.step {
-  position: relative;
-  display: grid;
-  gap: 3px;
-  padding: 9px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--panel);
-}
-
-.step b {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--size-dense);
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.step .mono {
-  font-size: var(--size-micro);
-  color: var(--muted);
-}
-
-.step b::before {
-  flex: none;
-}
-
-.step.done b::before {
-  content: "✓";
-  color: var(--ok);
-}
-
-.step.live {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent) inset;
-}
-
-.step.live b::before {
-  content: "●";
-  color: var(--accent);
-  font-size: var(--size-micro);
-}
-
-.step.wait {
-  opacity: 0.55;
-}
-
-.step.you {
-  border-color: var(--warn);
-}
-
-.step.you b::before {
-  content: "!";
-  color: var(--warn);
-  font-weight: 700;
-}
-
-.step.blocked {
-  border-color: var(--bad);
-  box-shadow: 0 0 0 1px var(--bad) inset;
-}
-
-.step.blocked b::before {
-  content: "×";
-  color: var(--bad);
-  font-weight: 700;
-}
-
-.step.unknown {
-  border-style: dashed;
-}
-
-.step.unknown b::before {
-  content: "?";
-  color: var(--muted);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .step.live {
-    animation: step-pulse 2.4s ease-in-out infinite;
-  }
-}
-
-@keyframes step-pulse {
-  50% {
-    box-shadow:
-      0 0 0 3px var(--accent-soft),
-      0 0 0 1px var(--accent) inset;
-  }
-}
-
-/* Merge: a button on the step with a PR waiting on you, and its confirm in place under the pipeline. */
-
-.step .step-merge {
-  justify-self: start;
-  margin-top: 4px;
-  padding: 4px 12px;
-  font-size: var(--size-dense);
-}
-
-.step[data-open="true"] {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent) inset;
-}
-
 .merge-confirm {
   margin-top: 10px;
   max-width: 640px;
-  border-left: 3px solid var(--accent);
 }
 
 .merge-confirm:focus {
@@ -432,7 +649,7 @@
 }
 
 .merge-confirm:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -466,33 +683,90 @@
   overflow-wrap: anywhere;
 }
 
-.merge-why {
-  color: var(--warn-ink);
+/*
+ * A reason or an error is plain text with a dot in its status colour before it,
+ * so the state never rests on text colour.
+ */
+.merge-why::before,
+.merge-error::before,
+.resume-error::before,
+.auto-switch-error::before,
+.answer-error::before {
+  content: "";
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--blocked);
 }
 
-.merge-error {
-  color: var(--bad-ink);
+.merge-why::before {
+  background: var(--needs-you);
 }
 
 /* Slice log */
 
+/*
+ * One faint block per sprint (the Action log row's fill, 8 px corners, no border), 16 px apart. Padding is
+ * 12 px by 16 px: wider than tall, since the lines carry vertical air; its 16 px text inset matches the
+ * tabs and the Action log. Inside: the sprint's name and state, then its waves, 8 px apart, each a
+ * `Wave N` row and its slices: 20 px lines with 2 px a side (rows about 24 px, a wave 4 px above its first
+ * slice). No dividers. Sprint > wave > slice: the sprint semibold, the wave regular and muted. Every
+ * status sits on one rail: a fixed-width, left-aligned last column (`--log-rail`), so the dots line up.
+ */
+.log-group {
+  min-width: 560px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.log-sprint {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--log-rail);
+  column-gap: 16px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.log-sprint > .chip {
+  justify-self: start;
+}
+
+.log-sprint-name {
+  margin: 0;
+  font-size: var(--size-dense);
+  font-weight: 600;
+  line-height: 20px;
+}
+
 .slice-log {
   width: 100%;
-  min-width: 560px;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: var(--size-dense);
+  line-height: 20px;
 }
 
 .slice-log th,
 .slice-log td {
-  padding: 7px 10px;
-  border-top: 1px solid var(--line);
+  padding: 2px 0;
   text-align: left;
   vertical-align: middle;
 }
 
 .slice-log td:last-child {
-  text-align: right;
+  width: calc(var(--log-rail) + 16px);
+  padding-left: 16px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* Confidence is an attribute, not a state: a quiet tag after the title. */
+.slice-log .chip.tag {
+  margin-left: 8px;
   white-space: nowrap;
 }
 
@@ -502,20 +776,17 @@
   font-variant-numeric: tabular-nums;
 }
 
-.slice-log td:last-child .chip + .figures {
-  margin-left: 8px;
+.slice-log tr.grp th {
+  font-weight: 400;
+  color: var(--muted);
 }
 
-.slice-log tr.grp th,
-.slice-log tr.grp td {
-  font-weight: 600;
-  border-top: 0;
-  padding-top: 14px;
+.log-wave tr:last-child > * {
+  padding-bottom: 0;
 }
 
-.slice-log tr.grp:first-child th,
-.slice-log tr.grp:first-child td {
-  padding-top: 4px;
+.log-wave + .log-wave tr.grp > * {
+  padding-top: 8px;
 }
 
 .slice-log .code {
@@ -526,20 +797,20 @@
 .doc-code {
   padding: 1px 4px;
   border-radius: var(--radius-sm);
-  background: var(--panel-2);
+  background: var(--hover);
   font: var(--size-small) / 1 var(--mono);
   overflow-wrap: anywhere;
 }
 
 /* A fix run's agent log: the slice log's table, each engineer a link to its view. */
 .agent-log a {
-  color: var(--accent-ink);
-  font-weight: 600;
+  color: var(--fg);
+  font-weight: 500;
   text-underline-offset: 2px;
 }
 
 .agent-log tr[aria-current="true"] td {
-  background: var(--accent-soft);
+  background: var(--hover);
 }
 
 /* Other activity: agents tied to no run, kept quiet under the main view. */
@@ -547,7 +818,7 @@
   display: grid;
   gap: 8px;
   padding-top: 12px;
-  border-top: 1px dashed var(--line);
+  border-top: 1px dashed var(--border);
   min-width: 0;
 }
 
@@ -570,9 +841,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 4px 12px;
-  padding: 6px 10px;
+  padding: 8px 16px;
   border-radius: var(--radius-sm);
-  background: var(--panel-2);
+  background: var(--surface);
   font-size: var(--size-small);
   color: var(--muted);
   min-width: 0;
@@ -614,10 +885,10 @@
 .reply-word {
   padding: 2px 6px;
   border-radius: var(--radius-sm);
-  background: var(--panel);
-  border: 1px solid var(--line);
+  background: var(--bg);
+  border: 1px solid var(--border);
   font-size: var(--size-small);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .reply-why {
@@ -631,7 +902,7 @@
   display: grid;
   gap: 6px;
   padding-top: 8px;
-  border-top: 1px dashed var(--line);
+  border-top: 1px dashed var(--border);
   min-width: 0;
 }
 
@@ -709,10 +980,6 @@
   overflow-wrap: anywhere;
 }
 
-.resume-error {
-  color: var(--bad-ink);
-}
-
 /* The auto-continue switch beside the run's state chip; a failed save's message beside it. */
 .auto-switch {
   display: inline-flex;
@@ -724,13 +991,41 @@
 }
 
 .auto-switch-error {
-  color: var(--bad-ink);
   font-size: var(--size-small);
   overflow-wrap: anywhere;
 }
 
 /* Phone: each row stacks, the copy and send buttons under its text, full width. */
 @media (max-width: 480px) {
+  .board-link-long {
+    display: none;
+  }
+
+  .board-link-short {
+    display: inline;
+  }
+
+  .flow-fold {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--fg);
+    font: inherit;
+    font-size: var(--size-dense);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .flow-frame:not(.open) > .flow-scroll {
+    display: none;
+  }
+
   .reply-row,
   .reply-cmd,
   .reply-actions,
@@ -753,10 +1048,10 @@
   }
 }
 
-/* Narrow: the runs list stacks above the main view. */
+/* Narrow: the runs list stacks above the main column, with less room around everything. */
 
 @media (max-width: 820px) {
-  .screen {
+  .screen-body {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -764,32 +1059,98 @@
     position: static;
     height: auto;
     overflow: visible;
+    gap: 16px;
+    padding: 16px 20px;
     border-right: 0;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--border);
   }
 
-  .run-list {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  .runs {
+    overflow: visible;
+  }
+
+  .main {
+    width: calc(100% - 40px);
+    padding: 24px 20px 40px;
   }
 }
 
-/* Phone: each log row stacks its figures under its title, so states stay in view. */
+@media (max-width: 480px) {
+  .side {
+    gap: 12px;
+    padding: 12px 16px;
+  }
+
+  .main {
+    width: calc(100% - 32px);
+    padding: 20px 16px 40px;
+  }
+
+  .add-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
+  .runs-head {
+    display: none;
+  }
+
+  .run-header {
+    margin-bottom: 12px;
+  }
+
+  /* The folded flow is one line: a tight gap keeps the Next step card's button on a 375 × 667 screen. */
+  .flow-frame {
+    margin-bottom: 16px;
+  }
+
+  .run-name {
+    font-size: 22px;
+  }
+
+  .card.next-step {
+    padding: 20px;
+  }
+
+  .next-top {
+    margin-bottom: 12px;
+  }
+
+  .next-acts {
+    margin-top: 20px;
+  }
+
+  .main > .tabs {
+    margin-top: 32px;
+  }
+}
+
+/* Phone: the blocks fill the width; each slice is one line where it fits, its status after the title. */
 
 @media (max-width: 560px) {
-  .slice-log {
+  .log-group {
     min-width: 0;
   }
 
+  .log-wave tr:last-child {
+    padding-bottom: 0;
+  }
+
+  .log-wave + .log-wave tr.grp {
+    padding-top: 8px;
+  }
+
+  .log-wave + .log-wave tr.grp > * {
+    padding-top: 0;
+  }
+
   .slice-log tbody,
-  .slice-log tr,
-  .slice-log th,
-  .slice-log td {
+  .slice-log tr {
     display: block;
   }
 
   .slice-log tr {
-    padding: 7px 0;
-    border-top: 1px solid var(--line);
+    padding: 2px 0;
   }
 
   .slice-log tr.grp {
@@ -797,70 +1158,37 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    border-top: 0;
-    padding-top: 14px;
   }
 
   .slice-log th,
   .slice-log td,
   .slice-log tr.grp th,
   .slice-log tr.grp td {
+    display: block;
     padding: 0;
-    border-top: 0;
+  }
+
+  .slice-log tr:not(.grp) td {
+    display: inline;
   }
 
   .slice-log td:last-child {
+    width: auto;
+    padding-left: 0;
     text-align: left;
     white-space: normal;
   }
 
-  .slice-log tr:not(.grp) td:last-child:not(:empty) {
-    margin-top: 4px;
+  .log-sprint {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
   }
-}
 
-/* Waiting on you: the queue entries for the selected run, each with its state edge, and the answer form in place. */
-.waiting {
-  display: grid;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--line);
-  min-width: 0;
-  max-width: 760px;
-}
-
-.waiting-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.waiting-row {
-  min-width: 0;
-}
-
-.waiting-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.waiting-body,
-.waiting-answer {
-  margin: 0;
-  font-size: var(--size-small);
-  overflow-wrap: anywhere;
-}
-
-.waiting-answer {
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--panel-2);
+  .slice-log tr:not(.grp) td:last-child:not(:empty)::before {
+    content: " · ";
+    color: var(--muted);
+  }
 }
 
 .answer-form:focus {
@@ -868,7 +1196,7 @@
 }
 
 .answer-form:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -888,8 +1216,4 @@
   margin: 0;
   font-size: var(--size-small);
   overflow-wrap: anywhere;
-}
-
-.answer-error {
-  color: var(--bad-ink);
 }

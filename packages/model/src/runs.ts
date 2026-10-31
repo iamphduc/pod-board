@@ -4,7 +4,7 @@
 
 import type { Board, BoardRepo } from './board.ts'
 import { fixRuns } from './fix-runs.ts'
-import { isBlockedSlice, isDrafting, isHalted, isRun, isRunning, pendingHandBack, planAgentRunning, roleOf, waveWaitingPr } from './pipeline.ts'
+import { isDrafting, isRun, isRunning, pendingHandBack, planState, roleOf } from './pipeline.ts'
 import type { PlanModel } from './run-model.ts'
 
 export type RunState = 'blocked' | 'needs-you' | 'running' | 'idle' | 'unsupported' | 'error'
@@ -43,21 +43,10 @@ function repoRuns(repo: BoardRepo, now: number): RunSummary[] {
 }
 
 function planRun(repo: BoardRepo, plan: PlanModel, now: number): RunSummary {
-  const run: RunSummary = { repoId: repo.id, repo: repo.name, plan: plan.slug, title: plan.title, where: where(repo, plan, now), state: state(repo, plan, now) }
+  const run: RunSummary = { repoId: repo.id, repo: repo.name, plan: plan.slug, title: plan.title, where: where(repo, plan, now), state: planState(repo, plan, now) }
   const portBase = repo.claims.find((c) => c.plan === plan.slug)?.portBase ?? plan.portBase
   if (portBase !== undefined) run.portBase = portBase
   return run
-}
-
-/** First match wins: blocked → needs-you (an ask, or a wave PR waiting on you) → running → idle. */
-function state(repo: BoardRepo, plan: PlanModel, now: number): RunState {
-  const current = plan.sprints.find((s) => s.slug === plan.currentSprint)
-  const slices = current?.waves.flatMap((w) => w.slices) ?? []
-  if (isHalted(plan) || slices.some(isBlockedSlice)) return 'blocked'
-  if (plan.queue.some((e) => e.needsYou) || current?.waves.some((w) => waveWaitingPr(repo, plan, current, w, now) !== undefined)) return 'needs-you'
-  const wave = current?.waves.find((w) => w.wave === current.currentWave)
-  if (planAgentRunning(repo, plan, now) || wave?.slices.some((s) => s.status === 'pushed')) return 'running'
-  return 'idle'
 }
 
 function where(repo: BoardRepo, plan: PlanModel, now: number): string {

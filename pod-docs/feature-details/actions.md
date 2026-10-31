@@ -12,6 +12,7 @@ Board actions change something outside the board: merge a PR that waits on you (
   - `merged` only when GitHub says `MERGED`; `auto-merge` when auto-merge is on; `queued` only when GraphQL shows a merge-queue entry.
   - `unconfirmed` when the call succeeded but GitHub doesn't show a result yet; `failed` with gh's trimmed stderr, or `PR is closed`.
 - **Answer:** the text is cleaned (control characters dropped, whitespace folded to one line, at most 2000 characters, no `**Resolution:**` or `**Answer (` of its own; see [run-model.md](run-model.md)), then appended to the end of the entry's one line as ` **Answer (human):** <text>`. The writer works on bytes: it splices that one line and keeps line endings, BOM, and other bytes as they were. It writes a temp file beside the queue, reads the queue again, and renames only if nothing changed. Results: `answered`, `changed` (entry gone, duplicated, or the file changed while saving), or `failed`.
+- **Where you press it:** Merge and Answer sit on the Next step card, or on a row in the Waiting tab, and open in place under it; the Action log is in the Log tab. Continue and Go sit on a reply ([runs-and-pipeline.md](runs-and-pipeline.md)).
 - **Path:** exactly `<repo>/pod-docs/handoff-queue.md`, whose real path must sit under the repo's real path. A missing file is never created.
 - **Action log:** one JSON line per logged request in `<config dir>/actions.jsonl`, never in a repo. Merge, answer, and resume entries each pair an `action` with its own results; the reader drops lines that don't fit. `Board.actions` is the newest 50; after each logged action the server rebuilds the Board and sends it before it answers. A failed append gives `logged: false`.
 
@@ -21,7 +22,7 @@ Board actions change something outside the board: merge a PR that waits on you (
 - **`queued` only from a merge-queue entry:** gh 2.92's `pr view --json` has no merge-queue field, and an open PR after a successful call can also be a lagging re-read. Calling that `queued` would be false, so it reads `unconfirmed` (merge-actions wave 2 fix).
 - **`--match-head-commit`:** merges only the commit you saw, so a push after the confirm (autopilot racing you, say) is refused as `stale`.
 - **The board writes only the queue file, one answer line** ([plan](../plans/board-actions.md#key-decisions)): this changes phase 1's "never writes into a repo" rule as little as possible. Turned down: editing plans, sprint docs, or the entry body.
-- **Build answers before pod reads them** ([decision](../decisions.md#2026-10-21--build-queue-answers-before-pod-reads-them)): the board writes the master plan's format now; the claude-pod change comes separately. Trade-off: until pod reads it, the answer sits unread and the form says to also answer in the chat.
+- **Build answers before pod reads them** ([decision](../decisions.md#2026-10-21--build-queue-answers-before-pod-reads-them)): the board wrote the master plan's format first; claude-pod 0.8.0+ (claude-pod #96) now reads it at wave start and on resume, so the form says to answer here, then Continue, with no chat step. On a fix run or repo row it says the next `/pod:code` wave reads it instead, since `/pod:fix` reads no answers.
 - **A write by pod wins:** the re-read before the rename turns a race into `changed` instead of losing pod's line.
 - **Retry only on `EPERM` and `EBUSY`:** on Windows an editor or a scanner can hold the file for a moment; other codes won't pass on a retry.
 
@@ -42,3 +43,5 @@ Board actions change something outside the board: merge a PR that waits on you (
 - 2026-10-21 · queue-and-replies A1: the answer route, the queue writer, and answer entries in the action log.
 - 2026-10-22 · resume-runs S1: resume entries in the action log.
 - 2026-10-22 · board-actions · plan complete: merge, answer, and resume actions with one action log; final PR #33 passed review at round 2 after fix PR #34, which made a quoted answer marker count only after the Resolution · [report](../reports/board-actions.html)
+- 2026-10-27 · fix-answer-note · the Answer form note now says to answer here, then Continue; claude-pod #96 reads the line, so no chat step. On a fix run or repo row it says pod reads it when a `/pod:code` run next starts a wave.
+- 2026-10-28 · calm-dashboard · Merge and Answer moved to the Next step card and the Waiting tab, the Action log to the Log tab; the routes didn't change; final PR #54 passed review at round 1 · [report](../reports/calm-dashboard.html)

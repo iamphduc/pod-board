@@ -1,9 +1,10 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const themeDir = dirname(fileURLToPath(import.meta.url))
+const srcDir = join(themeDir, '..')
 const publicDir = join(themeDir, '..', '..', 'public')
 
 const read = (name: string) => readFileSync(join(themeDir, name), 'utf8')
@@ -29,6 +30,45 @@ function customProps(body: string): Record<string, string> {
   return out
 }
 
+type Rule = { selectors: string[]; body: string; media?: string }
+
+/** Flat list of style rules; a rule inside `@media` carries its condition. */
+function rules(css: string, media?: string): Rule[] {
+  const out: Rule[] = []
+  let i = 0
+  while (i < css.length) {
+    const open = css.indexOf('{', i)
+    if (open < 0) break
+    const prelude = css.slice(i, open).trim()
+    let depth = 0
+    let close = open
+    for (; close < css.length; close++) {
+      if (css[close] === '{') depth++
+      else if (css[close] === '}' && --depth === 0) break
+    }
+    const body = css.slice(open + 1, close)
+    if (prelude.startsWith('@media') || prelude.startsWith('@supports')) {
+      out.push(...rules(body, prelude.replace(/^@\w+\s*/, '').trim()))
+    } else if (!prelude.startsWith('@')) out.push({ selectors: prelude.split(',').map((s) => s.trim()), body, media })
+    i = close + 1
+  }
+  return out
+}
+
+/** Declarations of a rule body as [property, value] pairs, custom properties included. */
+function declList(body: string): [string, string][] {
+  return [...body.matchAll(/(--[a-z0-9-]+|[a-z-]+)\s*:\s*([^;}]+)/gi)].map((m) => [m[1]!.toLowerCase(), m[2]!.trim()])
+}
+
+/** Every `.css` file under packages/web/src, so CSS added by later slices is covered too. */
+function cssFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const p = join(dir, name)
+    if (statSync(p).isDirectory()) return cssFiles(p)
+    return name.endsWith('.css') ? [p] : []
+  })
+}
+
 const tokensCss = () => stripComments(read('tokens.css'))
 const light = () => customProps(blockAfter(tokensCss(), ':root {'))
 const darkMedia = () =>
@@ -38,37 +78,11 @@ const darkAttr = () => customProps(blockAfter(tokensCss(), ':root[data-theme="da
 // ---- colour math (WCAG 2.x) ----
 type Rgb = [number, number, number]
 
-function hslToRgb(h: number, s: number, l: number): Rgb {
-  const a = s * Math.min(l, 1 - l)
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12
-    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))
-  }
-  // A browser paints 8-bit channels, so contrast is checked on the rounded colour.
-  return [f(0), f(8), f(4)].map((v) => Math.round(v * 255)) as Rgb
-}
-
 function parseColor(value: string): Rgb {
   const hex = /^#([0-9a-f]{6})$/i.exec(value)
   if (hex) return [0, 2, 4].map((i) => parseInt(hex[1]!.slice(i, i + 2), 16)) as Rgb
-  const hsl = /^hsl\(\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%\s*\)$/i.exec(value)
-  if (hsl) return hslToRgb(Number(hsl[1]), Number(hsl[2]) / 100, Number(hsl[3]) / 100)
   throw new Error(`not a colour this test reads: ${value}`)
 }
-
-/** Hue of the token as written: an hsl() hue is taken as is, a hex is converted. */
-function hueOf(value: string): number {
-  const hsl = /^hsl\(\s*([\d.]+)/i.exec(value)
-  if (hsl) return Number(hsl[1])
-  const [r, g, b] = parseColor(value).map((v) => v / 255) as Rgb
-  const max = Math.max(r, g, b)
-  const d = max - Math.min(r, g, b)
-  if (d === 0) return 0
-  const h = max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
-  return h * 60
-}
-
-const hueGap = (a: number, b: number) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b))
 
 function luminance(c: Rgb): number {
   const [r, g, b] = c.map((v) => {
@@ -84,65 +98,69 @@ function contrast(a: string, b: string): number {
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)
 }
 
-// ---- the plan's ## Look palette ----
+// ---- the plan's ## Look palette, [dark, light] ----
 const LOOK = {
-  bg: ['#f4f5f8', '#0f121a'],
-  panel: ['#ffffff', '#171b26'],
-  'panel-2': ['#eef0f5', '#1e2331'],
-  line: ['#d9dde7', '#2c3344'],
-  fg: ['#161a26', '#e8eaf1'],
-  muted: ['#5d6478', '#9aa1b4'],
-  accent: ['#2f55d4', '#7e9bff'],
-  'accent-soft': ['#e4e9fb', '#232c4d'],
-  ok: ['#1d8a55', '#4fc58a'],
-  'ok-soft': ['#dff3e8', '#173326'],
-  warn: ['#b26a00', '#f0ae47'],
-  'warn-soft': ['#fbefd9', '#3a2c14'],
-  bad: ['#c2373a', '#f07a7c'],
-  'bad-soft': ['#f9e1e1', '#3d1d20'],
-  idle: ['#7a8194', '#8b92a6'],
-  'idle-soft': ['#eceef3', '#232836'],
+  bg: ['#000000', '#ffffff'],
+  surface: ['#0a0a0a', '#fafafa'],
+  hover: ['#1a1a1a', '#f2f2f2'],
+  border: ['#262626', '#eaeaea'],
+  'border-strong': ['#3a3a3a', '#d4d4d4'],
+  fg: ['#ededed', '#171717'],
+  muted: ['#a1a1a1', '#666666'],
+  faint: ['#6e6e6e', '#8f8f8f'],
+  'primary-bg': ['#ededed', '#171717'],
+  'primary-fg': ['#0a0a0a', '#ffffff'],
+  focus: ['#52a8ff', '#0068d6'],
+  blocked: ['#ff5f5f', '#d0262f'],
+  'needs-you': ['#f5a623', '#b25d00'],
+  running: ['#52a8ff', '#0068d6'],
+  ready: ['#3ecf72', '#1a8a45'],
+  idle: ['#8f8f8f', '#7d7d7d'],
 } as const
 
-const STATES = ['accent', 'ok', 'warn', 'bad', 'idle'] as const
+/** Tokens that are never a text colour: `--faint` fails 4.5:1, status colours are for dots only. */
+const NOT_TEXT = ['faint', 'blocked', 'needs-you', 'running', 'ready', 'idle']
+
+/** Token names L1 retires. */
+const OLD_TOKEN = /--(?:panel|panel-2|line|accent|ok|warn|bad|display|body)(?![\w-])|--[a-z0-9-]+-(?:soft|ink)(?![\w-])/gi
 
 const themes = () => [
-  ['light', light()],
   ['dark', darkMedia()],
+  ['light', light()],
 ] as const
 
 describe('tokens', () => {
   it('palette tokens match the Look', () => {
     const l = light()
     const d = darkMedia()
-    for (const [name, [lv, dv]] of Object.entries(LOOK)) {
-      expect(l[`--${name}`]?.toLowerCase(), `light --${name}`).toBe(lv)
+    for (const [name, [dv, lv]] of Object.entries(LOOK)) {
       expect(d[`--${name}`]?.toLowerCase(), `dark --${name}`).toBe(dv)
+      expect(l[`--${name}`]?.toLowerCase(), `light --${name}`).toBe(lv)
     }
     // Both dark selectors hold the same set, value for value.
     expect(darkAttr()).toEqual(d)
     // Every colour token has a dark value, and dark adds none of its own.
-    const colours = (t: Record<string, string>) =>
-      Object.keys(t).filter((k) => /^(#|hsl\(|rgb\()/i.test(t[k]!)).sort()
+    const colours = (t: Record<string, string>) => Object.keys(t).filter((k) => /^(#|hsl\(|rgb\()/i.test(t[k]!)).sort()
     expect(colours(d), 'dark colour tokens').toEqual(colours(l))
-    expect(Object.keys(d).length).toBeGreaterThan(0)
     // Dark also flips native controls and scrollbars.
     for (const sel of [':root[data-theme="dark"]', '@media (prefers-color-scheme: dark)']) {
       expect(blockAfter(tokensCss(), sel)).toMatch(/color-scheme:\s*dark/)
     }
     expect(blockAfter(tokensCss(), ':root {')).toMatch(/color-scheme:\s*light/)
-    // Font stacks from the preview.
-    expect(l['--display']).toMatch(/^"Bricolage Grotesque"/)
-    expect(l['--body']).toMatch(/^"Instrument Sans"/)
-    expect(l['--mono']).toMatch(/^"JetBrains Mono"/)
+    // Geist for the UI, Geist Mono for paths, commands and numbers.
+    expect(l['--font']).toMatch(/^"Geist",/)
+    expect(l['--mono']).toMatch(/^"Geist Mono",/)
+    // Size and radius tokens keep their names.
+    for (const name of ['--size-micro', '--size-small', '--size-dense', '--size-body', '--radius-sm', '--radius-md', '--radius-lg']) {
+      expect(l[name], name).toBeDefined()
+    }
   })
 
   it('text contrast is at least 4.5 to 1', () => {
     for (const [theme, t] of themes()) {
       const pairs: [string, string][] = []
-      for (const text of ['fg', 'muted']) for (const surface of ['bg', 'panel', 'panel-2']) pairs.push([text, surface])
-      for (const s of STATES) pairs.push([`${s}-ink`, `${s}-soft`], [`${s}-ink`, 'panel'])
-      pairs.push(['panel', 'accent'])
+      for (const text of ['fg', 'muted']) for (const surface of ['bg', 'surface', 'hover']) pairs.push([text, surface])
+      pairs.push(['primary-fg', 'primary-bg'])
       for (const [fg, bg] of pairs) {
         const a = t[`--${fg}`]
         const b = t[`--${bg}`]
@@ -154,43 +172,41 @@ describe('tokens', () => {
     }
   })
 
-  it('ink tokens keep the Look\'s hues', () => {
-    const l = light()
-    const d = darkMedia()
-    for (const s of STATES) {
-      expect(d[`--${s}-ink`]?.toLowerCase(), `dark --${s}-ink`).toBe(d[`--${s}`]?.toLowerCase())
-      const ink = l[`--${s}-ink`]
-      expect(ink, `light --${s}-ink`).toBeDefined()
-      const gap = hueGap(hueOf(ink!), hueOf(l[`--${s}`]!))
-      expect(gap, `light --${s}-ink hue drift`).toBeLessThanOrEqual(1)
-      // A base that already passes is kept as is.
-      const base = l[`--${s}`]!
-      if (contrast(base, l[`--${s}-soft`]!) >= 4.5 && contrast(base, l['--panel']!) >= 4.5) {
-        expect(ink!.toLowerCase(), `light --${s}-ink`).toBe(base)
-      }
+  it('faint and status colors are never text', () => {
+    // The guarded names are the theme's own, in both themes.
+    for (const name of NOT_TEXT) {
+      expect(light()[`--${name}`], `light --${name}`).toBeDefined()
+      expect(darkMedia()[`--${name}`], `dark --${name}`).toBeDefined()
     }
+    const banned = new RegExp(`var\\(\\s*--(?:${NOT_TEXT.join('|')})\\s*[,)]`, 'i')
+    // The detector itself catches the cases it is for, and lets icons and dots through.
+    const hits = (css: string) =>
+      rules(stripComments(css)).flatMap((r) =>
+        // An icon is drawn in currentColor; colouring an svg is not colouring text.
+        r.selectors.every((s) => /(^|[\s>])svg$/.test(s))
+          ? []
+          : declList(r.body).filter(([p, v]) => p === 'color' && banned.test(v)).map(([, v]) => `${r.selectors.join(', ')} { color: ${v} }`),
+      )
+    expect(hits('.a { color: var(--faint) } .b { color: var(--ready); } .c { color: var(--idle, red) }')).toHaveLength(3)
+    expect(hits('.a { background: var(--ready); color: var(--muted) } .b::before { background: var(--blocked) } .p svg { color: var(--ready) }')).toEqual([])
+
+    const files = cssFiles(srcDir)
+    expect(files.length).toBeGreaterThan(3)
+    for (const file of files) expect(hits(readFileSync(file, 'utf8')), relative(srcDir, file)).toEqual([])
   })
 
-  it('chips write state text in ink and keep the base colour for the dot', () => {
-    const base = stripComments(read('base.css'))
-    const chip = { 's-run': 'accent', 's-ok': 'ok', 's-you': 'warn', 's-bad': 'bad', 's-idle': 'idle' }
-    for (const [cls, s] of Object.entries(chip)) {
-      expect(base, cls).toContain(`.chip.${cls} {`)
-      const body = blockAfter(base, `.chip.${cls} {`)
-      expect(body, cls).toMatch(new RegExp(`color:\\s*var\\(--${s}-ink\\)`))
-      expect(body, cls).toMatch(new RegExp(`background:\\s*var\\(--${s}-soft\\)`))
-      expect(body, cls).toMatch(new RegExp(`--chip-dot:\\s*var\\(--${s}\\)`))
+  it('screens use only the new tokens', () => {
+    const files = cssFiles(srcDir)
+    expect(files.map((f) => relative(srcDir, f).replace(/\\/g, '/'))).toEqual(
+      expect.arrayContaining(['screens/board/board.css', 'screens/engineer/engineer.css', 'screens/runs/runs.css', 'theme/base.css']),
+    )
+    for (const file of files) {
+      const found = stripComments(readFileSync(file, 'utf8')).match(OLD_TOKEN) ?? []
+      expect(found, relative(srcDir, file)).toEqual([])
     }
-    const edge = { 'k-run': 'accent', 'k-ok': 'ok', 'k-you': 'warn', 'k-bad': 'bad' }
-    for (const [cls, s] of Object.entries(edge)) {
-      expect(blockAfter(base, `.card.${cls} {`), cls).toMatch(new RegExp(`border-left-color:\\s*var\\(--${s}\\)`))
-    }
-    for (const sel of ['.btn {', '.btn.primary {', '.input {', '.frame {', '.eyebrow {', '.mono {', ':focus-visible {']) {
-      expect(() => blockAfter(base, sel), sel).not.toThrow()
-    }
-    expect(blockAfter(base, '.btn {')).toMatch(/appearance:\s*none/)
-    expect(blockAfter(base, '.input {')).toMatch(/appearance:\s*none/)
-    expect(blockAfter(base, ':focus-visible {')).toMatch(/outline:\s*2px solid var\(--accent\)/)
+    // The pattern itself.
+    expect('var(--panel-2) var(--accent) var(--ok-soft) var(--bad-ink) var(--body)'.match(OLD_TOKEN)).toHaveLength(5)
+    expect('var(--border-strong) var(--primary-bg) var(--ready) var(--font) var(--chip-dot)'.match(OLD_TOKEN)).toBeNull()
   })
 
   it('fonts are served from the app', () => {
@@ -212,23 +228,15 @@ describe('tokens', () => {
       expect(face).toMatch(/font-display:\s*swap/)
       declared.add(`${family} ${weight}`)
     }
-    expect([...declared].sort()).toEqual(
-      [
-        'Bricolage Grotesque 600',
-        'Bricolage Grotesque 700',
-        'Instrument Sans 400',
-        'Instrument Sans 500',
-        'Instrument Sans 600',
-        'JetBrains Mono 400',
-        'JetBrains Mono 500',
-      ].sort(),
-    )
+    expect([...declared].sort()).toEqual(['Geist 400', 'Geist 500', 'Geist 600', 'Geist Mono 400', 'Geist Mono 500'])
     // Each family ships its OFL license beside the font files.
-    for (const family of ['bricolage-grotesque', 'instrument-sans', 'jetbrains-mono']) {
+    for (const family of ['geist', 'geist-mono']) {
       const license = join(publicDir, 'fonts', `${family}-OFL.txt`)
       expect(existsSync(license), license).toBe(true)
       expect(readFileSync(license, 'utf8')).toContain('SIL Open Font License')
     }
+    // The old faces are gone: only Geist files are in public/fonts.
+    for (const name of readdirSync(join(publicDir, 'fonts'))) expect(name, 'public/fonts').toMatch(/^geist-/)
     // No theme file reaches another host.
     for (const name of readdirSync(themeDir)) {
       if (name.endsWith('.test.ts') || !statSync(join(themeDir, name)).isFile()) continue
@@ -257,7 +265,7 @@ describe('tokens', () => {
     }
     // The size inside a `font:` shorthand is the token before the optional `/line-height`.
     const shorthandSize = (value: string): string => {
-      const m = /(var\(--[a-z0-9-]+\)|[\d.]+(?:rem|px))(?:\s*\/|\s+(?:var\(--(?:body|display|mono)\)|"))/i.exec(value)
+      const m = /(var\(--[a-z0-9-]+\)|[\d.]+(?:rem|px))(?:\s*\/|\s+(?:var\(--(?:font|mono)\)|"))/i.exec(value)
       if (!m) throw new Error(`font shorthand without a size: ${value}`)
       return m[1]!
     }

@@ -1,4 +1,4 @@
-/** The viewer's theme pick. `system` follows `prefers-color-scheme`. */
+/** The viewer's theme pick. `system` follows `prefers-color-scheme`; nothing stored means `dark`. */
 export type ThemeChoice = 'system' | 'light' | 'dark'
 
 /** The part of `Storage` the theme needs, so tests can pass a plain object. */
@@ -15,13 +15,16 @@ function isChoice(value: unknown): value is ThemeChoice {
   return typeof value === 'string' && (CHOICES as readonly string[]).includes(value)
 }
 
-/** The stored choice; anything missing, unknown, or unreadable reads as `system`. */
+/** The theme when nothing usable is stored. index.html's boot script follows the same rule. */
+export const DEFAULT_CHOICE: ThemeChoice = 'dark'
+
+/** The stored choice; anything missing, unknown, or unreadable reads as `dark`. */
 export function readChoice(storage: ChoiceStorage | null | undefined): ThemeChoice {
   try {
     const value = storage?.getItem(THEME_KEY)
-    return isChoice(value) ? value : 'system'
+    return isChoice(value) ? value : DEFAULT_CHOICE
   } catch {
-    return 'system'
+    return DEFAULT_CHOICE
   }
 }
 

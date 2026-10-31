@@ -19,10 +19,11 @@ export type GhReader = {
   /** The PR found by its head branch (a fix run's `fix-<slug>`, or a plan's final PR on `<plan-slug>`), with `branch` set. */
   getBranch(repoPath: string, branch: string): PrStatus | undefined
   /**
-   * Fetches the PRs that are due, by number and by head branch. `true` when the gh status or
+   * Fetches the PRs that are due, by number and by head branch. `staging` heads are asked about every
+   * PR_CACHE_MS even after a merge (every plan reuses the branch). `true` when the gh status or
    * any PR's number, state, checks, or url changed.
    */
-  refresh(repoPath: string, numbers: number[], branches?: string[]): Promise<boolean>
+  refresh(repoPath: string, numbers: number[], branches?: string[], staging?: string[]): Promise<boolean>
 }
 
 /** The reader the merge routes use: it can also drop a PR, so the next refresh fetches it again. */
@@ -34,7 +35,7 @@ export type GhCache = GhReader & {
 export const AUTH_RECHECK_MS = 60_000
 export const PR_CACHE_MS = 30_000
 export const GH_TIMEOUT_MS = 10_000
-const PR_FIELDS = 'number,state,url,statusCheckRollup'
+const PR_FIELDS = 'number,state,url,statusCheckRollup,baseRefName,mergedAt'
 const LIST_FIELDS = `${PR_FIELDS},headRefName`
 /** A branch gh can't read as a flag, with no spaces or shell characters. */
 const BRANCH = /^[A-Za-z0-9][\w./-]{0,199}$/
@@ -182,14 +183,15 @@ export function createGhReader(opts: { exec?: GhExec; now?: () => number } = {})
       (pr) => pr.state !== 'open',
     )
 
-  const refreshBranch = (repoPath: string, branch: string) =>
+  /** `reused`: a branch every plan merges through (staging), so even a merged PR on it is asked about again. */
+  const refreshBranch = (repoPath: string, branch: string, reused = false) =>
     refreshEntry(
       branchKey(repoPath, branch),
       (e) =>
         fetchInto(['pr', 'list', '--head', branch, '--state', 'all', '--json', LIST_FIELDS, '--limit', '10'], repoPath, e, (out, at) =>
           parsePrList(out, branch, at),
         ),
-      (pr) => pr.state === 'merged',
+      (pr) => !reused && pr.state === 'merged',
     )
 
   return {
@@ -204,12 +206,17 @@ export function createGhReader(opts: { exec?: GhExec; now?: () => number } = {})
         if (pr?.number === n && pr.branch !== undefined && key === branchKey(repoPath, pr.branch)) cache.delete(key)
       }
     },
-    async refresh(repoPath, numbers, branches = []) {
+    async refresh(repoPath, numbers, branches = [], staging = []) {
       let changed = await checkAuth(repoPath)
       if (status !== 'ok') return changed
       const wanted = [...new Set(numbers)].filter((n) => Number.isSafeInteger(n) && n > 0)
       const heads = [...new Set(branches)].filter((b) => BRANCH.test(b))
-      const results = await Promise.all([...wanted.map((n) => refreshPr(repoPath, n)), ...heads.map((b) => refreshBranch(repoPath, b))])
+      const reused = [...new Set(staging)].filter((b) => BRANCH.test(b) && !heads.includes(b))
+      const results = await Promise.all([
+        ...wanted.map((n) => refreshPr(repoPath, n)),
+        ...heads.map((b) => refreshBranch(repoPath, b)),
+        ...reused.map((b) => refreshBranch(repoPath, b, true)),
+      ])
       for (const r of results) changed ||= r
       return changed
     },
@@ -238,6 +245,9 @@ function prOf(data: unknown, n: number, checkedAt: number): PrStatus | undefined
   if (!state) return undefined
   const pr: PrStatus = { number: n, state, checks: rollupChecks(d.statusCheckRollup), checkedAt }
   if (typeof d.url === 'string' && d.url) pr.url = d.url
+  if (typeof d.baseRefName === 'string' && d.baseRefName) pr.base = d.baseRefName
+  const mergedAt = typeof d.mergedAt === 'string' ? Date.parse(d.mergedAt) : NaN
+  if (Number.isFinite(mergedAt)) pr.mergedAt = mergedAt
   return pr
 }
 

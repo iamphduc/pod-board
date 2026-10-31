@@ -22,10 +22,12 @@ function pngSize(file: string): { w: number; h: number } {
   return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) }
 }
 
-/** The light palette: custom properties in the first `:root {` block of the theme tokens. */
-function lightTokens(): Map<string, string> {
+/** The dark palette, the default theme: custom properties in the `:root[data-theme="dark"]` block of the theme tokens. */
+function darkTokens(): Map<string, string> {
   const css = readFileSync(join(web, 'src/theme/tokens.css'), 'utf8')
-  const block = css.slice(css.indexOf(':root {'), css.indexOf('}', css.indexOf(':root {')))
+  const at = css.indexOf(':root[data-theme="dark"]')
+  expect(at, 'dark block in tokens.css').toBeGreaterThanOrEqual(0)
+  const block = css.slice(at, css.indexOf('}', at))
   return new Map([...block.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim().toLowerCase()]))
 }
 
@@ -39,11 +41,13 @@ describe('installable manifest', () => {
     expect(m.display).toBe('standalone')
   })
 
-  it('takes its colours from the light tokens', () => {
+  it('takes its colours from the dark tokens', () => {
+    // Dark is the default theme, so the install splash and title bar are its page colour.
     const m = manifest()
-    const light = lightTokens()
-    expect(m.background_color).toBe(light.get('--bg'))
-    expect([...light.values()]).toContain(m.theme_color)
+    const bg = darkTokens().get('--bg')
+    expect(bg, 'dark --bg').toBeDefined()
+    expect(m.background_color).toBe(bg)
+    expect(m.theme_color).toBe(bg)
   })
 
   it('lists 192 and 512 px PNG icons that exist at those sizes, one maskable', () => {

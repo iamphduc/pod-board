@@ -90,3 +90,70 @@ export function planExtras(md: string): { portBase?: number; go: 'unknown' } {
     ? { portBase, go: 'unknown' }
     : { go: 'unknown' }
 }
+
+export type PlanLook = { kind: 'set' | 'none' | 'empty'; direction?: string }
+/** What a plan doc records about the steps before its sprints; each field only when the doc shows it. */
+export type PlanFacts = { grilledWith?: string; look?: PlanLook; researchLinks?: string[] }
+
+/** The doc's lines with fenced code blocks blanked, so an example never counts. */
+function unfenced(md: string): string[] {
+  let fence = false
+  return lines(md).map((line) => {
+    if (/^\s*(```|~~~)/.test(line)) {
+      fence = !fence
+      return ''
+    }
+    return fence ? '' : line
+  })
+}
+
+/** The body of the first `## <title>` section, up to the next `## ` heading; undefined with no such section. */
+function section(md: string, title: string): string | undefined {
+  const all = unfenced(md)
+  const start = all.findIndex((l) => new RegExp(`^##\\s+${title}\\s*$`, 'i').test(l.trim()))
+  if (start < 0) return undefined
+  const rest = all.slice(start + 1)
+  const end = rest.findIndex((l) => /^#{1,2}\s/.test(l))
+  return (end < 0 ? rest : rest.slice(0, end)).join('\n').trim()
+}
+
+const NO_UI = /^(?:none\b|n\/a\b|no ui\b|no visual\b)/i
+
+/**
+ * The plan doc's `Grilled-with:` value (from its metadata line, up to ` · ` or the closing `_`), its
+ * `## Look` section read as set (with the picked `direction X` if it names one), none (it says no UI),
+ * or empty, and the research reports it links (`research/<slug>.md` or `.html`), each once.
+ */
+export function planFacts(md: string): PlanFacts {
+  const out: PlanFacts = {}
+  const meta = unfenced(md).find((l) => /^_.*\bGrilled-with:/.test(l.trim()))
+  const grilled = meta && /\bGrilled-with:\s*([^·_]*)/.exec(meta)?.[1]?.trim()
+  if (grilled) out.grilledWith = grilled
+  const look = section(md, 'Look')
+  if (look !== undefined) {
+    if (look === '') out.look = { kind: 'empty' }
+    else if (NO_UI.test(look.replace(/^[-*\s]+/, ''))) out.look = { kind: 'none' }
+    else {
+      const d = /\bdirection\s+([A-Z]|\d+)\b/i.exec(look)?.[1]
+      out.look = d === undefined ? { kind: 'set' } : { kind: 'set', direction: `direction ${d.toUpperCase()}` }
+    }
+  }
+  const links = [...unfenced(md).join('\n').matchAll(/\bresearch\/([\w.-]+?)\.(?:md|html)\b/g)].map((m) => m[1]!)
+  if (links.length > 0) out.researchLinks = [...new Set(links)]
+  return out
+}
+
+/**
+ * The staging branch from `pod-docs/decisions.md`: a `## … merge target: staging` decision names it in
+ * backticks within its section (the first name holding `staging`), else pod's `pod-staging`. Undefined with no such decision.
+ */
+export function stagingBranch(decisions: string | undefined): string | undefined {
+  if (decisions === undefined) return undefined
+  const all = unfenced(decisions)
+  const start = all.findIndex((l) => /^##\s.*\bmerge target:\s*staging\b/i.test(l.trim()))
+  if (start < 0) return undefined
+  const rest = all.slice(start + 1)
+  const end = rest.findIndex((l) => /^##\s/.test(l))
+  const body = (end < 0 ? rest : rest.slice(0, end)).join('\n')
+  return /`([A-Za-z0-9][\w./-]*staging[\w./-]*)`/.exec(body)?.[1] ?? 'pod-staging'
+}

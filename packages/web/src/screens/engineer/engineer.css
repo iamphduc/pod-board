@@ -19,7 +19,7 @@
 }
 
 .ev-side + .ev-side {
-  border-left: 1px solid var(--line);
+  border-left: 1px solid var(--border);
 }
 
 .ev-bar {
@@ -31,8 +31,9 @@
 
 .ev-title {
   margin-right: auto;
-  font-family: var(--display);
-  font-weight: 700;
+  font-family: var(--font);
+  font-weight: 600;
+  letter-spacing: -0.02em;
   font-size: var(--size-title);
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -90,7 +91,7 @@
   flex-direction: column-reverse;
   max-height: 22rem;
   overflow: auto;
-  background: var(--panel-2);
+  background: var(--surface);
   border-radius: var(--radius-sm);
 }
 
@@ -131,7 +132,7 @@
   font-style: italic;
 }
 
-/* A result's mark takes its chip's colour. */
+/* A result's mark: a dot in its state's colour beside the word, which stays the log's text colour. */
 .ev-res {
   margin-left: 4px;
   display: inline-flex;
@@ -145,15 +146,15 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: currentColor;
+  background: var(--dot, var(--idle));
 }
 
 .ev-res.s-ok {
-  color: var(--ok-ink);
+  --dot: var(--ready);
 }
 
 .ev-res.s-bad {
-  color: var(--bad-ink);
+  --dot: var(--blocked);
 }
 
 @media (max-width: 820px) {
@@ -163,6 +164,6 @@
 
   .ev-side + .ev-side {
     border-left: 0;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid var(--border);
   }
 }

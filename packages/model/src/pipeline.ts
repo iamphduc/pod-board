@@ -9,7 +9,8 @@ import { formatTokens, isDone } from './pod-flow/model.ts'
 import type { PlanModel, SliceModel, SprintModel, WaveModel } from './run-model.ts'
 import { agentState, IDLE_GAP_MS, STALE_MS } from './transcript.ts'
 
-export type StepState = 'done' | 'live' | 'wait' | 'you' | 'blocked' | 'unknown'
+/** `skipped`: the plan didn't take this step (no research, no UI); the flow shows it dim. */
+export type StepState = 'done' | 'live' | 'wait' | 'you' | 'blocked' | 'unknown' | 'skipped'
 /** `merge` is set only on a step that shows a PR waiting on you (see `waitingPrs`). */
 export type Step = { key: string; label: string; state: StepState; detail: string; merge?: { number: number } }
 export type Stage = { key: string; caption: string; steps: Step[] }
@@ -61,6 +62,18 @@ const PENDING_GATE =
  * `someday: …`, an agent default, a note that names a gate mid-sentence) don't stop it. Run state
  * still follows `isHalted` (BLOCKED → blocked; a PENDING reads needs-you).
  */
+const GATE_NAMES = ['blocked-concern', 'plan-review-fail', 'auto-merge-fail', 'inter-wave-verify', 'safety-bound', 'escalation-valve', 'plan-complete']
+
+/** The gate (1–7) an autopilot halt entry starts with, by its number or else its name; undefined when it isn't a halt. */
+export function haltGate(body: string): number | undefined {
+  const head = PENDING_GATE.exec(body)?.[0]
+  if (head === undefined) return undefined
+  const n = /gate\s*([1-7])\b/i.exec(head)?.[1]
+  if (n !== undefined) return Number(n)
+  const i = GATE_NAMES.findIndex((name) => head.toLowerCase().endsWith(name))
+  return i < 0 ? undefined : i + 1
+}
+
 export const isAutopilotStopped = (plan: Pick<PlanModel, 'queue'>) =>
   isHalted(plan) ||
   plan.queue.some(
@@ -194,15 +207,30 @@ export function waveHandedPr(repo: BoardRepo, plan: PlanModel, s: SprintModel, w
 export const finalWaitingPr = (repo: BoardRepo, plan: PlanModel, now: number): number | undefined =>
   isRun(repo, plan, now) ? pendingHandBack(repo, plan) : undefined
 
+/** A plan run's state, as the runs list shows it. */
+export type PlanState = 'blocked' | 'needs-you' | 'running' | 'idle'
+
+/** First match wins: blocked → needs-you (an ask, or a wave PR waiting on you) → running → idle. */
+export function planState(repo: BoardRepo, plan: PlanModel, now: number): PlanState {
+  const current = plan.sprints.find((s) => s.slug === plan.currentSprint)
+  const slices = current?.waves.flatMap((w) => w.slices) ?? []
+  if (isHalted(plan) || slices.some(isBlockedSlice)) return 'blocked'
+  if (plan.queue.some((e) => e.needsYou) || current?.waves.some((w) => waveWaitingPr(repo, plan, current, w, now) !== undefined)) return 'needs-you'
+  const wave = current?.waves.find((w) => w.wave === current.currentWave)
+  if (planAgentRunning(repo, plan, now) || wave?.slices.some((s) => s.status === 'pushed')) return 'running'
+  return 'idle'
+}
+
 // ---- The pipeline ----
 
-type Ctx = { repo: BoardRepo; plan: PlanModel; now: number; agents: { a: AgentRun; role: AgentRole; live: boolean }[] }
+type Ctx = { repo: BoardRepo; plan: PlanModel; now: number; agents: { a: AgentRun; role: AgentRole; live: boolean }[]; state: PlanState }
 
 /** The plan's pipeline stages and slice log; undefined for a plan the repo doesn't have. Never throws. */
 export function buildPipeline(repo: BoardRepo, planSlug: string, now: number): Pipeline | undefined {
   const plan = repo.model.plans.find((p) => p.slug === planSlug)
   if (!plan) return undefined
-  const ctx: Ctx = { repo, plan, now, agents: repo.agents.map((a) => ({ a, role: roleOf(a, plan), live: isRunning(a, now) })) }
+  const agents = repo.agents.map((a) => ({ a, role: roleOf(a, plan), live: isRunning(a, now) }))
+  const ctx: Ctx = { repo, plan, now, agents, state: planState(repo, plan, now) }
   const n = plan.sprints.length
   const stages: Stage[] = [
     {
@@ -234,8 +262,9 @@ function sprintSteps(ctx: Ctx, s: SprintModel): Step[] {
       const step: Step = { key: `${s.slug}/wave-${w.wave}`, label: `Wave ${w.wave}`, state, detail: waveDetail(ctx, s, w, state) }
       const n = state === 'you' ? waveWaitingPr(ctx.repo, ctx.plan, s, w, ctx.now) : undefined
       if (n !== undefined) return Object.assign(step, { detail: `PR #${n} · ${waitingWords(ctx.plan)}`, merge: { number: n } })
-      // Autopilot, not halted: the PR is pod's to merge. No merge, and the wave reads live, not you.
-      const auto = state === 'live' && isAutopilot(ctx.plan) ? waveHandedPr(ctx.repo, ctx.plan, s, w, ctx.now) : undefined
+      // Autopilot, not stopped at this wave: the PR is pod's to merge. No merge here; the card's state is
+      // the wave's own (running while its engineer works, else the run's), and its detail says pod merges.
+      const auto = state !== 'done' && isAutopilot(ctx.plan) && isWaveLive(ctx, s, w) ? waveHandedPr(ctx.repo, ctx.plan, s, w, ctx.now) : undefined
       if (auto !== undefined) step.detail = `PR #${auto} · autopilot merges`
       return step
     })
@@ -269,8 +298,14 @@ function waveState(ctx: Ctx, s: SprintModel, w: WaveModel): StepState {
   const open = new Set(w.slices.filter((x) => !isSliceDone(x)).map((x) => x.code))
   const asks = ctx.plan.queue.some((e) => e.needsYou && e.slice !== undefined && open.has(e.slice) && (e.sprint === undefined || e.sprint === s.slug))
   if (asks || waveWaitingPr(ctx.repo, ctx.plan, s, w, ctx.now) !== undefined) return 'you'
-  return isWaveLive(ctx, s, w) ? 'live' : 'wait'
+  if (!isWaveLive(ctx, s, w)) return 'wait'
+  // The wave in progress: running while one of its own engineers runs; otherwise the run's state
+  // (running, as when autopilot merges its PR; blocked; needs you; or waiting when the run is idle).
+  return waveAgents(ctx, s, w).some((x) => x.live) ? 'live' : IN_PROGRESS_STEP[ctx.state]
 }
+
+/** The flow's wave in progress with no engineer of its own at work, by the run's state. */
+const IN_PROGRESS_STEP: Record<PlanState, StepState> = { blocked: 'blocked', 'needs-you': 'you', running: 'live', idle: 'wait' }
 
 /** The current wave of the current sprint, a pushed slice, or one of the wave's engineers running. */
 function isWaveLive(ctx: Ctx, s: SprintModel, w: WaveModel): boolean {
@@ -322,7 +357,8 @@ function joinedLength(spans: [number, number][]): number {
 }
 
 function waveDetail(ctx: Ctx, s: SprintModel, w: WaveModel, state: StepState): string {
-  if (state === 'wait') return `${count(w.slices.length, 'slice')} planned`
+  // A wave not reached yet; the wave in progress keeps its plain count while it waits.
+  if (state === 'wait' && !isWaveLive(ctx, s, w)) return `${count(w.slices.length, 'slice')} planned`
   const agents = waveAgents(ctx, s, w)
   if (agents.length === 0) return count(w.slices.length, 'slice')
   const live = state === 'live'
@@ -384,8 +420,13 @@ function logStatus(ctx: Ctx, s: SprintModel, w: WaveModel): string {
   if (w.slices.every(isSliceDone)) return numbered === undefined ? 'merged' : `merged PR #${numbered}`
   const open = w.slices.find((x) => x.pr.state === 'open' && x.pr.number !== undefined)?.pr.number
   if (open !== undefined) return `PR #${open} open`
-  return isWaveLive(ctx, s, w) ? 'running' : 'planned'
+  if (!isWaveLive(ctx, s, w)) return 'planned'
+  // An engineer at work on this wave is a fact about it: running. Otherwise the wave in progress says
+  // what the run does (running, blocked, needs you, or waiting when idle), as the flow's wave card does.
+  return waveAgents(ctx, s, w).some((x) => x.live) ? 'running' : IN_PROGRESS[ctx.state]
 }
+
+const IN_PROGRESS: Record<PlanState, string> = { blocked: 'blocked', 'needs-you': 'needs you', running: 'running', idle: 'waiting' }
 
 const NO_CONFIDENCE = new Set(['', '—', '-'])
 

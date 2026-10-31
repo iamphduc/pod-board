@@ -30,6 +30,8 @@ Decision: keep it private until the human checks the fixtures, then make it publ
 Consequences: fixtures must still be scrubbed as if public.
 
 ## 2026-10-19 — light chip text: darker ink tokens
+_Obsolete: the calm-dashboard Look (2026-10-28) draws a state as a dot plus a word in `--fg` or `--muted`, with no fill, so chip text no longer takes a state color and the `--*-ink` and `--*-soft` tokens are gone. See the 2026-10-28 entry below._
+
 Context: the approved light theme's chip text fails 4.5:1 on its soft fills (queue entry from sprint server-runs, slice L1; draft `pod-docs/design-drafts/chip-contrast.html`).
 Decision: keep option A as built: light chip text uses the `--*-ink` tokens (the same hue, darkened only enough to pass); dots, card edges, and fills keep the Look's colors. Dark is unchanged.
 Consequences: light chip text is slightly darker than the preview; `tokens.test.ts` keeps the 4.5:1 check.
@@ -107,6 +109,7 @@ Consequences: the board never infers "waiting for go" from transcripts; the Go b
 Context: sprint `queue-and-replies` was planned to wait for claude-pod's `**Answer (human):**` queue format. claude-pod doesn't have it yet, and the human wants all hand-offs on the board website.
 Decision: build the board side now against the master plan's format: a `**Answer (human):** <text>` line on the entry in `pod-docs/handoff-queue.md`. The claude-pod change (pod reads the line like a chat answer) goes to the claude-pod agents in parallel.
 Consequences: until claude-pod reads the line, an answer written from the board sits in the queue unread, and pod still waits for the chat. The board says so where you answer. End-to-end verification of answers waits for the claude-pod change. If claude-pod settles on a different format, the board's writer follows it.
+Update 2026-10-27: claude-pod #96 (pod 0.8.0+) reads the line at wave start and on resume, so the form now says to answer here, then Continue, with no chat step. On a fix run or repo row, which `/pod:fix` or no run handles, it says the next `/pod:code` wave reads it.
 
 ## 2026-10-22 — a closed hand-back PR still counts as waiting (agent default — override anytime)
 Context: a plan's final PR whose hand-back is pending but whose PR was closed (not merged) still reads `you merge` and offers Merge, which then fails with `PR is closed` (sprint merge-actions, P1).
@@ -162,3 +165,32 @@ Consequences: a wait over 15 minutes that doesn't end in a tool result (a backgr
 Context: pod writes the `autopilot-run` marker only in sprint docs, so once a plan's last sprint is archived the board can't tell it ran on autopilot, and its final PR reads `PR #N · you merge` with Merge. The options were to read the marker from the archived sprint docs, or to ask claude-pod to keep it in the plan doc.
 Decision: keep `you merge` on the final PR. It is right at gate 2 (review still failing) and at gate 7 (the staging PR), where the human merges; it is wrong only while autopilot is about to merge a final PR that passed review.
 Consequences: in that window, Merge on the board races autopilot to the same merge. Revisit if pod writes the marker in the plan doc.
+
+## 2026-10-28 — states are dots plus words; the ink tokens go
+Context: the calm-dashboard plan's Look (draft `pod-docs/design-drafts/calm-dashboard-look-3.html`) replaces the board-read look: black and white, Geist fonts, no colored card edges or fills, dark first (sprint calm-screen, slice L1).
+Decision: every state is a dot in its status color plus a word in `--fg` or `--muted`; status colors and `--faint` are never a text color (`tokens.test.ts` checks every CSS file under `packages/web/src`). This makes the 2026-10-19 "light chip text: darker ink tokens" decision obsolete. Nothing stored for the theme reads as Dark.
+Consequences: an error or a merge reason is plain text with a colored dot before it. The `--*-ink` and `--*-soft` tokens, and the other board-read names, are gone; screens use only the new tokens.
+
+## 2026-10-28 — app manifest colors follow the Dark default
+
+The installed app's `manifest.webmanifest` uses `#000000` for `background_color` and `theme_color`, matching the new Dark default (plan `calm-dashboard`), so no white splash or browser bar shows before a dark page. `pwa.test.ts` checks them against the dark `--bg`. Chosen by the human at gate 1 of the calm-screen sprint.
+
+## 2026-10-28 — Next step card wording (agent default — override anytime)
+
+Plan `calm-dashboard`. Answer items: the title is the entry body cut to 80 characters; the detail is "The run is stopped until you answer." (`BLOCKED`) or "pod goes on with the value in use until you answer." (`PENDING`). PR items: `Merge PR #N` with "Wave W of <sprint> is handed back to you.", "The plan's final PR is reviewed and waits for you." or "The fix PR is reviewed and waits for you." Reply items: `Send <word>` with the reply row's reason. Change it in `packages/web/src/screens/runs/next-step.ts`.
+
+## 2026-10-28 — an autopilot halt and a waiting PR on the Next step card (agent default — override anytime)
+
+Plan `calm-dashboard`. A `BLOCKED` autopilot halt takes the card. A `PENDING` gate stop (for example gate 6, a PR held back for you to merge) lets the PR take the card, and the halt is listed in the Waiting tab. Pinned by `next-step.test.ts › autopilot`.
+
+## 2026-10-28 — the no-session note sits behind "Run it yourself" (agent default — override anytime)
+
+Plan `calm-dashboard`. On a reply, the card shows only `Copy continue` (or Continue / Go) and `Run it yourself`; the "No pod session found for this run…" note sits behind `Run it yourself` with the session line and the `cd` / `claude --resume` commands. Change it in `packages/web/src/screens/runs/ReplyPanel.tsx`.
+
+## 2026-10-28 — folder picker Add with a partly typed name (agent default — override anytime)
+
+Plan `calm-dashboard`. Add posts a folder only when the typed text ends in a separator, or its last part is a listed folder's whole name (any case); otherwise Add is disabled, and the footer shows the exact path Add will post. Posting the open folder instead would silently add the parent of what you typed. Change it in `packages/web/src/screens/runs/folder-picker.ts`.
+
+## 2026-10-28 — Add repo opens a modal dialog from the sidebar
+
+The human asked for the old full-height sidebar back, with Add repo at its bottom opening the folder picker in a dialog. That dialog is the one exception to the calm-dashboard Look's "controls open in place, never a modal" rule. The ⋯ menu sits at the right end of the run header (fix PR https://github.com/iamphduc/pod-board/pull/56).

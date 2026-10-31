@@ -76,7 +76,7 @@ async function transcript(repoPath: string, id: string, agentType: string, promp
   await writeFile(join(sub, `agent-${id}.jsonl`), lines.map((l) => JSON.stringify(l)).join('\n') + '\n')
 }
 
-type FakeGh = GhReader & { refreshed: { repoPath: string; numbers: number[]; branches?: string[] }[]; asked: number[] }
+type FakeGh = GhReader & { refreshed: { repoPath: string; numbers: number[]; branches?: string[]; staging?: string[] }[]; asked: number[] }
 
 function fakeGh(prs: Record<number, PrStatus['state']> = {}, status: GhStatus = 'ok', byBranch: Record<string, PrStatus> = {}): FakeGh {
   const refreshed: FakeGh['refreshed'] = []
@@ -92,8 +92,13 @@ function fakeGh(prs: Record<number, PrStatus['state']> = {}, status: GhStatus = 
       return state ? { number: n, state, checks: 'pass', checkedAt: NOW } : undefined
     },
     getBranch: (_repoPath, branch) => byBranch[branch],
-    async refresh(repoPath, numbers, branches = []) {
-      refreshed.push({ repoPath, numbers: [...numbers], ...(branches.length > 0 ? { branches: [...branches] } : {}) })
+    async refresh(repoPath, numbers, branches = [], staging = []) {
+      refreshed.push({
+        repoPath,
+        numbers: [...numbers],
+        ...(branches.length > 0 ? { branches: [...branches] } : {}),
+        ...(staging.length > 0 ? { staging: [...staging] } : {}),
+      })
       return false
     },
   }
@@ -441,6 +446,27 @@ describe('board service', () => {
     expect(board.repos[0]!.prs).toEqual([pr])
     const ship = model.buildPipeline(board.repos[0]!, 'ui-polish', NOW)?.stages.find((s) => s.key === 'ship')?.steps
     expect(ship).toEqual([{ key: 'final-pr', label: 'Final PR', state: 'wait', detail: 'PR #91 · after review' }])
+  })
+
+  test("a final PR into a staging branch: refreshGh asks gh for that branch too, and the Board has its PR", async () => {
+    // ui-polish's final PR #91 merged into `ui-polish-staging`; the staging PR #95 to main is open.
+    const repo = copyFixture('chess-web', 'chess-web-ui-polish')
+    await writeFile(join(repo, 'pod-docs', 'handoff-queue.md'), '# Handoff Queue\n')
+    await claim(3200, repo, 'ui-polish')
+    const path = normalizeRepoPath(repo, platform)
+    const final: PrStatus = { number: 91, state: 'merged', checks: 'pass', checkedAt: NOW, branch: 'ui-polish', base: 'ui-polish-staging' }
+    const staging: PrStatus = { number: 95, state: 'open', checks: 'pass', checkedAt: NOW, branch: 'ui-polish-staging', base: 'main' }
+    const gh = fakeGh({}, 'ok', { 'ui-polish': final, 'ui-polish-staging': staging })
+    const service = createBoardService(deps(gh))
+    const board = await service.build()
+    await service.refreshGh(board)
+    expect(gh.refreshed).toEqual([{ repoPath: path, numbers: [], branches: ['ui-polish'], staging: ['ui-polish-staging'] }])
+    expect(board.repos[0]!.prs).toEqual([final, staging])
+    const ship = model.buildFlow(board.repos[0]!, 'ui-polish', NOW)?.find((s) => s.key === 'ship')?.steps
+    expect(ship?.map((s) => [s.label, s.state, s.detail])).toEqual([
+      ['Final PR', 'done', 'merged PR #91'],
+      ['Staging → main', 'you', 'PR #95 · you merge'],
+    ])
   })
 
   test('a PR found by branch that is also a numbered live PR is on the Board once', async () => {

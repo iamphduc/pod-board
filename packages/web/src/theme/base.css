@@ -1,4 +1,8 @@
-/* Base styles and the shared state classes. Screen layouts live with their screens. */
+/*
+ * Base styles and the shared classes every screen uses (the plan's ## Look and
+ * pod-docs/design-drafts/calm-dashboard-look-3.html). Screen layouts live with
+ * their screens. Colours come from tokens.css only.
+ */
 
 *,
 *::before,
@@ -15,7 +19,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font-family: var(--body);
+  font-family: var(--font);
   font-size: var(--size-body);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
@@ -24,10 +28,10 @@ body {
 h1,
 h2,
 h3 {
-  font-family: var(--display);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  line-height: 1.15;
+  font-family: var(--font);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
   text-wrap: balance;
   margin: 0;
 }
@@ -42,19 +46,27 @@ h2 {
 
 h3 {
   font-size: var(--size-title);
-  font-weight: 600;
 }
 
 p {
   margin: 0;
 }
 
+/* Links are the text colour with a grey underline; hover turns it to the focus colour. */
 a {
-  color: var(--accent);
+  color: var(--fg);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--focus);
+  text-decoration-color: currentColor;
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -65,7 +77,7 @@ a {
 .eyebrow {
   font: 500 var(--size-micro) / 1 var(--mono);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.06em;
   color: var(--muted);
 }
 
@@ -75,129 +87,233 @@ a {
 }
 
 .frame {
-  background: var(--panel);
-  border: 1px solid var(--line);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   min-width: 0;
 }
 
-/* Chips: state text in its ink on the soft fill; the dot keeps the base colour. */
-.chip {
+/*
+ * Status: a dot and a word, never colour alone. The word stays in --fg or
+ * --muted; only the dot takes the status colour. .chip keeps its markup
+ * (<span class="chip s-…">) and looks the same.
+ */
+.chip,
+.status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font: 500 var(--size-micro) / 1 var(--mono);
-  padding: 4px 8px;
-  border-radius: var(--radius-pill);
+  gap: 8px;
+  font: 500 var(--size-small) / 1.2 var(--font);
   white-space: nowrap;
-  color: var(--fg);
-  background: var(--panel-2);
+  color: var(--muted);
+  background: transparent;
+  --dot: var(--idle);
 }
 
-.chip::before {
+.chip::before,
+.status::before {
   content: "";
   flex: none;
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--chip-dot, currentColor);
+  background: var(--dot, var(--idle));
 }
 
-.chip.s-run {
-  color: var(--accent-ink);
-  background: var(--accent-soft);
-  --chip-dot: var(--accent);
+.chip.s-bad,
+.status.s-bad {
+  color: var(--fg);
+  --dot: var(--blocked);
 }
 
-.chip.s-ok {
-  color: var(--ok-ink);
-  background: var(--ok-soft);
-  --chip-dot: var(--ok);
+.chip.s-you,
+.status.s-you {
+  color: var(--fg);
+  --dot: var(--needs-you);
 }
 
-.chip.s-you {
-  color: var(--warn-ink);
-  background: var(--warn-soft);
-  --chip-dot: var(--warn);
+.chip.s-run,
+.status.s-run {
+  --dot: var(--running);
 }
 
-.chip.s-bad {
-  color: var(--bad-ink);
-  background: var(--bad-soft);
-  --chip-dot: var(--bad);
+.chip.s-ok,
+.status.s-ok {
+  --dot: var(--ready);
 }
 
-.chip.s-idle {
-  color: var(--idle-ink);
-  background: var(--idle-soft);
-  --chip-dot: var(--idle);
+.chip.s-idle,
+.status.s-idle {
+  --dot: var(--idle);
 }
 
-/* Cards: the left edge carries the state. */
+/*
+ * A running dot breathes: its opacity eases down to 0.45 and back over 2 s. Only the dot animates,
+ * never its label or card, and only opacity, so it stays cheap. Screen 1's flow marks use it too.
+ */
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.chip.s-run::before,
+.status.s-run::before {
+  animation: breathe 2s ease-in-out infinite;
+}
+
+/* Reduced motion: the dot stays solid. */
+@media (prefers-reduced-motion: reduce) {
+  .chip.s-run::before,
+  .status.s-run::before {
+    animation: none;
+  }
+}
+
+/* Cards: plain. No coloured edge and no colour fill; the status dot carries the state. */
 .card {
   display: grid;
-  gap: 6px;
-  padding: 9px 10px;
-  background: var(--panel);
+  gap: 8px;
+  padding: 24px;
+  background: var(--surface);
   color: var(--fg);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--idle);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
 }
 
-.card.k-run {
-  border-left-color: var(--accent);
+/* Nothing to do: a quiet dashed outline. */
+.card.calm {
+  background: transparent;
+  border-style: dashed;
 }
 
-.card.k-ok {
-  border-left-color: var(--ok);
-}
+/* The wave board still puts .k-run, .k-ok, .k-you and .k-bad on its cards; they draw nothing. */
 
-.card.k-you {
-  border-left-color: var(--warn);
-}
-
-.card.k-bad {
-  border-left-color: var(--bad);
-}
-
-/* Buttons and inputs drop the browser's own look. */
+/*
+ * Buttons: 40 px tall with 20 px sides, or .sm at 32 px with 12 px sides;
+ * labels 14 px / 500 at both sizes. .lead (icon before the label) and .trail
+ * (icon after) cut the icon side to 16 px (10 px small) so the label looks
+ * centred. .icon is square and icon only, and needs an aria-label.
+ */
 .btn {
   appearance: none;
   -webkit-appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
-  font: 600 var(--size-small) / 1 var(--body);
-  padding: 8px 12px;
+  height: 40px;
+  padding: 0 20px;
+  font: 500 var(--size-dense) / 1 var(--font);
+  white-space: nowrap;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
   color: var(--fg);
   cursor: pointer;
   text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
 }
 
 .btn:hover {
-  border-color: var(--muted);
+  background: var(--hover);
+  color: var(--fg);
 }
 
-.btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--panel);
+.btn:active {
+  background: var(--border);
+}
+
+.btn svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.btn.sm {
+  height: 32px;
+  padding: 0 12px;
+  gap: 6px;
+}
+
+.btn.lead {
+  padding-left: 16px;
+  gap: 6px;
+}
+
+.btn.trail {
+  padding-right: 16px;
+  gap: 6px;
+}
+
+/* Beside a 14 px / 500 label, the icon's line matches the label's stem. */
+.btn.lead svg,
+.btn.trail svg {
+  stroke-width: 1.75;
+}
+
+.btn.sm.lead {
+  padding-left: 10px;
+}
+
+.btn.sm.trail {
+  padding-right: 10px;
+}
+
+.btn.icon {
+  width: 40px;
+  padding: 0;
+}
+
+.btn.sm.icon {
+  width: 32px;
+  padding: 0;
+}
+
+/* Primary: the one main action. Black on white in light, white on black in dark, in every state. */
+.btn.primary,
+.btn.primary:hover,
+.btn.primary:active {
+  background: var(--primary-bg);
+  border-color: var(--primary-bg);
+  color: var(--primary-fg);
 }
 
 .btn.primary:hover {
-  border-color: var(--fg);
+  opacity: 0.88;
+}
+
+.btn.primary:active {
+  opacity: 0.76;
 }
 
 .btn:disabled,
 .btn[aria-disabled="true"] {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.5;
+}
+
+/* Quiet button (the draft's ghost): no fill or frame until hovered, for the lesser choice (Cancel). */
+.btn.quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+.btn.quiet:hover {
+  background: var(--hover);
+  border-color: transparent;
+  color: var(--fg);
 }
 
 .input {
@@ -205,11 +321,12 @@ a {
   -webkit-appearance: none;
   margin: 0;
   min-width: 0;
-  font: 400 var(--size-small) / 1.3 var(--mono);
-  padding: 8px 10px;
+  height: 40px;
+  font: 400 var(--size-dense) / 1.3 var(--font);
+  padding: 0 12px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
   color: var(--fg);
 }
 
@@ -223,32 +340,23 @@ a {
 }
 
 .input:focus-visible {
-  border-color: var(--accent);
+  outline: 2px solid var(--focus);
+  outline-offset: 0;
+  border-color: var(--fg);
 }
 
 .input[aria-invalid="true"] {
-  border-color: var(--bad);
+  border-color: var(--blocked);
 }
 
-/* Quiet button: no fill or frame until hovered, for the lesser choice (Cancel). */
-.btn.quiet {
-  background: transparent;
-  border-color: transparent;
-  color: var(--muted);
-}
-
-.btn.quiet:hover {
-  background: var(--panel-2);
-  border-color: var(--line);
-  color: var(--fg);
-}
-
-/* Multi-line input: <textarea class="input">. Body font, grows downward only. */
+/* Multi-line input: <textarea class="input">. Grows downward only. */
 textarea.input {
   display: block;
   width: 100%;
+  height: auto;
   min-height: 72px;
-  font: 400 var(--size-small) / 1.45 var(--body);
+  padding: 10px 12px;
+  font: 400 var(--size-dense) / 1.45 var(--font);
   resize: vertical;
 }
 
@@ -263,56 +371,140 @@ textarea.input {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin: 0;
   padding: 4px 0;
   border: 0;
   background: none;
   color: var(--fg);
-  font: 500 var(--size-micro) / 1 var(--mono);
+  font: 400 var(--size-dense) / 1.2 var(--font);
   cursor: pointer;
 }
 
 .switch::before {
   content: "";
   flex: none;
-  width: 30px;
+  width: 32px;
   height: 18px;
-  border: 1px solid var(--muted);
   border-radius: var(--radius-pill);
-  background: var(--panel-2);
+  background: var(--border-strong);
+  transition: background-color 0.15s ease;
 }
 
 .switch::after {
   content: "";
   position: absolute;
   top: 50%;
-  left: 4px;
-  width: 10px;
-  height: 10px;
-  margin-top: -5px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
   border-radius: 50%;
-  background: var(--muted);
+  background: var(--bg);
   transition: transform 0.15s ease;
 }
 
 .switch[aria-checked="true"]::before {
-  border-color: var(--accent);
-  background: var(--accent);
+  background: var(--fg);
 }
 
 .switch[aria-checked="true"]::after {
-  background: var(--panel);
-  transform: translateX(12px);
-}
-
-.switch:hover::before {
-  border-color: var(--fg);
+  background: var(--bg);
+  transform: translateX(14px);
 }
 
 .switch:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.5;
+}
+
+/* Tabs: <button class="tab" aria-expanded>; .n is the count. The open tab is underlined. */
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 0;
+  background: none;
+  font: 500 var(--size-dense) / 1 var(--font);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--fg);
+}
+
+.tab[aria-expanded="true"] {
+  color: var(--fg);
+}
+
+.tab[aria-expanded="true"]::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--fg);
+}
+
+.tab .n {
+  margin-left: 6px;
+  font: 400 var(--size-micro) / 1 var(--mono);
+  color: var(--muted);
+}
+
+/* Menu: the only element with a shadow. */
+.menu {
+  min-width: 248px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: var(--size-dense);
+  box-shadow: 0 12px 32px var(--shadow);
+}
+
+/* Segmented choice: buttons with aria-pressed. */
+.seg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.seg > button {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 1;
+  margin: 0;
+  height: auto;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: 500 var(--size-micro) / 1.3 var(--font);
+  cursor: pointer;
+}
+
+.seg > button:hover {
+  color: var(--fg);
+}
+
+.seg > button[aria-pressed="true"] {
+  background: var(--hover);
+  color: var(--fg);
 }
 
 /*
@@ -321,12 +513,12 @@ textarea.input {
  */
 .inplace {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  padding: 12px;
-  background: var(--panel-2);
+  padding: 16px;
+  background: var(--surface);
   color: var(--fg);
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
 
@@ -337,12 +529,16 @@ textarea.input {
   gap: 8px;
 }
 
-/* Phone: every control is a 44 px touch target. */
+/* Phone: every control is a 44 px touch target, and icon buttons are 44 × 44. */
 @media (max-width: 480px) {
   .btn,
   .input,
   .switch {
     min-height: 44px;
+  }
+
+  .btn.icon {
+    min-width: 44px;
   }
 
   .inplace-actions {

@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calm dashboard: simpler C</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f4f5f8; --panel:#fff; --panel-2:#eef0f5; --line:#d9dde7; --fg:#161a26; --muted:#5d6478;
+  --accent:#2f55d4; --accent-soft:#e4e9fb;
+  --ok:#1d8a55; --ok-soft:#dff3e8; --you:#b26a00; --you-soft:#fbefd9; --bad:#c2373a; --bad-soft:#f9e1e1; --idle:#7a8194; --idle-soft:#eceef3;
+  --display:'Bricolage Grotesque',system-ui,sans-serif; --body:'Instrument Sans',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg:#0f121a; --panel:#171b26; --panel-2:#1e2331; --line:#2c3344; --fg:#e8eaf1; --muted:#9aa1b4;
+  --accent:#7e9bff; --accent-soft:#232c4d;
+  --ok:#4fc58a; --ok-soft:#173326; --you:#f0ae47; --you-soft:#3a2c14; --bad:#f07a7c; --bad-soft:#3d1d20; --idle:#8b92a6; --idle-soft:#232836;
+  color-scheme: dark;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.45 var(--body); }
+h1,h2,h3 { font-family:var(--display); margin:0; }
+.page { max-width:1300px; margin:0 auto; padding:24px 16px 64px; }
+.intro { display:flex; flex-wrap:wrap; gap:12px 24px; align-items:flex-start; justify-content:space-between; margin-bottom:20px; }
+.intro p { margin:6px 0 0; color:var(--muted); max-width:72ch; }
+.cols { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:20px; }
+@media (max-width: 860px) { .cols { grid-template-columns:1fr; } }
+.col h2 { font-size:20px; margin-bottom:4px; }
+.col > p { margin:0 0 12px; color:var(--muted); font-size:14px; }
+.sec { margin-top:28px; }
+.sec > h2 { font-size:20px; margin-bottom:10px; }
+.lbl { font-size:12px; color:var(--muted); margin:14px 0 6px; text-transform:uppercase; letter-spacing:.04em; }
+
+.chip { display:inline-flex; align-items:center; gap:6px; font:500 12px/1 var(--body); padding:4px 8px; border-radius:999px; white-space:nowrap; }
+.chip::before { content:''; width:7px; height:7px; border-radius:50%; background:currentColor; }
+.chip.ok { background:var(--ok-soft); color:var(--ok); } .chip.you { background:var(--you-soft); color:var(--you); }
+.chip.bad { background:var(--bad-soft); color:var(--bad); } .chip.idle { background:var(--idle-soft); color:var(--idle); }
+.chip.live { background:var(--accent-soft); color:var(--accent); }
+.btn { font:500 14px/1 var(--body); color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 14px; white-space:nowrap; cursor:pointer; }
+.btn:hover { background:var(--panel-2); }
+.btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+:root[data-theme="dark"] .btn.primary { color:#0f121a; }
+.btn.quiet { background:transparent; border-color:transparent; color:var(--muted); }
+.btn.sm { padding:6px 10px; font-size:13px; }
+.mono { font-family:var(--mono); font-size:13px; }
+.muted { color:var(--muted); }
+a { color:var(--accent); text-decoration:none; }
+.switch { display:inline-flex; align-items:center; gap:8px; font:500 13px var(--body); color:var(--fg); background:none; border:0; padding:0; }
+.switch::before { content:''; width:30px; height:18px; border-radius:9px; background:var(--line); background-image:radial-gradient(circle at 9px 9px,var(--panel) 6px,transparent 6.5px); }
+.switch.on::before { background:var(--accent); background-image:radial-gradient(circle at 21px 9px,#fff 6px,transparent 6.5px); }
+
+.phone { width:375px; max-width:100%; margin:0 auto; border:1px solid var(--line); border-radius:18px; overflow:hidden; background:var(--bg); font-size:15px; min-height:700px; }
+.scr { padding:12px 12px 16px; }
+.appbar { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--line); background:var(--panel); }
+.brand { font:700 16px var(--display); }
+.sp { flex:1; }
+.menu-btn { width:34px; height:34px; display:inline-grid; place-items:center; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--fg); font:700 16px var(--body); }
+.menu { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:6px; font-size:14px; width:230px; box-shadow:0 6px 20px rgb(0 0 0 / .12); }
+.menu .mi { padding:8px 10px; border-radius:6px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.menu .seg { display:flex; gap:4px; padding:6px 8px; }
+.menu .seg span { flex:1; text-align:center; padding:5px 0; border-radius:6px; border:1px solid var(--line); font-size:12px; }
+.menu .seg span.on { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+.menu hr { border:0; border-top:1px solid var(--line); margin:4px 0; }
+
+.runs { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
+.run { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border-radius:8px; background:var(--panel); border:1px solid var(--line); font-size:14px; }
+.run.sel { border-color:var(--accent); }
+.run small { display:block; color:var(--muted); font-size:12px; }
+.run b { font-weight:600; }
+.title { font:700 20px var(--display); }
+.ttl-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; margin:4px 0 10px; }
+.dots { display:flex; align-items:center; gap:4px; }
+.dots i { width:22px; height:6px; border-radius:3px; background:var(--line); }
+.dots i.d { background:var(--ok); } .dots i.c { background:var(--you); width:34px; }
+.dots-l { font:12px var(--mono); color:var(--muted); }
+
+.next { --edge:var(--you); background:var(--panel); border:1px solid var(--line); box-shadow:inset 4px 0 0 var(--edge); border-radius:10px; padding:14px 14px 14px 18px; }
+.next.bad { --edge:var(--bad); } .next.ok { --edge:var(--ok); } .next.idle { --edge:var(--idle); box-shadow:none; }
+.next .k { font:600 12px var(--body); text-transform:uppercase; letter-spacing:.05em; color:var(--muted); display:flex; gap:8px; align-items:center; }
+.next h3 { font-size:19px; margin:6px 0 4px; }
+.next p { margin:0 0 10px; font-size:14px; color:var(--muted); }
+.next .acts { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.next .more { margin-top:10px; padding-top:8px; border-top:1px dashed var(--line); font-size:13px; color:var(--muted); }
+.next.simple p:last-child { margin-bottom:0; }
+
+.tabs { display:flex; gap:2px; border-bottom:1px solid var(--line); margin-top:14px; }
+.tabs span { padding:8px 12px; font-size:14px; color:var(--muted); border-bottom:2px solid transparent; }
+.tabs span.on { color:var(--fg); border-bottom-color:var(--accent); font-weight:600; }
+.tabs .count { font:12px var(--mono); }
+.pipe { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+.step { display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:8px; background:var(--panel); border:1px solid var(--line); font-size:14px; }
+.step .ic { width:18px; text-align:center; }
+.step.done { color:var(--muted); background:transparent; border-style:dashed; }
+.step.done .ic { color:var(--ok); }
+.step.cur { border-color:var(--you); box-shadow:inset 3px 0 0 var(--you); flex-direction:column; align-items:stretch; }
+.step.cur .row { display:flex; align-items:center; gap:8px; }
+.step.cur .sub { font-size:13px; color:var(--muted); padding-left:26px; }
+.step.wait { color:var(--muted); background:transparent; }
+.plain { list-style:none; margin:10px 0 0; padding:0; font-size:14px; }
+.plain li { display:flex; gap:8px; align-items:center; padding:7px 2px; border-bottom:1px solid var(--line); }
+.plain li:last-child { border-bottom:0; }
+.plain li.done { color:var(--muted); }
+.plain li .ic { width:16px; text-align:center; }
+.plain li.done .ic { color:var(--ok); }
+.plain li.cur { font-weight:600; }
+.plain li.cur .ic { color:var(--you); }
+.q { padding:8px 0; border-bottom:1px solid var(--line); font-size:14px; }
+.q .clamp { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+.cut { width:100%; border-collapse:collapse; font-size:14px; background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+.cut th, .cut td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+.cut th { background:var(--panel-2); font-weight:600; font-size:13px; }
+.cut tr:last-child td { border-bottom:0; }
+.cut td:first-child { width:38%; }
+.tag { font:600 11px var(--body); padding:2px 6px; border-radius:4px; text-transform:uppercase; letter-spacing:.04em; }
+.tag.rm { background:var(--bad-soft); color:var(--bad); } .tag.mv { background:var(--accent-soft); color:var(--accent); } .tag.kp { background:var(--ok-soft); color:var(--ok); }
+.states { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:12px; }
+.pick { margin-top:28px; padding:16px; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="intro">
+    <div>
+      <h1>Calm dashboard: a simpler C</h1>
+      <p>Left: C as first drafted. Right: the same layout with everything removed that you don't need in order to act. Nothing you act on is gone: each item is either removed because something else already says it, or moved one click away. See the table under the screens.</p>
+    </div>
+    <div style="display:flex;gap:6px"><button class="btn sm" data-t="light">Light</button><button class="btn sm" data-t="dark">Dark</button></div>
+  </div>
+
+  <div class="cols">
+    <div class="col">
+      <h2>C, first draft</h2>
+      <p>What you saw before.</p>
+      <div class="phone">
+        <div class="appbar"><span class="brand">Pod Board</span><span class="chip live">live</span><span class="sp"></span><button class="btn sm">+ repo</button><button class="menu-btn">⋯</button></div>
+        <div class="scr">
+          <div class="runs">
+            <div class="run sel"><div><b>chess-web</b><small>sparring-ladder · wave 3/3</small></div><span class="chip you">needs you</span></div>
+            <div class="run"><div><b>watchless</b><small>friends · wave 1/2</small></div><span class="chip live">running</span></div>
+          </div>
+          <div class="ttl-row"><span class="title">sparring-ladder</span><span class="dots"><i class="d"></i><i class="d"></i><i class="d"></i><i class="c"></i><i></i></span></div>
+          <div style="margin:-4px 0 10px"><button class="switch">auto-continue</button></div>
+          <div class="next"><div class="k">Next step</div><h3>Merge PR #78, wave 3</h3><p>Both slices are pushed and checked. CI passed.</p>
+            <div class="acts"><button class="btn primary">Merge PR #78</button><button class="btn quiet">Open on GitHub</button></div>
+            <div class="more">and 2 more waiting · <a href="#">show</a></div></div>
+          <div class="tabs"><span class="on">Plan</span><span>Waiting <span class="count">3</span></span><span>Log</span></div>
+          <div class="pipe">
+            <div class="step done"><span class="ic">✓</span>Plan · 1 sprint</div>
+            <div class="step done"><span class="ic">✓</span>Wave 1 · 3 slices · PR #76</div>
+            <div class="step done"><span class="ic">✓</span>Wave 2 · 2 slices · PR #77</div>
+            <div class="step cur"><div class="row"><span class="ic">●</span><b>Wave 3</b><span class="chip you">you merge</span></div><div class="sub">T1 · Tune the step table · pushed · 18 min</div></div>
+            <div class="step wait"><span class="ic">○</span>Final review</div>
+          </div>
+          <p class="muted" style="font-size:13px;margin:10px 0 0">2 other agents running · <a href="#">show</a></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <h2>C, simpler</h2>
+      <p>The same screen with less on it.</p>
+      <div class="phone">
+        <div class="appbar"><span class="brand">Pod Board</span><span class="sp"></span><button class="btn sm">+ repo</button><button class="menu-btn">⋯</button></div>
+        <div class="scr">
+          <div class="runs">
+            <div class="run sel"><b>chess-web</b><span class="chip you">needs you</span></div>
+            <div class="run"><b>watchless</b><span class="chip live">running</span></div>
+          </div>
+          <div class="ttl-row"><span class="title">sparring-ladder</span><span class="dots"><i class="d"></i><i class="d"></i><i class="d"></i><i class="c"></i><i></i></span><span class="dots-l">wave 3 of 3</span></div>
+          <div class="next simple"><div class="k">Next step</div><h3>Merge <a href="#">PR #78</a></h3><p>Wave 3 is checked and CI passed.</p>
+            <div class="acts"><button class="btn primary">Merge</button></div></div>
+          <div class="tabs"><span>Waiting <span class="count">3</span></span><span>Plan</span><span>Log</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>What changed and where it went</h2>
+    <table class="cut">
+      <tr><th>Item</th><th>In the simpler C</th></tr>
+      <tr><td>The <code>live</code> chip in the bar</td><td><span class="tag rm">removed</span> Shows only when the connection is lost (<code>lost · retrying</code>). A working board says nothing.</td></tr>
+      <tr><td>Run subtitles (<code>sparring-ladder · wave 3/3</code>)</td><td><span class="tag rm">removed</span> The selected run's title and strip already say it. The chip stays, so state never shows as text alone.</td></tr>
+      <tr><td>auto-continue switch</td><td><span class="tag mv">moved</span> Into the ⋯ menu, labeled with the run's name. It's a setting, not an action.</td></tr>
+      <tr><td>Card: "Both slices are pushed and checked"</td><td><span class="tag rm">shortened</span> One short line only. The details are in the Plan tab.</td></tr>
+      <tr><td>Card: "Open on GitHub" button</td><td><span class="tag mv">moved</span> The PR number in the heading is the link.</td></tr>
+      <tr><td>Card: "and 2 more waiting · show"</td><td><span class="tag rm">removed</span> The Waiting tab's count says it.</td></tr>
+      <tr><td>Tabs open by default</td><td><span class="tag mv">changed</span> All tabs start closed, so the page ends under the card. Click one to open it; the board remembers it per browser.</td></tr>
+      <tr><td>Tab order</td><td><span class="tag mv">changed</span> Waiting first, since that's where you act most after the card.</td></tr>
+      <tr><td>Pipeline steps (dashed cards, slice counts, PR numbers)</td><td><span class="tag rm">simplified</span> In the Plan tab, one plain line per step. Only the current step has a detail line.</td></tr>
+      <tr><td>"2 other agents running"</td><td><span class="tag mv">moved</span> Into the Log tab, with the slice times and the Action log.</td></tr>
+      <tr><td>Next step card, Merge, Answer, Continue, Waiting entries, chips</td><td><span class="tag kp">kept</span> Everything you act on stays.</td></tr>
+    </table>
+  </div>
+
+  <div class="sec">
+    <h2>The simpler card in every state</h2>
+    <div class="states">
+      <div><div class="lbl">Blocked</div><div class="next bad simple"><div class="k">Next step <span class="chip bad">blocked</span></div><h3>Answer: H1 can't reach the rates file</h3><p>The run is stopped until you answer.</p><div class="acts"><button class="btn primary">Answer</button></div></div></div>
+      <div><div class="lbl">PR to merge</div><div class="next simple"><div class="k">Next step</div><h3>Merge <a href="#">PR #78</a></h3><p>Wave 3 is checked and CI passed.</p><div class="acts"><button class="btn primary">Merge</button></div></div></div>
+      <div><div class="lbl">Entry to answer</div><div class="next simple"><div class="k">Next step</div><h3>Decide: keep the 2300 and 2500 baselines?</h3><p>In use: keep the default.</p><div class="acts"><button class="btn primary">Answer</button></div></div></div>
+      <div><div class="lbl">Reply to send</div><div class="next ok simple"><div class="k">Next step</div><h3>Send continue</h3><p>Wave 2 merged. pod waits for your reply.</p><div class="acts"><button class="btn primary">Continue</button><a href="#" style="font-size:13px">Run it yourself</a></div></div></div>
+      <div><div class="lbl">Nothing to do</div><div class="next idle simple"><div class="k">Nothing to do</div><h3>pod is working on wave 3</h3><p>2 engineers running.</p></div></div>
+    </div>
+    <p class="muted" style="font-size:13px">"Run it yourself" opens the session commands (<code>cd</code>, <code>claude --resume</code>, Copy continue) in place under the card.</p>
+  </div>
+
+  <div class="sec">
+    <h2>Tabs, opened</h2>
+    <div class="states">
+      <div><div class="lbl">Waiting</div><div class="tabs" style="margin:0"><span class="on">Waiting <span class="count">3</span></span><span>Plan</span><span>Log</span></div>
+        <div class="q"><div class="clamp">Needs your decision: recent arenas gave too few players near 2300 (7) and 2500 (1), so rung baseline also reads those players' opponents.</div></div>
+        <div class="q"><div class="clamp">Look: below 768 px the Liem card's detail reads "2732" instead of "GM·2732", because the GM tag already sits by his name.</div></div>
+        <div class="q"><div class="clamp">Look: at 375 px his name reads "Le Quang Li…" on the in-game Liem card (the name box is 136 px).</div></div></div>
+      <div><div class="lbl">Plan</div><div class="tabs" style="margin:0"><span>Waiting <span class="count">3</span></span><span class="on">Plan</span><span>Log</span></div>
+        <ul class="plain"><li class="done"><span class="ic">✓</span>Plan</li><li class="done"><span class="ic">✓</span>Wave 1</li><li class="done"><span class="ic">✓</span>Wave 2</li>
+        <li class="cur"><span class="ic">●</span>Wave 3 <span class="chip you">you merge</span></li><li style="padding-left:26px;font-size:13px;color:var(--muted)">T1 · Tune the step table · pushed · 18 min</li><li class="muted"><span class="ic">○</span>Final review</li></ul>
+        <p style="font-size:13px;margin:8px 0 0"><a href="#">Wave board</a></p></div>
+      <div><div class="lbl">Log</div><div class="tabs" style="margin:0"><span>Waiting <span class="count">3</span></span><span>Plan</span><span class="on">Log</span></div>
+        <p class="mono muted" style="margin:10px 0 0">T1 · 18 min · 41k tok<br>U1 · 22 min · 57k tok</p>
+        <p style="font-size:13px;margin:8px 0">2 other agents running</p>
+        <p class="mono muted" style="margin:0">Oct 26 01:39 · continue · started<br>Oct 26 01:38 · answered · BLOCKED</p></div>
+      <div><div class="lbl">⋯ menu, open</div>
+        <div class="menu"><div class="mi"><button class="switch">auto-continue</button><span class="muted" style="font-size:12px">this run</span></div><hr><div class="seg"><span>System</span><span class="on">Light</span><span>Dark</span></div><div class="mi"><span>Ports</span><span class="mono muted">4000</span></div></div></div>
+    </div>
+  </div>
+
+  <div class="pick">
+    <p style="margin:0">Reply <b>ok</b> to use the simpler C, or name what to put back or cut further. For example: "keep auto-continue on screen", or "open Waiting by default".</p>
+  </div>
+</div>
+<script>
+document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { document.documentElement.dataset.theme = b.dataset.t; });
+</script>
+</body>
+</html>
