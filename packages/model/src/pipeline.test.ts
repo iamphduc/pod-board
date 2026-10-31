@@ -326,8 +326,8 @@ describe('buildPipeline', () => {
       ['s1', 1, 'Sprint 1 · wave 1', 'merged PR #41'],
       ['s1', 2, 'Sprint 1 · wave 2', 'merged'],
       ['s2', 1, 'Sprint 2 · wave 1', 'PR #50 open'],
-      // B4 is blocked, so the run is blocked, and its in-progress wave says so, as the runs list does.
-      ['s2', 2, 'Sprint 2 · wave 2', 'blocked'],
+      // B4 blocks the run, but B2's engineer is at work: its wave still reads running.
+      ['s2', 2, 'Sprint 2 · wave 2', 'running'],
       ['s2', 3, 'Sprint 2 · wave 3', 'planned'],
       ['s2', 4, 'Sprint 2 · wave 4', 'blocked'],
     ])
@@ -354,6 +354,12 @@ describe('buildPipeline', () => {
     expect(at([])).toEqual(['idle', ['merged PR #40', 'waiting', 'planned']])
     // An engineer at work on the wave: running.
     expect(at([], [running({ sprint: 'one', slice: 'B1' })])).toEqual(['running', ['merged PR #40', 'running', 'planned']])
+    // An engineer at work on the wave reads running even when the run is blocked by another wave's slice
+    // (the sprint's chip, the run's own, says blocked).
+    const blockedElsewhere = { one: [[1, 'A1', `${pr(40)} merged`, 'done'], [2, 'B1', '—', 'pending'], [3, 'C1', '—', 'blocked']] as BoardRow[] }
+    const r = repo(files({ sprints: [['one', 'active']], docs: blockedElsewhere }), { agents: [running({ sprint: 'one', slice: 'B1' })] })
+    expect(model.listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).find((x) => x.plan === 'alpha')?.state).toBe('blocked')
+    expect(build(r).log.map((g) => g.status)).toEqual(['merged PR #40', 'running', 'blocked'])
   })
 
   it('unknown plan and empty repo', () => {
