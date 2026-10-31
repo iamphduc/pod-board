@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildRepoModel, type Board, type BoardRepo, type RunSummary } from '@pod-board/model'
-import { agentChip, agentLogRows, banners, connectionStatus, emptyMessage, groupChip, nextStatus, otherRows, rowFigures, runChip, runLabel, tabPress, titleParts } from './view.ts'
+import { agentChip, agentLogRows, banners, connectionStatus, emptyMessage, groupChip, logBlocks, nextStatus, otherRows, rowFigures, runChip, runLabel, tabPress, titleParts } from './view.ts'
 
 const run = (over: Partial<RunSummary>): RunSummary => ({ repoId: 'r', repo: 'chess-web', where: 'x', state: 'idle', ...over })
 
@@ -253,5 +253,45 @@ describe('fix runs and other activity', () => {
       { key: 'x1', text: 'researcher', time: '09:40', chip: { cls: 's-ok', label: 'ended' } },
       { key: 'x2', text: 'engineer · fix-old', time: '11:58', chip: { cls: 's-run', label: 'running' } },
     ])
+  })
+})
+
+describe('log blocks', () => {
+  const row = (code: string) => ({ code, title: `Title ${code}`, live: false })
+  const group = (sprint: string, i: number, wave: number, status: string, codes: string[]) => ({ sprint, wave, label: `Sprint ${i} · wave ${wave}`, status, rows: codes.map(row) })
+  const sprints = [
+    { slug: 'warmup', status: 'done' as const },
+    { slug: 'ladder', status: 'active' as const },
+    { slug: 'rematch', status: 'planned' as const },
+  ]
+
+  it('one block per sprint, holding its waves in order, each wave with its slices', () => {
+    const log = [
+      group('warmup', 1, 1, 'merged PR #70', ['A1']),
+      group('warmup', 1, 2, 'merged PR #71', ['B1', 'B2']),
+      group('ladder', 2, 1, 'merged PR #76', ['L1']),
+      group('ladder', 2, 2, 'running', ['U1']),
+    ]
+    const blocks = logBlocks(log, sprints, 'ladder')
+    expect(blocks.map((b) => [b.key, b.title, b.chip])).toEqual([
+      ['warmup', 'Sprint 1 · warmup', { cls: 's-ok', label: 'done' }],
+      ['ladder', 'Sprint 2 · ladder', { cls: 's-run', label: 'running' }],
+    ])
+    expect(blocks[0]!.waves.map((w) => [w.key, w.label, w.chip.label, w.rows.map((r) => r.code)])).toEqual([
+      ['warmup/1', 'Wave 1', 'merged PR #70', ['A1']],
+      ['warmup/2', 'Wave 2', 'merged PR #71', ['B1', 'B2']],
+    ])
+    expect(blocks[1]!.waves.map((w) => [w.label, w.chip])).toEqual([
+      ['Wave 1', { cls: 's-ok', label: 'merged PR #76' }],
+      ['Wave 2', { cls: 's-run', label: 'running' }],
+    ])
+  })
+
+  it("a sprint's number comes from the plan; a later sprint waits; an unknown one has no state", () => {
+    // The first sprint has no log (no doc): the second keeps its number.
+    expect(logBlocks([group('ladder', 2, 1, 'planned', ['L1'])], sprints, undefined)[0]).toMatchObject({ title: 'Sprint 2 · ladder', chip: { cls: 's-idle', label: 'waiting' } })
+    expect(logBlocks([group('gone', 4, 1, 'planned', ['X1'])], sprints, 'ladder')[0]).toMatchObject({ title: 'gone' })
+    expect(logBlocks([group('gone', 4, 1, 'planned', ['X1'])], sprints, 'ladder')[0]).not.toHaveProperty('chip')
+    expect(logBlocks([], sprints, 'ladder')).toEqual([])
   })
 })

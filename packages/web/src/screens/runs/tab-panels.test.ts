@@ -107,20 +107,25 @@ describe('tab panels', () => {
     expect(html).not.toMatch(/class="inplace reply-panel"/)
   })
 
-  it("log groups: each wave (and a fix run's agents) is one block holding its header and its rows", () => {
+  it('log blocks: one per sprint, named by its heading, its waves as row groups; a fix run has one Agents block', () => {
     const repo = chess()
     const run = runOf(repo)
     const pipeline = buildPipeline(repo, PLAN, NOW)!
     const plan = renderToStaticMarkup(createElement(LogTab, { repo, run, pipeline, now: NOW, actions: [] }))
-    const blocks = [...plan.matchAll(/<div class="log-group"><table class="slice-log">([\s\S]*?)<\/table><\/div>/g)].map((m) => m[1]!)
-    // One block per wave of the log, in order, each with its row-group header and only its own slices.
-    expect(blocks.map((b) => /<th scope="rowgroup">([^<]*)<\/th>/.exec(b)?.[1])).toEqual(pipeline.log.map((g) => g.label))
-    blocks.forEach((b, i) => expect(b.match(/<tr>/g)?.length ?? 0, pipeline.log[i]!.label).toBe(pipeline.log[i]!.rows.length))
-    expect(plan).toMatch(/<div class="log-frame" role="region" aria-label="Slice log" tabindex="0"><div class="log-group">/)
+    const blocks = [...plan.matchAll(/<section class="log-group" aria-labelledby="([^"]+)">([\s\S]*?)<\/section>/g)]
+    // chess-web has one sprint, ladder, with three waves.
+    expect(blocks).toHaveLength(1)
+    const [, id, body] = blocks[0]!
+    // The heading names the block and its table; the sprint's state sits beside it.
+    expect(body).toMatch(new RegExp(`<h3 class="log-sprint-name" id="${id}">Sprint 1 · ladder</h3><span class="chip s-run">running</span>`))
+    expect(body).toMatch(new RegExp(`<table class="slice-log" aria-labelledby="${id}">`))
+    // One row group per wave: a `Wave N` header with its status, then its slices.
+    const waves = [...body!.matchAll(/<tbody class="log-wave"><tr class="grp"><th scope="rowgroup">([^<]*)<\/th><td><span class="chip [^"]*">([^<]*)<\/span><\/td><\/tr>([\s\S]*?)<\/tbody>/g)]
+    expect(waves.map((w) => [w[1], w[2], w[3]!.match(/<tr>/g)?.length])).toEqual(pipeline.log.map((g) => [`Wave ${g.wave}`, g.status, g.rows.length]))
     // A slice with no figures yet (T1, pending) leaves its figures cell empty, so a phone shows no stray middle dot.
     expect(plan).toMatch(/<span class="code">T1<\/span>[\s\S]*?<\/td><td><\/td><\/tr>/)
 
-    // A fix run's agent log follows the same rule: one block for its agents.
+    // A fix run's agent log: one block, headed Agents, its rows straight under it.
     const eng: AgentRun = { id: 'e1', session: 's', type: 'pod:engineer', tokens: 0, ended: false, branch: 'fix-scroll', startedAt: NOW - 10 * MIN, lastAt: NOW - MIN }
     const fixRepo: BoardRepo = {
       id: 'web',
@@ -133,7 +138,8 @@ describe('tab panels', () => {
       claims: [{ portBase: 3100, repoPath: '/r/web', plan: 'fix-scroll' }],
     }
     const fix = renderToStaticMarkup(createElement(LogTab, { repo: fixRepo, run: runOf(fixRepo, 'fix-scroll'), fixPipeline: buildFixPipeline(fixRepo, 'fix-scroll', NOW)!, now: NOW, actions: [] }))
-    expect(fix).toMatch(/aria-label="Agent log" tabindex="0"><div class="log-group"><table class="slice-log agent-log"><tbody><tr class="grp"><th scope="rowgroup">Agents<\/th>/)
+    const agents = /<section class="log-group" aria-labelledby="([^"]+)"><div class="log-sprint"><h3 class="log-sprint-name" id="\1">Agents<\/h3><\/div><table class="slice-log agent-log" aria-labelledby="\1"><tbody><tr/.exec(fix)
+    expect(agents, 'the Agents block').not.toBeNull()
   })
 
   it('log sections', () => {

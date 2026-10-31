@@ -463,22 +463,28 @@ describe('runs.css log tab', () => {
     }
   })
 
-  it("sets each wave group on one faint block: the Action log row's fill, 8 px corners, no border, 8 px apart", () => {
+  it("sets each sprint on one faint block: the Action log row's fill, 8 px corners, no border, 12 px apart, 12 px padding on every side", () => {
     for (const width of [1280, 375]) {
       const group = stylesAt(width).get('.log-group')
       expect(group?.['background'], `fill at ${width} px`).toBe(stylesAt(width).get('.other-list li')?.['background'])
       expect(group?.['background']).toBe('var(--surface)')
       expect(group?.['border-radius']).toBe('var(--radius-md)') // 8 px
-      expect(group?.['padding']).toBe('8px 12px')
+      expect(group?.['padding']).toBe('12px')
       expect(group?.['border']).toBeUndefined()
-      expect(stylesAt(width).get('.log-frame')?.['gap']).toBe('8px')
+      expect(stylesAt(width).get('.log-frame')?.['gap']).toBe('12px')
+      // The Action log row's text starts at the same 12 px inset, like the tabs' labels.
+      expect(stylesAt(width).get('.other-list li')?.['padding']).toBe('6px 12px')
     }
-    // Tight inside a block: 20 px lines, 2 px above and below each cell, so a header sits 4 px above its first slice.
+    // Tight inside a wave: 20 px lines, 2 px above and below each cell (24 px rows, a wave 4 px above its first slice).
     expect(stylesAt(1280).get('.slice-log')?.['line-height']).toBe('20px')
     expect(stylesAt(1280).get('.slice-log td')?.['padding']).toBe('2px 0')
-    // No extra space above a header: the blocks' gap does that now.
-    expect(stylesAt(1280).get('.slice-log tr.grp th')?.['padding-top']).toBeUndefined()
-    expect(stylesAt(375).get('.slice-log tr.grp')?.['padding-top']).toBeUndefined()
+    // 8 px between the waves of a sprint: 10 px above each later wave's row, minus the 2 px the last slice leaves.
+    expect(stylesAt(1280).get('.log-wave + .log-wave tr.grp > *')?.['padding-top']).toBe('10px')
+    expect(stylesAt(375).get('.log-wave + .log-wave')?.['margin-top']).toBe('8px')
+    // Sprint > wave > slice: the sprint semibold, the wave regular and muted.
+    expect(stylesAt(1280).get('.log-sprint-name')?.['font-weight']).toBe('600')
+    expect(stylesAt(1280).get('.slice-log tr.grp th')?.['font-weight']).toBe('400')
+    expect(stylesAt(1280).get('.slice-log tr.grp th')?.['color']).toBe('var(--muted)')
   })
 
   it('on a phone a slice is one line: its figures follow the title after a middle dot', () => {
