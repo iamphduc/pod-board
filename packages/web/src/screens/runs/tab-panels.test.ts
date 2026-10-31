@@ -161,6 +161,12 @@ describe('tab panels', () => {
     expect(waveOf(asks.html, 3)).toEqual(['s-you', 'needs you'])
     // Done waves keep their merged status.
     expect(waveOf(asks.html, 1)?.[1]).toMatch(/^merged/)
+    // Idle (no asks, nothing runs): the sidebar keeps idle; the Log reads waiting, for the sprint and its wave.
+    const idle = logOf(chess([(f) => (f[QUEUE] = '# Handoff Queue
+')]))
+    expect(idle.run.state).toBe('idle')
+    expect(chipOf(idle.html)).toEqual(['s-idle', 'waiting'])
+    expect(waveOf(idle.html, 3)).toEqual(['s-idle', 'waiting'])
   })
 
   it('log sections', () => {

@@ -362,6 +362,26 @@ describe('buildPipeline', () => {
     expect(build(r).log.map((g) => g.status)).toEqual(['merged PR #40', 'running', 'blocked'])
   })
 
+  it("the flow's wave in progress is running only while its own engineer runs; otherwise it takes the run's state", () => {
+    const docs = (b1: string) => ({ one: [[1, 'A1', `${pr(40)} merged`, 'done'], [2, 'B1', '—', b1], [3, 'C1', '—', 'pending']] as BoardRow[] })
+    const at = (q: string[], agents: AgentRun[] = [], b1 = 'pending') => {
+      const r = repo(files({ sprints: [['one', 'active']], docs: docs(b1), queue: q }), { agents })
+      const run = model.listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW).find((x) => x.plan === 'alpha')!
+      const p = build(r)
+      return { run: run.state, flow: steps(p, 'sprint:one').map(([label, state, detail]) => `${label} ${state} ${detail}`), log: p.log.map((g) => g.status) }
+    }
+    // Halted: red blocked.
+    expect(at([queueLine('BLOCKED', 'orchestrator → human', 'plan: alpha', 'gate 1: B1 is blocked')])).toMatchObject({ run: 'blocked', flow: ['Wave 1 done 1 slice', 'Wave 2 blocked 1 slice', 'Wave 3 wait 1 slice planned'] })
+    // A plan-level ask for you: amber needs you.
+    expect(at([queueLine('PENDING', 'orchestrator → human', 'plan: alpha', 'Pick a look')])).toMatchObject({ run: 'needs-you', flow: ['Wave 1 done 1 slice', 'Wave 2 you 1 slice', 'Wave 3 wait 1 slice planned'] })
+    // Idle: dim waiting, and not called planned, since it is the wave in progress.
+    expect(at([])).toMatchObject({ run: 'idle', flow: ['Wave 1 done 1 slice', 'Wave 2 wait 1 slice', 'Wave 3 wait 1 slice planned'], log: ['merged PR #40', 'waiting', 'planned'] })
+    // Its own engineer at work: blue running.
+    expect(at([], [running({ sprint: 'one', slice: 'B1' })]).flow[1]).toMatch(/^Wave 2 live 1 engineer/)
+    // The run runs (a pushed slice) but no engineer of this wave does: waiting, in the flow and the log.
+    expect(at([], [], 'pushed')).toMatchObject({ run: 'running', flow: ['Wave 1 done 1 slice', 'Wave 2 wait 1 slice', 'Wave 3 wait 1 slice planned'], log: ['merged PR #40', 'waiting', 'planned'] })
+  })
+
   it('unknown plan and empty repo', () => {
     const r = repo(files({ sprints: [['one', 'active']], docs: { one: [[1, 'A1', '—', 'pending']] } }))
     expect(buildPipeline(r, 'nope', NOW)).toBeUndefined()

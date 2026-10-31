@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildRepoModel, type Board, type BoardRepo, type RunSummary } from '@pod-board/model'
-import { agentChip, agentLogRows, banners, connectionStatus, emptyMessage, groupChip, logBlocks, nextStatus, otherRows, rowFigures, runChip, runLabel, tabPress, titleParts } from './view.ts'
+import { agentChip, agentLogRows, banners, connectionStatus, emptyMessage, groupChip, logBlocks, logRunChip, nextStatus, otherRows, rowFigures, runChip, runLabel, tabPress, titleParts } from './view.ts'
 
 const run = (over: Partial<RunSummary>): RunSummary => ({ repoId: 'r', repo: 'chess-web', where: 'x', state: 'idle', ...over })
 
@@ -303,5 +303,10 @@ describe('log blocks', () => {
     expect(asks.chip).toEqual({ cls: 's-you', label: 'needs you' })
     expect(asks.waves[0]!.chip).toEqual({ cls: 's-you', label: 'needs you' })
     expect(groupChip('waiting')).toEqual({ cls: 's-idle', label: 'waiting' })
+    // An idle run's sprint reads waiting in the Log (the runs list keeps idle); every other state is the run's chip.
+    expect(logRunChip('idle')).toEqual({ cls: 's-idle', label: 'waiting' })
+    expect(logRunChip('blocked')).toEqual(runChip('blocked'))
+    expect(logRunChip('needs-you')).toEqual(runChip('needs-you'))
+    expect(logRunChip('running')).toEqual(runChip('running'))
   })
 })
