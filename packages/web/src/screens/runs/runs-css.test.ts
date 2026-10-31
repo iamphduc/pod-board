@@ -214,6 +214,11 @@ describe('runs.css main column and run cards', () => {
     const phone = stylesAt(375)
     expect(px(phone.get('.flow-frame')?.['margin-bottom'])).toBeLessThanOrEqual(16)
     expect(px(phone.get('.run-header')?.['margin-bottom'])).toBeLessThanOrEqual(12)
+    // The plan's title is longer than its slug and wraps beside the link and the menu, so the strip, the
+    // card's heading and its button sit 8, 8 and 16 px closer in (measured: the button's bottom at 674 px without).
+    expect(px(phone.get('.run-meta')?.['margin-top'])).toBeLessThanOrEqual(8)
+    expect(px(phone.get('.next-top')?.['margin-bottom'])).toBeLessThanOrEqual(8)
+    expect(px(phone.get('.next-acts')?.['margin-top'])).toBeLessThanOrEqual(16)
   })
 
   it('shortens the wave board link on phones', () => {

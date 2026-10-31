@@ -1102,6 +1102,11 @@
     margin-bottom: 12px;
   }
 
+  /* The plan's title wraps beside the link and the menu: the strip, the card's heading and its button sit closer in. */
+  .run-meta {
+    margin-top: 8px;
+  }
+
   /* The folded flow is one line: a tight gap keeps the Next step card's button on a 375 × 667 screen. */
   .flow-frame {
     margin-bottom: 16px;
@@ -1116,11 +1121,11 @@
   }
 
   .next-top {
-    margin-bottom: 12px;
+    margin-bottom: 8px;
   }
 
   .next-acts {
-    margin-top: 20px;
+    margin-top: 16px;
   }
 
   .main > .tabs {
