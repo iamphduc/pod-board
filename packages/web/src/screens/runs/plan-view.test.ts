@@ -199,9 +199,11 @@ describe('plan view', () => {
       f[PLAN] = f[PLAN]!.replace(/Generated: 2026-10-17 · /, generated === undefined ? '' : `Generated: ${generated} · `)
     }
 
-    it('an agent start clearly inside the window wins over the stamp', () => {
-      // The stamp says 2 days ago; the agent, 5 hours ago.
-      expect(meta(chess(() => {}, { agents: [agent('a', NOW - 5 * 3_600_000)] }))).toBe('chess-web · Plan · started 5 h ago')
+    it('the earliest known start wins: the stamp or an agent start inside the window', () => {
+      // The stamp says 2 days ago; the agent, 5 hours ago: the run started at the stamp.
+      expect(meta(chess(() => {}, { agents: [agent('a', NOW - 5 * 3_600_000)] }))).toBe('chess-web · Plan · started 2 days ago')
+      // An agent before the stamp (a resumed autopilot rewrote it): the agent's time.
+      expect(meta(chess(() => {}, { agents: [agent('a', NOW - 5 * 24 * 3_600_000)] }))).toBe('chess-web · Plan · started 5 days ago')
     })
 
     it('an agent start near or past the window edge is not trusted: earlier transcripts may have aged out', () => {
