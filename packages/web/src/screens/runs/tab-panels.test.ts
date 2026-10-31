@@ -117,6 +117,8 @@ describe('tab panels', () => {
     expect(blocks.map((b) => /<th scope="rowgroup">([^<]*)<\/th>/.exec(b)?.[1])).toEqual(pipeline.log.map((g) => g.label))
     blocks.forEach((b, i) => expect(b.match(/<tr>/g)?.length ?? 0, pipeline.log[i]!.label).toBe(pipeline.log[i]!.rows.length))
     expect(plan).toMatch(/<div class="log-frame" role="region" aria-label="Slice log" tabindex="0"><div class="log-group">/)
+    // A slice with no figures yet (T1, pending) leaves its figures cell empty, so a phone shows no stray middle dot.
+    expect(plan).toMatch(/<span class="code">T1<\/span>[\s\S]*?<\/td><td><\/td><\/tr>/)
 
     // A fix run's agent log follows the same rule: one block for its agents.
     const eng: AgentRun = { id: 'e1', session: 's', type: 'pod:engineer', tokens: 0, ended: false, branch: 'fix-scroll', startedAt: NOW - 10 * MIN, lastAt: NOW - MIN }

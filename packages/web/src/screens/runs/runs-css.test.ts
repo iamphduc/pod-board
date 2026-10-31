@@ -468,7 +468,7 @@ describe('runs.css log tab', () => {
       const group = stylesAt(width).get('.log-group')
       expect(group?.['background'], `fill at ${width} px`).toBe(stylesAt(width).get('.other-list li')?.['background'])
       expect(group?.['background']).toBe('var(--surface)')
-      expect(group?.['border-radius']).toBe('8px')
+      expect(group?.['border-radius']).toBe('var(--radius-md)') // 8 px
       expect(group?.['padding']).toBe('8px 12px')
       expect(group?.['border']).toBeUndefined()
       expect(stylesAt(width).get('.log-frame')?.['gap']).toBe('8px')
