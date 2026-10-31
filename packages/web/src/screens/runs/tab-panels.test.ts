@@ -107,6 +107,78 @@ describe('tab panels', () => {
     expect(html).not.toMatch(/class="inplace reply-panel"/)
   })
 
+  it('log blocks: one per sprint, named by its heading, its waves as row groups; a fix run has one Agents block', () => {
+    const repo = chess()
+    const run = runOf(repo)
+    const pipeline = buildPipeline(repo, PLAN, NOW)!
+    const plan = renderToStaticMarkup(createElement(LogTab, { repo, run, pipeline, now: NOW, actions: [] }))
+    const blocks = [...plan.matchAll(/<section class="log-group" aria-labelledby="([^"]+)">([\s\S]*?)<\/section>/g)]
+    // chess-web has one sprint, ladder, with three waves.
+    expect(blocks).toHaveLength(1)
+    const [, id, body] = blocks[0]!
+    // The heading names the block and its table; the sprint's state sits beside it (the run's: it asks for you).
+    expect(body).toMatch(new RegExp(`<h3 class="log-sprint-name" id="${id}">Sprint 1 · ladder</h3><span class="chip s-you">needs you</span>`))
+    expect(body).toMatch(new RegExp(`<table class="slice-log" aria-labelledby="${id}">`))
+    // One row group per wave: a `Wave N` header with its status, then its slices.
+    const waves = [...body!.matchAll(/<tbody class="log-wave"><tr class="grp"><th scope="rowgroup">([^<]*)<\/th><td><span class="chip [^"]*">([^<]*)<\/span><\/td><\/tr>([\s\S]*?)<\/tbody>/g)]
+    expect(waves.map((w) => [w[1], w[2], w[3]!.match(/<tr>/g)?.length])).toEqual(pipeline.log.map((g) => [`Wave ${g.wave}`, g.status, g.rows.length]))
+    // Confidence is a quiet tag after the title and model; the status column holds no confidence.
+    expect(plan).toMatch(/<span class="code">L1<\/span>[^]*?<span class="muted"> · opus<\/span><span class="chip tag">medium confidence<\/span><\/td><td><\/td><\/tr>/)
+    // A running slice: its figures follow the title (after the model, before the tag); the rail holds only `running`.
+    const t1 = { id: 't1', session: 's', type: 'pod:engineer', tokens: 392_000, ended: false, sprint: 'ladder', slice: 'T1', startedAt: NOW - 38 * MIN, lastAt: NOW - MIN }
+    const live = chess([], { agents: [t1] })
+    const livePlan = renderToStaticMarkup(createElement(LogTab, { repo: live, run: runOf(live), pipeline: buildPipeline(live, PLAN, NOW)!, now: NOW, actions: [] }))
+    expect(livePlan).toMatch(/<span class="code">T1<\/span>[^]*?<span class="muted"> · opus<\/span><span class="figures"> · \d+ min · 392k tok<\/span><\/td><td><span class="chip s-run">running<\/span><\/td><\/tr>/)
+    // No status cell anywhere holds figures.
+    for (const html of [plan, livePlan]) expect(html).not.toMatch(/<td>(<span class="chip [^"]+">[^<]*<\/span>)?<span class="figures">/)
+    // A slice with no figures yet (T1, pending) leaves its figures cell empty, so a phone shows no stray middle dot.
+    expect(plan).toMatch(/<span class="code">T1<\/span>[\s\S]*?<\/td><td><\/td><\/tr>/)
+
+    // A fix run's agent log: one block, headed Agents, its rows straight under it.
+    const eng: AgentRun = { id: 'e1', session: 's', type: 'pod:engineer', tokens: 0, ended: false, branch: 'fix-scroll', startedAt: NOW - 10 * MIN, lastAt: NOW - MIN }
+    const fixRepo: BoardRepo = {
+      id: 'web',
+      name: 'web',
+      path: '/r/web',
+      source: 'claim',
+      model: buildRepoModel({ 'pod-docs/README.md': '# pod docs\n\npod docs: 2\n' }),
+      agents: [eng],
+      prs: [],
+      claims: [{ portBase: 3100, repoPath: '/r/web', plan: 'fix-scroll' }],
+    }
+    const fix = renderToStaticMarkup(createElement(LogTab, { repo: fixRepo, run: runOf(fixRepo, 'fix-scroll'), fixPipeline: buildFixPipeline(fixRepo, 'fix-scroll', NOW)!, now: NOW, actions: [] }))
+    const agents = /<section class="log-group" aria-labelledby="([^"]+)"><div class="log-sprint"><h3 class="log-sprint-name" id="\1">Agents<\/h3><\/div><table class="slice-log agent-log" aria-labelledby="\1"><tbody><tr/.exec(fix)
+    expect(agents, 'the Agents block').not.toBeNull()
+    // Its rows too: the label, then the time inline; the rail holds only the agent's state.
+    expect(fix).toMatch(/<tr><td>[^<]*(<a [^>]*>[^<]*<\/a>)?[^<]*<span class="figures"> · [^<]+<\/span><\/td><td><span class="chip [^"]+">[^<]+<\/span><\/td><\/tr>/)
+  })
+
+  it("the Log never disagrees with the runs list: the current sprint and its in-progress wave take the run's state", () => {
+    const chipOf = (html: string) => /<h3 class="log-sprint-name"[^>]*>Sprint 1 · ladder<\/h3><span class="chip ([^"]+)">([^<]*)<\/span>/.exec(html)?.slice(1)
+    const waveOf = (html: string, n: number) => new RegExp(`<th scope="rowgroup">Wave ${n}</th><td><span class="chip ([^"]+)">([^<]*)</span>`).exec(html)?.slice(1)
+    const logOf = (repo: BoardRepo) => {
+      const run = runOf(repo)
+      return { run, html: renderToStaticMarkup(createElement(LogTab, { repo, run, pipeline: buildPipeline(repo, PLAN, NOW)!, now: NOW, actions: [] })) }
+    }
+    // Halted: gate 3 BLOCKED to you.
+    const halted = logOf(chess([addQueue(entry('BLOCKED', 'orchestrator → human', `plan: ${PLAN}`, 'gate 3 auto-merge-fail: PR #78 has no passing CI'))]))
+    expect(halted.run.state).toBe('blocked')
+    expect(chipOf(halted.html)).toEqual(['s-bad', 'blocked'])
+    expect(waveOf(halted.html, 3)).toEqual(['s-bad', 'blocked'])
+    // The fixture as it is: asks for you, no agents.
+    const asks = logOf(chess())
+    expect(asks.run.state).toBe('needs-you')
+    expect(chipOf(asks.html)).toEqual(['s-you', 'needs you'])
+    expect(waveOf(asks.html, 3)).toEqual(['s-you', 'needs you'])
+    // Done waves keep their merged status.
+    expect(waveOf(asks.html, 1)?.[1]).toMatch(/^merged/)
+    // Idle (no asks, nothing runs): the sidebar keeps idle; the Log reads waiting, for the sprint and its wave.
+    const idle = logOf(chess([(f) => (f[QUEUE] = '# Handoff Queue\n')]))
+    expect(idle.run.state).toBe('idle')
+    expect(chipOf(idle.html)).toEqual(['s-idle', 'waiting'])
+    expect(waveOf(idle.html, 3)).toEqual(['s-idle', 'waiting'])
+  })
+
   it('log sections', () => {
     const other: AgentRun = { id: 'o1', session: 's', type: 'general-purpose', tokens: 0, ended: true, startedAt: NOW - 20 * MIN, lastAt: NOW - 10 * MIN }
     const at = (html: string, label: string) => {

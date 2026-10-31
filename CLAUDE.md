@@ -15,3 +15,11 @@
 - Keep the visible gap between icon and label at about 6–8 px, counting the icon's own empty space.
 - Never use text glyphs (`+`, `⋯`, `↑`) as icons; use SVG icons from the shared set.
 - Size inline controls such as breadcrumbs to their text; never give them a fixed min-width that leaves uneven gaps.
+
+## Spacing
+
+- Use multiples of 4 px for gaps, padding, and margins; 2 px is allowed only for cell padding inside tight rows.
+- Keep inside space at or below outside space: rows in a group sit closer than the groups do.
+- In a padded box, make horizontal padding larger than vertical (about 12 px by 16 px). Line height already adds vertical air.
+- Put status values in a fixed-width, left-aligned column, so their dots line up on one rail. The column holds the status only (dot and word), so it never wraps.
+- Show attributes and figures (confidence, model, minutes, tokens) as tags or inline text after the title, never in the status column.

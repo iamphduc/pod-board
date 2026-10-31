@@ -449,3 +449,78 @@ describe('breathing running dot', () => {
   })
 })
 
+
+describe('runs.css log tab', () => {
+  // The slice log (and a fix run's agent log, the same table) reads calm: no line under every row.
+  it('draws no divider between rows or under a wave header, at any width', () => {
+    for (const width of [1280, 375]) {
+      for (const r of runsRules().filter((x) => appliesAt(x.media, width) && x.selectors.some((s) => s.startsWith('.slice-log')))) {
+        const d = decls(r.body)
+        for (const side of ['border', 'border-top', 'border-bottom']) {
+          expect(d[side] === undefined || d[side] === '0', `${r.selectors.join(', ')} ${side} at ${width} px`).toBe(true)
+        }
+      }
+    }
+  })
+
+  it("sets each sprint on one faint block: the Action log row's fill, 8 px corners, no border, 16 px apart, 12 px by 16 px padding", () => {
+    for (const width of [1280, 375]) {
+      const group = stylesAt(width).get('.log-group')
+      expect(group?.['background'], `fill at ${width} px`).toBe(stylesAt(width).get('.other-list li')?.['background'])
+      expect(group?.['background']).toBe('var(--surface)')
+      expect(group?.['border-radius']).toBe('var(--radius-md)') // 8 px
+      // Wider than tall, for optical balance: the lines already carry vertical air.
+      expect(group?.['padding']).toBe('12px 16px')
+      expect(group?.['border']).toBeUndefined()
+      // Outside space at least the inside space.
+      expect(stylesAt(width).get('.log-frame')?.['gap']).toBe('16px')
+      // The Action log rows and the tab labels share the blocks' 16 px text inset.
+      expect(stylesAt(width).get('.other-list li')?.['padding']).toBe('8px 16px')
+      expect(stylesAt(width).get('.main > .tabs .tab')?.['padding-inline']).toBe('16px')
+      expect(stylesAt(width).get('.main > .tabs .tab[aria-expanded="true"]::after')?.['left']).toBe('16px')
+      expect(stylesAt(width).get('.main > .tabs .tab[aria-expanded="true"]::after')?.['right']).toBe('16px')
+    }
+    // Tight inside a wave: 20 px lines, 2 px above and below each cell (24 px rows, a wave 4 px above its first slice).
+    expect(stylesAt(1280).get('.slice-log')?.['line-height']).toBe('20px')
+    expect(stylesAt(1280).get('.slice-log td')?.['padding']).toBe('2px 0')
+    // 8 px of visible space between the waves of a sprint: a wave's last row keeps no bottom padding, and
+    // the next wave's row has 8 px above it.
+    expect(stylesAt(1280).get('.log-wave tr:last-child > *')?.['padding-bottom']).toBe('0')
+    expect(stylesAt(1280).get('.log-wave + .log-wave tr.grp > *')?.['padding-top']).toBe('8px')
+    expect(stylesAt(375).get('.log-wave tr:last-child')?.['padding-bottom']).toBe('0')
+    expect(stylesAt(375).get('.log-wave + .log-wave tr.grp')?.['padding-top']).toBe('8px')
+    expect(stylesAt(375).get('.log-wave + .log-wave')?.['margin-top']).toBeUndefined()
+    // Sprint > wave > slice: the sprint semibold, the wave regular and muted.
+    expect(stylesAt(1280).get('.log-sprint-name')?.['font-weight']).toBe('600')
+    expect(stylesAt(1280).get('.slice-log tr.grp th')?.['font-weight']).toBe('400')
+    expect(stylesAt(1280).get('.slice-log tr.grp th')?.['color']).toBe('var(--muted)')
+  })
+
+  it('puts every status on one rail: a fixed-width, left-aligned column, the same in the sprint header and the tables', () => {
+    const wide = stylesAt(1280)
+    expect(wide.get('.slice-log')?.['table-layout']).toBe('fixed')
+    // A fixed table's column width counts the cell's padding, so the cell adds its 16 px gap to the rail.
+    expect(wide.get('.slice-log td:last-child')?.['width']).toBe('calc(var(--log-rail) + 16px)')
+    expect(wide.get('.slice-log td:last-child')?.['padding-left']).toBe('16px')
+    expect(wide.get('.slice-log td:last-child')?.['text-align']).toBe('left')
+    // The rail holds a status only (dot and word), so it never wraps.
+    expect(wide.get('.slice-log td:last-child')?.['white-space']).toBe('nowrap')
+    expect(wide.get('.log-sprint')?.['grid-template-columns']).toBe('minmax(0, 1fr) var(--log-rail)')
+    expect(wide.get('.log-sprint')?.['column-gap']).toBe('16px')
+    // Wide enough for `● merged PR #1234` and `● needs you` on one line.
+    expect(wide.get('.log-frame')?.['--log-rail']).toBe('176px')
+    // Phones keep the status inline after the title.
+    expect(stylesAt(375).get('.slice-log td:last-child')?.['width']).toBe('auto')
+    expect(stylesAt(375).get('.log-sprint')?.['display']).toBe('flex')
+  })
+
+  it('shows confidence as a quiet tag after the title, not in the status column', () => {
+    expect(stylesAt(1280).get('.slice-log .chip.tag')?.['margin-left']).toBe('8px')
+  })
+
+  it('on a phone a slice is one line: its figures follow the title after a middle dot', () => {
+    const phone = stylesAt(375)
+    expect(phone.get('.slice-log tr:not(.grp) td')?.['display']).toBe('inline')
+    expect(phone.get('.slice-log tr:not(.grp) td:last-child:not(:empty)::before')?.['content']).toBe('" · "')
+  })
+})

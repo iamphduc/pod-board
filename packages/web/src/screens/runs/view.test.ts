@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildRepoModel, type Board, type BoardRepo, type RunSummary } from '@pod-board/model'
-import { agentChip, agentLogRows, banners, connectionStatus, emptyMessage, groupChip, nextStatus, otherRows, rowFigures, runChip, runLabel, tabPress, titleParts } from './view.ts'
+import { agentChip, agentLogRows, banners, confidenceTag, connectionStatus, emptyMessage, groupChip, logBlocks, logRunChip, nextStatus, otherRows, rowFigures, runChip, runLabel, tabPress, titleParts } from './view.ts'
 
 const run = (over: Partial<RunSummary>): RunSummary => ({ repoId: 'r', repo: 'chess-web', where: 'x', state: 'idle', ...over })
 
@@ -68,7 +68,11 @@ describe('screen 1 view helpers', () => {
   })
 
   it('row figures join what is known and skip the rest', () => {
-    expect(rowFigures({ code: 'B1', title: 't', confidence: 'high', minutes: 22, tokens: 248_000, live: false })).toBe('high · 22 min · 248k tok')
+    // Confidence is an attribute (a tag after the title), not a figure.
+    expect(rowFigures({ code: 'B1', title: 't', confidence: 'high', minutes: 22, tokens: 248_000, live: false })).toBe('22 min · 248k tok')
+    expect(confidenceTag({ code: 'B1', title: 't', confidence: 'high', live: false })).toBe('high confidence')
+    expect(confidenceTag({ code: 'B1', title: 't', confidence: 'Medium', live: false })).toBe('medium confidence')
+    expect(confidenceTag({ code: 'B1', title: 't', live: false })).toBeUndefined()
     expect(rowFigures({ code: 'B1', title: 't', minutes: 14, live: true })).toBe('14 min')
     expect(rowFigures({ code: 'B1', title: 't', live: false })).toBe('')
     expect(rowFigures({ code: 'B1', title: 't', minutes: 0, tokens: 0, live: false })).toBe('0 min')
@@ -253,5 +257,60 @@ describe('fix runs and other activity', () => {
       { key: 'x1', text: 'researcher', time: '09:40', chip: { cls: 's-ok', label: 'ended' } },
       { key: 'x2', text: 'engineer · fix-old', time: '11:58', chip: { cls: 's-run', label: 'running' } },
     ])
+  })
+})
+
+describe('log blocks', () => {
+  const row = (code: string) => ({ code, title: `Title ${code}`, live: false })
+  const group = (sprint: string, i: number, wave: number, status: string, codes: string[]) => ({ sprint, wave, label: `Sprint ${i} · wave ${wave}`, status, rows: codes.map(row) })
+  const sprints = [
+    { slug: 'warmup', status: 'done' as const },
+    { slug: 'ladder', status: 'active' as const },
+    { slug: 'rematch', status: 'planned' as const },
+  ]
+
+  it('one block per sprint, holding its waves in order, each wave with its slices', () => {
+    const log = [
+      group('warmup', 1, 1, 'merged PR #70', ['A1']),
+      group('warmup', 1, 2, 'merged PR #71', ['B1', 'B2']),
+      group('ladder', 2, 1, 'merged PR #76', ['L1']),
+      group('ladder', 2, 2, 'running', ['U1']),
+    ]
+    const blocks = logBlocks(log, sprints, { slug: 'ladder', chip: runChip('running') })
+    expect(blocks.map((b) => [b.key, b.title, b.chip])).toEqual([
+      ['warmup', 'Sprint 1 · warmup', { cls: 's-ok', label: 'done' }],
+      ['ladder', 'Sprint 2 · ladder', { cls: 's-run', label: 'running' }],
+    ])
+    expect(blocks[0]!.waves.map((w) => [w.key, w.label, w.chip.label, w.rows.map((r) => r.code)])).toEqual([
+      ['warmup/1', 'Wave 1', 'merged PR #70', ['A1']],
+      ['warmup/2', 'Wave 2', 'merged PR #71', ['B1', 'B2']],
+    ])
+    expect(blocks[1]!.waves.map((w) => [w.label, w.chip])).toEqual([
+      ['Wave 1', { cls: 's-ok', label: 'merged PR #76' }],
+      ['Wave 2', { cls: 's-run', label: 'running' }],
+    ])
+  })
+
+  it("a sprint's number comes from the plan; a later sprint waits; an unknown one has no state", () => {
+    // The first sprint has no log (no doc): the second keeps its number.
+    expect(logBlocks([group('ladder', 2, 1, 'planned', ['L1'])], sprints, undefined)[0]).toMatchObject({ title: 'Sprint 2 · ladder', chip: { cls: 's-idle', label: 'waiting' } })
+    const cur = { slug: 'ladder', chip: runChip('running') }
+    expect(logBlocks([group('gone', 4, 1, 'planned', ['X1'])], sprints, cur)[0]).toMatchObject({ title: 'gone' })
+    expect(logBlocks([group('gone', 4, 1, 'planned', ['X1'])], sprints, cur)[0]).not.toHaveProperty('chip')
+    expect(logBlocks([], sprints, cur)).toEqual([])
+  })
+
+  it("the current sprint's chip is the run's own chip, as the runs list shows it; the in-progress wave matches", () => {
+    const log = [group('ladder', 2, 3, 'blocked', ['T1'])]
+    expect(logBlocks(log, sprints, { slug: 'ladder', chip: runChip('blocked') })[0]).toMatchObject({ chip: { cls: 's-bad', label: 'blocked' } })
+    const asks = logBlocks([group('ladder', 2, 3, 'needs you', ['T1'])], sprints, { slug: 'ladder', chip: runChip('needs-you') })[0]!
+    expect(asks.chip).toEqual({ cls: 's-you', label: 'needs you' })
+    expect(asks.waves[0]!.chip).toEqual({ cls: 's-you', label: 'needs you' })
+    expect(groupChip('waiting')).toEqual({ cls: 's-idle', label: 'waiting' })
+    // An idle run's sprint reads waiting in the Log (the runs list keeps idle); every other state is the run's chip.
+    expect(logRunChip('idle')).toEqual({ cls: 's-idle', label: 'waiting' })
+    expect(logRunChip('blocked')).toEqual(runChip('blocked'))
+    expect(logRunChip('needs-you')).toEqual(runChip('needs-you'))
+    expect(logRunChip('running')).toEqual(runChip('running'))
   })
 })

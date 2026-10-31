@@ -106,6 +106,7 @@ describe('autopilot run, not halted', () => {
 
   it('a waiting wave PR is autopilot’s to merge, not yours', () => {
     const wave = step(build(r), 'one/wave-1')
+    // The run is running (pod merges the pushed PR), so the wave in progress reads running too.
     expect(wave).toEqual({ key: 'one/wave-1', label: 'Wave 1', state: 'live', detail: 'PR #9 · autopilot merges' })
     expect(waitingPrs(r, NOW)).toEqual([])
     expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW)[0]?.state).toBe('running')
@@ -208,7 +209,10 @@ describe('autopilot run, stopped at a PENDING gate', () => {
 
   it.each(NOTES)('is no stop: %s', (_, body) => {
     const r = repo({ sprintMarker: MARKER, queue: [gate(body)] })
-    expect(stopOf(body)).toEqual({ key: 'one/wave-1', label: 'Wave 1', state: 'live', detail: 'PR #9 · autopilot merges' })
+    // Pod still merges the PR, but every one of these notes is a pending entry to you, so the run (and the
+    // wave in progress) needs you.
+    expect(listRuns({ generatedAt: NOW, gh: 'ok', repos: [r] }, NOW)[0]?.state).toBe('needs-you')
+    expect(stopOf(body)).toEqual({ key: 'one/wave-1', label: 'Wave 1', state: 'you', detail: 'PR #9 · autopilot merges' })
     // No wave PR waits on you (the hand-back case still lists its final PR, the Ship step's own rule).
     expect(waitingPrs(r, NOW).filter((w) => w.kind === 'wave')).toEqual([])
   })
