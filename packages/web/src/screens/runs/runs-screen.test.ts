@@ -354,11 +354,26 @@ describe('sidebar', () => {
     expect(html).not.toMatch(/<dialog/)
   })
 
-  it('keeps the short rows: no plan or sprint subtitle', () => {
+  it('names each card as its run header does, with the repo as a muted line; no sprint or wave', () => {
     const side = sideOf(render({ repo: chess([onlyQueue()]) }).html)
-    expect(text(side)).toMatch(/chess-web/)
+    expect(side).toMatch(/<span class="run-head"><b>Sparring ladder to Liem<\/b><span class="run-repo muted">chess-web<\/span><\/span>/)
     expect(side).toMatch(/class="status /)
-    expect(text(side)).not.toMatch(/sparring-ladder|ladder|wave/i)
+    expect(text(side)).not.toMatch(/sparring-ladder|wave/i)
+  })
+
+  it('names a fix card by its PR title, with one fix tag', () => {
+    const name = 'fix-sprint-column'
+    const claim: Claim = { portBase: 3100, repoPath: '/c', plan: name }
+    const pr = gh(58, 'open', { branch: name, title: 'fix(server): gh pr list times out' })
+    const { html } = render({ repo: chess([onlyQueue()], { claims: [claim], prs: [pr] }), plan: name })
+    const side = sideOf(html)
+    const card = /<a class="run" href="#\/chess\/fix-sprint-column"[\s\S]*?<\/a>/.exec(side)?.[0] ?? ''
+    expect(card).toMatch(/<b>gh pr list times out<\/b>/)
+    expect(card).toMatch(/<span class="run-repo muted">chess-web<\/span><span class="chip tag">fix<\/span>/)
+    // `fix` once: the tag, never also in the name.
+    expect(count(text(card), /\bfix\b/)).toBe(1)
+    // The same name as the run header.
+    expect(headerOf(html)).toMatch(/<h1 class="run-name">gh pr list times out<\/h1>/)
   })
 
   it('shows lost · retrying beside the title only while lost', () => {
@@ -379,7 +394,7 @@ describe('sidebar', () => {
 
   it('heads the run with a plain title and one muted meta line, no crumb', () => {
     const header = headerOf(render({ repo: chess([onlyQueue()]) }).html)
-    expect(header).toMatch(/<h1 class="run-name">Sparring ladder to Liem<\/h1><p class="run-sub muted">chess-web · Plan<\/p>/)
+    expect(header).toMatch(/<h1 class="run-name">Sparring ladder to Liem<\/h1><p class="run-sub muted">chess-web · Plan · started 2 days ago<\/p>/)
     // No slash crumb and no eyebrow above the title.
     expect(header).not.toMatch(/run-crumb|eyebrow/)
     expect(text(header)).not.toMatch(/\//)
@@ -410,6 +425,71 @@ describe('sidebar', () => {
     expect(text(html)).toMatch(/Add repo/)
     expect(text(html)).not.toMatch(/in the bar/)
     expect(sideOf(html)).toMatch(ADD)
+  })
+
+  it("reads the started time against the Board's transcript window", () => {
+    const D = 24 * 3_600_000
+    const repo = chess([onlyQueue()], { agents: [{ id: 'a', session: 's', type: 'pod:engineer', tokens: 0, ended: true, startedAt: NOW - 10 * D, plan: PLAN }] })
+    const headerWith = (transcriptDays: number | undefined) => {
+      const board: Board = { ...boardOf(repo), ...(transcriptDays === undefined ? {} : { transcriptDays }) }
+      const runs = listRuns(board, NOW)
+      const html = renderToStaticMarkup(
+        createElement(RunsScreen, { board, stream: 'live', runs, selected: runs.find((r) => r.plan === PLAN), view: 'pipeline', slice: undefined, now: NOW, storage: storage() }),
+      )
+      return text(headerOf(html))
+    }
+    // No window on the Board: 30 days, so the agent 10 days back counts.
+    expect(headerWith(undefined)).toMatch(/started 10 days ago/)
+    // A 10-day window: that start is at the edge, so it reads as a date.
+    const day = new Date(NOW - 10 * D)
+    expect(headerWith(10)).toContain(`started ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][day.getMonth()]} ${day.getDate()}`)
+  })
+})
+
+describe('sidebar resize handle', () => {
+  /** A store keyed like localStorage. */
+  const keyed = (init: Record<string, string> = {}): TabStorage => {
+    const m = new Map(Object.entries(init))
+    return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, v), removeItem: (k) => void m.delete(k) }
+  }
+  const renderWith = (store: TabStorage) => {
+    const repo = chess([onlyQueue()])
+    const board = boardOf(repo)
+    const runs = listRuns(board, NOW)
+    return renderToStaticMarkup(
+      createElement(RunsScreen, { board, stream: 'live', runs, selected: runs.find((r) => r.plan === PLAN), view: 'pipeline', slice: undefined, now: NOW, storage: store }),
+    )
+  }
+  const handleOf = (html: string) => /<div[^>]*class="side-handle"[^>]*><\/div>/.exec(html)?.[0] ?? ''
+
+  it('is a focusable vertical separator with its value, min, and max', () => {
+    const handle = handleOf(renderWith(keyed()))
+    expect(handle).toMatch(/role="separator"/)
+    expect(handle).toMatch(/aria-orientation="vertical"/)
+    expect(handle).toMatch(/aria-valuenow="260"/)
+    expect(handle).toMatch(/aria-valuemin="200"/)
+    expect(handle).toMatch(/aria-valuemax="400"/)
+    expect(handle).toMatch(/tabindex="0"/)
+    expect(handle).toMatch(/aria-label="Resize the sidebar"/)
+    expect(handle).toMatch(/aria-controls="side"/)
+  })
+
+  it('sizes the sidebar column from the stored width, clamped', () => {
+    const at = (stored: Record<string, string>) => {
+      const html = renderWith(keyed(stored))
+      return { value: /aria-valuenow="(\d+)"/.exec(handleOf(html))?.[1], style: /<div class="screen-body" style="([^"]*)"/.exec(html)?.[1] }
+    }
+    expect(at({})).toEqual({ value: '260', style: '--side-width:260px' })
+    expect(at({ 'pod-board-sidebar-width': '320' })).toEqual({ value: '320', style: '--side-width:320px' })
+    expect(at({ 'pod-board-sidebar-width': '9000' })).toEqual({ value: '400', style: '--side-width:400px' })
+    expect(at({ 'pod-board-sidebar-width': 'wide' })).toEqual({ value: '260', style: '--side-width:260px' })
+  })
+
+  it('sits between the sidebar and the main column', () => {
+    const html = renderWith(keyed())
+    expect(html).toMatch(/<aside class="side" id="side">/)
+    expect(html.indexOf('class="side-handle"')).toBeGreaterThan(html.indexOf('</aside>'))
+    expect(html.indexOf('class="side-handle"')).toBeLessThan(html.indexOf('<main'))
   })
 })
 

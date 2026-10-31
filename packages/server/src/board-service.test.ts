@@ -125,6 +125,8 @@ describe('board service', () => {
     expect(board.generatedAt).toBe(NOW)
     expect(board.gh).toBe('ok')
     expect(board.ghCheckedAt).toBe(NOW)
+    // The transcript day window, so the page knows which agent starts it can trust.
+    expect(board.transcriptDays).toBe(30)
     expect(board.repos).toHaveLength(1)
     const [r] = board.repos
     expect(r).toMatchObject({ id: repoId(path, platform, caseless), name: 'chess-web', path, source: 'both' })

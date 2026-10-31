@@ -147,7 +147,7 @@ export function createBoardService(deps: BoardServiceDeps): BoardService {
       // Forget transcripts no repo listed this time: out of the day window, deleted, or their repo gone.
       agentRuns.retain(listed)
       repos.sort((a, b) => compare(a.name.toLowerCase(), b.name.toLowerCase()) || compare(a.path, b.path))
-      const board: Board = { generatedAt: now(), gh: deps.gh.status(), repos }
+      const board: Board = { generatedAt: now(), gh: deps.gh.status(), repos, transcriptDays: deps.transcriptDays }
       const checkedAt = deps.gh.checkedAt()
       if (checkedAt !== undefined) board.ghCheckedAt = checkedAt
       if (configUnreadable) board.configError = 'config unreadable'

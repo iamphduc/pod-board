@@ -136,6 +136,45 @@ describe('runs.css sidebar', () => {
     }
   })
 
+  it('takes its width from the resize handle on desktop, 260 px until it is set', () => {
+    expect(stylesAt(1280).get('.screen-body')?.['grid-template-columns']).toBe('var(--side-width, 260px) minmax(0, 1fr)')
+    // The sidebar, its handle, and the main column sit in fixed cells, so the handle overlaps the border line.
+    expect(stylesAt(1280).get('.side')?.['grid-column']).toBe('1')
+    expect(stylesAt(1280).get('.side-handle')?.['grid-column']).toBe('1')
+    expect(stylesAt(1280).get('.main')?.['grid-column']).toBe('2')
+  })
+
+  it('the handle: a col-resize strip on the right edge, with a hover and drag line and a visible focus ring', () => {
+    const at = stylesAt(1280)
+    const handle = at.get('.side-handle')
+    expect(handle?.['cursor']).toBe('col-resize')
+    expect(handle?.['justify-self']).toBe('end')
+    expect(handle?.['position']).toBe('sticky')
+    expect(handle?.['height']).toBe('100dvh')
+    // A pointer drag never scrolls or zooms the page instead.
+    expect(handle?.['touch-action']).toBe('none')
+    // The visible line shows on hover, on focus, and while dragging.
+    for (const sel of ['.side-handle:hover::after', '.side-handle:focus-visible::after', '[data-resizing] .side-handle::after']) {
+      expect(at.get(sel)?.['background'], sel).toBe('var(--focus)')
+    }
+    expect(at.get('.side-handle:focus-visible')?.['outline']).toMatch(/2px solid/)
+  })
+
+  it('while dragging: col-resize everywhere and no text selection', () => {
+    const drag = stylesAt(1280).get('[data-resizing]')
+    expect(drag?.['cursor']).toBe('col-resize')
+    expect(drag?.['user-select']).toBe('none')
+    expect(drag?.['-webkit-user-select']).toBe('none')
+  })
+
+  it('is off on phones, where the sidebar stacks', () => {
+    for (const width of [820, 480, 375]) {
+      expect(stylesAt(width).get('.side-handle')?.['display'], `.side-handle at ${width} px`).toBe('none')
+      expect(stylesAt(width).get('.main')?.['grid-column'], `.main at ${width} px`).toBe('1')
+      expect(stylesAt(width).get('.main')?.['grid-row'], `.main at ${width} px`).toBe('2')
+    }
+  })
+
   it('has no top bar rules left', () => {
     expect(runsRules().some((r) => r.selectors.includes('.bar'))).toBe(false)
   })
@@ -275,13 +314,16 @@ describe('runs.css run cards and Add repo', () => {
     expect(stylesAt(1280).get('.run-list')?.['gap']).toBe('12px')
   })
 
-  it('puts the status in the top-right corner, on the name line, with the fix tag under the name', () => {
+  it('puts the status in the top-right corner, on the name line, with the repo and the fix tag under the name', () => {
     const run = stylesAt(1280).get('.run')
     expect(run?.['align-items']).toBe('baseline')
     expect(run?.['justify-content']).toBe('space-between')
+    // The name takes a whole line; the muted repo and the tag share the line under it.
     const head = stylesAt(1280).get('.run-head')
-    expect(head?.['flex-direction']).toBe('column')
-    expect(head?.['align-items']).toBe('flex-start')
+    expect(head?.['flex-direction'] ?? 'row').toBe('row')
+    expect(head?.['flex-wrap']).toBe('wrap')
+    expect(stylesAt(1280).get('.run-head b')?.['flex-basis']).toBe('100%')
+    expect(stylesAt(1280).get('.run-repo')?.['font-size']).toBe('var(--size-micro)')
     // One padding for every card, so one- and two-line cards line up.
     expect(runsRules().filter((r) => r.selectors.some((s) => s.startsWith('.run') && !s.startsWith('.run-') && !s.startsWith('.runs')) && 'padding' in decls(r.body))).toHaveLength(1)
   })
