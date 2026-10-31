@@ -411,3 +411,41 @@ describe('runs.css flow rows and lines', () => {
     expect(styles.get('.flow-lines path.dashed')?.['stroke-dasharray']).toMatch(/^\d+ \d+$/)
   })
 })
+
+describe('breathing running dot', () => {
+  const runsCss = () => stripComments(readFileSync(join(here, 'runs.css'), 'utf8'))
+  const baseCss = () => stripComments(readFileSync(join(here, '../../theme/base.css'), 'utf8'))
+  const LIVE_MARKS = ['.flow-step.live .flow-mark svg', '.flow-fold[data-state="live"] .flow-mark svg']
+  const RUN_DOTS = ['.chip.s-run::before', '.status.s-run::before']
+  const REDUCE = /prefers-reduced-motion:\s*reduce/
+
+  it('has one breathe keyframe: opacity only, easing down to 0.45 and back', () => {
+    const m = /@keyframes\s+breathe\s*\{([\s\S]*?)\}\s*\}/.exec(baseCss())
+    expect(m, 'the breathe keyframes in base.css').not.toBeNull()
+    const props = [...m![1]!.matchAll(/([a-z-]+)\s*:/g)].map((x) => x[1])
+    expect(new Set(props)).toEqual(new Set(['opacity']))
+    expect(m![1]).toMatch(/opacity:\s*0\.45/)
+    // The old pulses are gone.
+    expect(runsCss()).not.toMatch(/flow-pulse/)
+    expect(baseCss()).not.toMatch(/status-pulse/)
+  })
+
+  it('animates only the running mark in the flow and the fold line, never the card or its text', () => {
+    const animated = runsRules().filter((r) => !r.media && 'animation' in decls(r.body))
+    expect(animated.flatMap((r) => r.selectors).sort()).toEqual([...LIVE_MARKS].sort())
+    for (const r of animated) expect(decls(r.body)['animation']).toBe('breathe 2s ease-in-out infinite')
+  })
+
+  it('breathes the sidebar and card running dots the same way', () => {
+    const animated = rules(baseCss()).filter((r) => !r.media && 'animation' in decls(r.body))
+    expect(animated.flatMap((r) => r.selectors).sort()).toEqual([...RUN_DOTS].sort())
+    for (const r of animated) expect(decls(r.body)['animation']).toBe('breathe 2s ease-in-out infinite')
+  })
+
+  it('stays solid when the reader asks for reduced motion', () => {
+    const off = (list: Rule[]) => list.filter((r) => r.media && REDUCE.test(r.media) && decls(r.body)['animation'] === 'none').flatMap((r) => r.selectors)
+    expect(off(runsRules()).sort()).toEqual([...LIVE_MARKS].sort())
+    expect(off(rules(baseCss())).sort()).toEqual([...RUN_DOTS].sort())
+  })
+})
+
