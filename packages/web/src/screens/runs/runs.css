@@ -303,9 +303,9 @@
   display: grid;
   grid-template-columns: repeat(var(--flow-cols), minmax(152px, 1fr));
   grid-template-rows: auto repeat(var(--flow-rows), auto);
-  /* The column gap holds the line across to the next column; the row gap the line down to the next card. */
+  /* The same room both ways: the column gap holds the line across, the row gap the line down. */
   column-gap: 32px;
-  row-gap: 16px;
+  row-gap: 32px;
   min-width: calc(var(--flow-cols) * 152px + (var(--flow-cols) - 1) * 32px);
 }
 
@@ -358,6 +358,8 @@
 
 .flow-cap {
   margin: 0;
+  /* The heading sits 16 px above its first card: it gives back half the row gap. */
+  margin-bottom: -16px;
   font: 500 var(--size-micro) / 16px var(--mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;

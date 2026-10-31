@@ -32,20 +32,44 @@ export function headPath(x: number, y: number, dir: 'right' | 'left' | 'down'): 
   return `M${n(x - 4)} ${n(y - 5)} L${n(x)} ${n(y)} L${n(x + 4)} ${n(y - 5)}`
 }
 
+/** Corner radius of the step routes. */
+const CORNER = 6
+
 /**
- * Back to an earlier column: from `from`'s left edge (at its middle) to `to`'s right edge a third of the
- * way down, so it doesn't meet a line leaving `to`'s right edge at its middle. Relative to `origin`.
+ * An orthogonal "smooth step" route from (x1, y1) to (x2, y2): horizontal out, one turn in the middle
+ * between them, vertical, a second turn, horizontal in, with rounded corners (6 px, less on a small
+ * step or a narrow gap). A straight line when both share a mid-line (within half a pixel).
+ */
+function step(x1: number, y1: number, x2: number, y2: number): string {
+  if (Math.abs(y2 - y1) < 0.5) return `M${n(x1)} ${n(y1)} L${n(x2)} ${n(y2)}`
+  const m = (x1 + x2) / 2
+  const dx = Math.sign(x2 - x1) || 1
+  const dy = Math.sign(y2 - y1)
+  const r = Math.min(CORNER, Math.abs(y2 - y1) / 2, Math.abs(x2 - x1) / 2)
+  return [
+    `M${n(x1)} ${n(y1)}`,
+    `L${n(m - dx * r)} ${n(y1)}`,
+    `Q${n(m)} ${n(y1)} ${n(m)} ${n(y1 + dy * r)}`,
+    `L${n(m)} ${n(y2 - dy * r)}`,
+    `Q${n(m)} ${n(y2)} ${n(m + dx * r)} ${n(y2)}`,
+    `L${n(x2)} ${n(y2)}`,
+  ].join(' ')
+}
+
+/** Across to a later column: from `from`'s right edge to `to`'s left edge, each at its mid-line, by a step route. */
+export function stepPath(from: Box, to: Box, origin: Box): string {
+  return step(from.right - origin.left, (from.top + from.bottom) / 2 - origin.top, to.left - origin.left, (to.top + to.bottom) / 2 - origin.top)
+}
+
+/**
+ * Back to an earlier column, by the same step route through the gap: from two thirds down `from`'s left
+ * edge to a third down `to`'s right edge, so it never runs along a line that meets either card at its
+ * mid-line. Relative to `origin`.
  */
 export function backPath(from: Box, to: Box, origin: Box): string {
   const x1 = from.left - origin.left
-  const y1 = (from.top + from.bottom) / 2 - origin.top
+  const y1 = from.top + ((from.bottom - from.top) * 2) / 3 - origin.top
   const x2 = to.right - origin.left
   const y2 = to.top + (to.bottom - to.top) / 3 - origin.top
-  const m = (x1 + x2) / 2
-  return `M${n(x1)} ${n(y1)} C${n(m)} ${n(y1)} ${n(m)} ${n(y2)} ${n(x2)} ${n(y2)}`
-}
-
-/** Not built yet. */
-export function stepPath(_from: Box, _to: Box, _origin: Box): string {
-  return ''
+  return step(x1, y1, x2, y2)
 }

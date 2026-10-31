@@ -1,7 +1,7 @@
 import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { Stage } from '@pod-board/model'
 import { Icon } from '../../theme/icons.tsx'
-import { backPath, downPath, edgePath, headPath } from '../board/geometry.ts'
+import { backPath, downPath, headPath, stepPath } from '../board/geometry.ts'
 import { flowColumns, flowEdges, foldLine } from './plan-view.ts'
 
 type Props = { stages: Stage[] }
@@ -39,7 +39,7 @@ export function Flow({ stages }: Props) {
       const a = cardRefs.current.get(e.from)?.getBoundingClientRect()
       const b = cardRefs.current.get(e.to)?.getBoundingClientRect()
       if (!a || !b) continue
-      const d = e.kind === 'down' ? downPath(a, b, origin) : e.kind === 'back' ? backPath(a, b, origin) : edgePath(a, b, origin)
+      const d = e.kind === 'down' ? downPath(a, b, origin) : e.kind === 'back' ? backPath(a, b, origin) : stepPath(a, b, origin)
       const head =
         e.kind === 'down'
           ? headPath((b.left + b.right) / 2 - origin.left, b.top - origin.top, 'down')
