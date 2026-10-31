@@ -118,3 +118,5 @@ export const moreLabel = (open: boolean, clamped: boolean): string | undefined =
 
 /** Whether a clamped body hides text: its full height is over its box by more than a pixel of rounding. */
 export const isClamped = (scrollHeight: number, clientHeight: number): boolean => scrollHeight - clientHeight > 1
+
+export const wouldClamp = (_scrollHeight: number, _lineHeight: number): boolean => false

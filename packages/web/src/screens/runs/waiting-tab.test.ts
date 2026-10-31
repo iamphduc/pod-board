@@ -4,7 +4,7 @@ import type { MergeState } from './merge-flow.ts'
 import type { NextItem } from './next-step.ts'
 import type { WaitingRow } from './queue-view.ts'
 import type { EntryKind } from './entry-kind.ts'
-import { answerAnchor, groupOpen, isClamped, kindChip, moreLabel, toggleGroup, keepOpen, mergeAnchor, replyGhost, replySeen, rowMeta, toggleOpen, waitGroups } from './waiting-tab.ts'
+import { answerAnchor, groupOpen, kindChip, wouldClamp, moreLabel, toggleGroup, keepOpen, mergeAnchor, replyGhost, replySeen, rowMeta, toggleOpen, waitGroups } from './waiting-tab.ts'
 
 const row = (line: string, over: Partial<WaitingRow> = {}): WaitingRow => ({
   key: `0:${line}`,
@@ -185,12 +185,18 @@ describe('waiting tab', () => {
     expect(moreLabel(true, false)).toBeUndefined()
   })
 
-  it('a body is clamped when its text is taller than its box', () => {
-    expect(isClamped(63, 42)).toBe(true)
-    expect(isClamped(42, 42)).toBe(false)
-    // Sub-pixel rounding is not overflow.
-    expect(isClamped(43, 42)).toBe(false)
-    // Not laid out yet (hidden tab): no control.
-    expect(isClamped(0, 0)).toBe(false)
+  it('a body would clamp when its text is over two lines, open or closed', () => {
+    // From the full text height and the line height, so the same rule holds while the entry is open:
+    // an open body that wraps to 3 lines after a resize still gets Show less; one that fits again doesn't.
+    expect(wouldClamp(63, 21)).toBe(true)
+    expect(wouldClamp(42, 21)).toBe(false)
+    expect(wouldClamp(21, 21)).toBe(false)
+    // Sub-pixel rounding is not a third line.
+    expect(wouldClamp(43, 21)).toBe(false)
+    expect(wouldClamp(43.5, 21)).toBe(true)
+    // Not laid out yet (hidden tab), or no line height to read: no control.
+    expect(wouldClamp(0, 21)).toBe(false)
+    expect(wouldClamp(63, Number.NaN)).toBe(false)
+    expect(wouldClamp(63, 0)).toBe(false)
   })
 })
