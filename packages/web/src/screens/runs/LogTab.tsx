@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import { otherActivity, type ActionEntry, type BoardRepo, type FixPipeline, type Pipeline, type RunSummary } from '@pod-board/model'
 import { EngineerView } from '../engineer/EngineerView.tsx'
 import { ActionLog } from './ActionLog.tsx'
@@ -14,11 +14,17 @@ type Props = { repo: BoardRepo; run: RunSummary; pipeline?: Pipeline; fixPipelin
 export function LogTab({ repo, run, pipeline, fixPipeline, agent, now, actions }: Props) {
   return (
     <div className="tab-panel log-tab">
-      {fixPipeline ? <FixLog repo={repo} run={run} pipeline={fixPipeline} agent={agent} now={now} /> : pipeline && <SliceLog log={pipeline.log} />}
+      {fixPipeline ? <FixLog repo={repo} run={run} pipeline={fixPipeline} agent={agent} now={now} /> : pipeline && <PlanLog repo={repo} run={run} pipeline={pipeline} />}
       <OtherActivity list={otherActivity(repo, now)} />
       <ActionLog entries={actions} now={now} />
     </div>
   )
+}
+
+/** A plan's slice log, with the plan's sprints for their numbers and states. */
+function PlanLog({ repo, run, pipeline }: { repo: BoardRepo; run: RunSummary; pipeline: Pipeline }) {
+  const plan = repo.model.plans.find((p) => p.slug === run.plan)
+  return <SliceLog log={pipeline.log} sprints={plan?.sprints ?? []} current={plan?.currentSprint} />
 }
 
 /** A fix run's agent log, and the open engineer's view below it. */
@@ -28,6 +34,7 @@ function FixLog({ repo, run, pipeline, agent, now }: { repo: BoardRepo; run: Run
   const open = agent === undefined ? undefined : pipeline.log.findLast((x) => x.agentId === agent && x.engineer)
   const engineer = open && repo.agents.find((a) => a.id === open.agentId)
 
+  const id = useId()
   const viewRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (open) viewRef.current?.scrollIntoView?.({ block: 'nearest' })
@@ -39,13 +46,14 @@ function FixLog({ repo, run, pipeline, agent, now }: { repo: BoardRepo; run: Run
         <p className="muted note">No agent has started on this fix yet.</p>
       ) : (
         <div className="log-frame" role="region" aria-label="Agent log" tabIndex={0}>
-          <div className="log-group">
-            <table className="slice-log agent-log">
+          <section className="log-group" aria-labelledby={id}>
+            <div className="log-sprint">
+              <h3 className="log-sprint-name" id={id}>
+                Agents
+              </h3>
+            </div>
+            <table className="slice-log agent-log" aria-labelledby={id}>
               <tbody>
-                <tr className="grp">
-                  <th scope="rowgroup">Agents</th>
-                  <td />
-                </tr>
                 {rows.map((r) => (
                   <tr key={r.key} aria-current={r.agentId === open?.agentId ? 'true' : undefined}>
                     <td>{r.href ? <a href={r.href}>{r.label}</a> : r.label}</td>
@@ -57,7 +65,7 @@ function FixLog({ repo, run, pipeline, agent, now }: { repo: BoardRepo; run: Run
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
         </div>
       )}
       {open && (

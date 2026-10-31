@@ -578,7 +578,7 @@
 .log-frame {
   position: relative;
   display: grid;
-  gap: 8px;
+  gap: 12px;
   overflow-x: auto;
   min-width: 0;
 }
@@ -697,14 +697,32 @@
 /* Slice log */
 
 /*
- * One faint block per wave group (the Action log row's fill, 8 px corners, no border), 8 px apart. Inside
- * a block, 20 px lines with 2 px a side: rows about 24 px, a header 4 px above its first slice. No dividers.
+ * One faint block per sprint (the Action log row's fill, 8 px corners, no border, 12 px padding on every
+ * side so its text lines up with the tabs and the Action log), 12 px apart. Inside: the sprint's name and
+ * state, then its waves, 8 px apart, each a `Wave N` row and its slices: 20 px lines with 2 px a side
+ * (rows about 24 px, a wave 4 px above its first slice). No dividers. Sprint > wave > slice: the sprint
+ * semibold, the wave regular and muted.
  */
 .log-group {
   min-width: 560px;
-  padding: 8px 12px;
+  padding: 12px;
   border-radius: var(--radius-md);
   background: var(--surface);
+}
+
+.log-sprint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.log-sprint-name {
+  margin: 0;
+  font-size: var(--size-dense);
+  font-weight: 600;
+  line-height: 20px;
 }
 
 .slice-log {
@@ -737,9 +755,13 @@
   margin-left: 8px;
 }
 
-.slice-log tr.grp th,
-.slice-log tr.grp td {
-  font-weight: 600;
+.slice-log tr.grp th {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.log-wave + .log-wave tr.grp > * {
+  padding-top: 10px;
 }
 
 .slice-log .code {
@@ -794,7 +816,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 4px 12px;
-  padding: 6px 10px;
+  padding: 6px 12px;
   border-radius: var(--radius-sm);
   background: var(--surface);
   font-size: var(--size-small);
@@ -1083,6 +1105,14 @@
 @media (max-width: 560px) {
   .log-group {
     min-width: 0;
+  }
+
+  .log-wave + .log-wave {
+    margin-top: 8px;
+  }
+
+  .log-wave + .log-wave tr.grp > * {
+    padding-top: 0;
   }
 
   .slice-log tbody,

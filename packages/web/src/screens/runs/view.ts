@@ -9,6 +9,7 @@ import {
   type Board,
   type BoardRepo,
   type FixLogRow,
+  type LogGroup,
   type LogRow,
   type OtherAgent,
   type RunState,
@@ -72,6 +73,35 @@ export function groupChip(status: string): Chip {
           ? 's-run'
           : 's-idle'
   return { cls, label: status }
+}
+
+/** One wave of a sprint's log block: `Wave N`, its status, and its slices. */
+export type LogWave = { key: string; label: string; chip: Chip; rows: LogRow[] }
+/** One sprint's log block: `Sprint N · <slug>`, its state when the plan knows the sprint, and its waves. */
+export type LogBlock = { key: string; title: string; chip?: Chip; waves: LogWave[] }
+
+/**
+ * The slice log as one block per sprint, in log order, each holding its waves. The sprint's number
+ * comes from the plan (a sprint with no doc has no log, so numbers can skip); its state is done,
+ * running (the plan's current sprint), or waiting. A sprint the plan doesn't list keeps its slug alone.
+ */
+export function logBlocks(log: LogGroup[], sprints: { slug: string; status: string }[], current: string | undefined): LogBlock[] {
+  const blocks: LogBlock[] = []
+  for (const g of log) {
+    let block = blocks.at(-1)
+    if (block?.key !== g.sprint) {
+      const at = sprints.findIndex((s) => s.slug === g.sprint)
+      const sprint = sprints[at]
+      block = { key: g.sprint, title: sprint ? `Sprint ${at + 1} · ${g.sprint}` : g.sprint, waves: [] }
+      if (sprint) {
+        block.chip =
+          sprint.status === 'done' ? { cls: 's-ok', label: 'done' } : sprint.slug === current ? { cls: 's-run', label: 'running' } : { cls: 's-idle', label: 'waiting' }
+      }
+      blocks.push(block)
+    }
+    block.waves.push({ key: `${g.sprint}/${g.wave}`, label: `Wave ${g.wave}`, chip: groupChip(g.status), rows: g.rows })
+  }
+  return blocks
 }
 
 /** `high · 22 min · 248k tok`, leaving out what isn't known. Zero tokens never show. */
