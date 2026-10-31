@@ -214,6 +214,11 @@ describe('runs.css main column and run cards', () => {
     const phone = stylesAt(375)
     expect(px(phone.get('.flow-frame')?.['margin-bottom'])).toBeLessThanOrEqual(16)
     expect(px(phone.get('.run-header')?.['margin-bottom'])).toBeLessThanOrEqual(12)
+    // The plan's title is longer than its slug and wraps beside the link and the menu, so the strip, the
+    // card's heading and its button sit 8, 8 and 16 px closer in (measured: the button's bottom at 674 px without).
+    expect(px(phone.get('.run-meta')?.['margin-top'])).toBeLessThanOrEqual(8)
+    expect(px(phone.get('.next-top')?.['margin-bottom'])).toBeLessThanOrEqual(8)
+    expect(px(phone.get('.next-acts')?.['margin-top'])).toBeLessThanOrEqual(16)
   })
 
   it('shortens the wave board link on phones', () => {
@@ -573,5 +578,101 @@ describe('runs.css log tab', () => {
     const phone = stylesAt(375)
     expect(phone.get('.slice-log tr:not(.grp) td')?.['display']).toBe('inline')
     expect(phone.get('.slice-log tr:not(.grp) td:last-child:not(:empty)::before')?.['content']).toBe('" · "')
+  })
+})
+
+/**
+ * The CLAUDE.md Spacing rules on screen 1 and the sidebar: runs.css, the tabs and the ⋯ menu, and the
+ * shared controls in base.css. The Add repo dialog's picker (picker.css) and screens 2 and 3 have their own files.
+ */
+describe('spacing scale', () => {
+  const SCREEN_ONE = ['runs.css', 'tabs.css', 'menu.css', '../../theme/base.css']
+  const SPACING = /^(padding|margin|gap|row-gap|column-gap)(-[a-z-]+)?$/
+  /**
+   * Values off the 4 px scale on purpose, each with its reason. 2 px is the tight-row allowance: the
+   * cells of the Log's 20 px rows, and a tag that has to fit inside one.
+   */
+  const ALLOWED: Record<string, string> = {
+    '.sr-only margin -1px': 'the visually hidden pattern, not spacing',
+    '.side-foot .add-repo padding-left 15px': 'Buttons rule: centred on the plus’s ink (runs-css pins it)',
+    '.side-foot .add-repo padding-right 17px': 'Buttons rule: centred on the plus’s ink',
+    '.btn.sm gap 6px': 'Buttons rule: 6–8 px of visible gap between icon and label',
+    '.btn.lead gap 6px': 'Buttons rule',
+    '.btn.trail gap 6px': 'Buttons rule',
+    '.btn.sm.lead padding-left 10px': 'Buttons rule: the icon side 2 px less than the 12 px text side',
+    '.btn.sm.trail padding-right 10px': 'Buttons rule',
+    '.switch::after margin-top -6px': 'centres the 12 px knob on the track, not spacing',
+    '.slice-log th padding 2px': 'tight row: the Log’s cell padding',
+    '.slice-log td padding 2px': 'tight row',
+    '.slice-log tr padding 2px': 'tight row (phones)',
+    '.chip.tag padding 2px': 'a tag inside a 20 px Log row',
+    '.reply-word padding 2px': 'a reply word tag inside its row',
+  }
+  const offScale = () => {
+    const out: string[] = []
+    for (const file of SCREEN_ONE) {
+      for (const r of rules(stripComments(readFileSync(join(here, file), 'utf8')))) {
+        for (const [prop, value] of Object.entries(decls(r.body))) {
+          if (!SPACING.test(prop)) continue
+          for (const m of value.matchAll(/(-?\d+(?:\.\d+)?)px/g)) {
+            const n = Number(m[1])
+            if (n % 4 === 0) continue
+            for (const sel of r.selectors) if (!ALLOWED[`${sel} ${prop} ${m[1]}px`]) out.push(`${file} ${sel} ${prop}: ${value}`)
+          }
+        }
+      }
+    }
+    return out
+  }
+
+  it('puts every gap, padding and margin on the 4 px scale, but for the listed exceptions', () => {
+    expect(offScale()).toEqual([])
+  })
+
+  it('pads each box wider than tall, about 12 by 16', () => {
+    const boxes: [string, number][] = [
+      ['.run', 1280],
+      ['.flow-step', 1280],
+      ['.banner', 1280],
+      ['.log-group', 1280],
+      ['.other-list li', 1280],
+      ['.flow-fold', 375],
+    ]
+    const menu = rules(stripComments(readFileSync(join(here, 'menu.css'), 'utf8')))
+    const pads = boxes.map(([sel, width]) => [sel, stylesAt(width).get(sel)?.['padding'] ?? ''])
+    pads.push(['.mi', decls(menu.find((r) => r.selectors.includes('.mi'))?.body ?? '')['padding'] ?? ''])
+    for (const [sel, pad] of pads) {
+      // Two values, vertical then horizontal, the horizontal one larger.
+      const m = /^(\d+)px (\d+)px$/.exec(pad!)
+      expect(m !== null && Number(m[2]) > Number(m[1]), `${sel} padding ${pad}`).toBe(true)
+    }
+    expect(stylesAt(1280).get('.run')?.['padding']).toBe('12px 16px')
+    expect(stylesAt(1280).get('.flow-step')?.['padding']).toBe('12px 16px')
+  })
+
+  it('pads the Next step card and the in-place panels wider than tall', () => {
+    const base = rules(stripComments(readFileSync(join(here, '../../theme/base.css'), 'utf8')))
+    const at = (sel: string) => Object.assign({}, ...base.filter((r) => !r.media && r.selectors.includes(sel)).map((r) => decls(r.body)))
+    expect(at('.card')['padding']).toBe('20px 24px')
+    expect(at('.inplace')['padding']).toBe('12px 16px')
+    expect(stylesAt(375).get('.card.next-step')?.['padding']).toBe('16px 20px')
+  })
+
+  it('keeps inside space at or below outside space', () => {
+    const px = (v: string | undefined) => Number(/^(\d+)px/.exec(v ?? '')?.[1] ?? NaN)
+    const at = stylesAt(1280)
+    // A run card's name and its tag sit closer than the cards do.
+    expect(px(at.get('.run-head')?.['gap'])).toBeLessThan(px(at.get('.run-list')?.['gap']))
+    // A step card's title and detail sit closer than the cards do.
+    expect(px(at.get('.flow-step')?.['gap'])).toBeLessThan(px(at.get('.flow')?.['row-gap']))
+    // The title and its meta line sit closer than the header and the flow.
+    expect(px(at.get('.run-sub')?.['margin-top'])).toBeLessThan(px(at.get('.run-header')?.['margin-bottom']))
+    // A reply and its result sit closer than the replies do.
+    expect(px(at.get('.reply-item')?.['gap'])).toBeLessThan(px(at.get('.reply-list')?.['gap']))
+  })
+
+  it('opens the ⋯ menu 8 px under its trigger', () => {
+    const menu = rules(stripComments(readFileSync(join(here, 'menu.css'), 'utf8')))
+    expect(menu.find((r) => r.selectors.includes('.bar-menu-panel'))?.body).toMatch(/top:\s*calc\(100% \+ 8px\)/)
   })
 })

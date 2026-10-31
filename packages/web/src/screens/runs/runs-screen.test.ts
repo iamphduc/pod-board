@@ -342,8 +342,11 @@ describe('sidebar', () => {
     const side = sideOf(html)
     const at = (needle: string) => side.indexOf(needle)
     expect(at('Pod Board')).toBeGreaterThan(-1)
-    expect(at('Runs · ')).toBeGreaterThan(at('Pod Board'))
-    expect(at('class="run-list"')).toBeGreaterThan(at('Runs · '))
+    // Just "Runs": the cards already show each run's state, so no `· N active` count.
+    expect(side).toMatch(/<span class="eyebrow runs-head">Runs<\/span>/)
+    expect(text(side)).not.toMatch(/active/)
+    expect(at('runs-head')).toBeGreaterThan(at('Pod Board'))
+    expect(at('class="run-list"')).toBeGreaterThan(at('runs-head'))
     expect(side).toMatch(ADD)
     expect(side.search(ADD)).toBeGreaterThan(at('class="run-list"'))
     // The button opens a dialog, and nothing is open at start.
@@ -372,6 +375,24 @@ describe('sidebar', () => {
     expect(header).toMatch(/aria-label="Menu"/)
     expect(header.indexOf('aria-label="Menu"')).toBeGreaterThan(header.indexOf('class="run-name"'))
     expect(count(html, /aria-label="Menu"/)).toBe(1)
+  })
+
+  it('heads the run with a plain title and one muted meta line, no crumb', () => {
+    const header = headerOf(render({ repo: chess([onlyQueue()]) }).html)
+    expect(header).toMatch(/<h1 class="run-name">Sparring ladder to Liem<\/h1><p class="run-sub muted">chess-web · Plan<\/p>/)
+    // No slash crumb and no eyebrow above the title.
+    expect(header).not.toMatch(/run-crumb|eyebrow/)
+    expect(text(header)).not.toMatch(/\//)
+    // The wave board link and the menu stay at the right end.
+    expect(header.indexOf('Open the wave board')).toBeGreaterThan(header.indexOf('run-sub'))
+  })
+
+  it('heads a fix run with its readable slug while it has no PR', () => {
+    const name = 'fix-sprint-column'
+    const claim: Claim = { portBase: 3100, repoPath: '/c', plan: name }
+    const header = headerOf(render({ repo: chess([], { claims: [claim] }), plan: name }).html)
+    expect(header).toMatch(/<h1 class="run-name">Sprint column<\/h1><p class="run-sub muted">chess-web · Fix<\/p>/)
+    expect(header).not.toMatch(/fix · /)
   })
 
   it('keeps the menu on the wave board header', () => {

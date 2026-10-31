@@ -2,13 +2,13 @@ import type { RunSummary } from '@pod-board/model'
 import { hashFor } from '../../selection.ts'
 import { runChip, runLabel } from './view.ts'
 
-type Props = { runs: RunSummary[]; active: number; selected: RunSummary | undefined }
+type Props = { runs: RunSummary[]; selected: RunSummary | undefined }
 
 /** The runs: one row each with its label, the `fix` tag, and its state as a dot and a word. */
-export function RunsList({ runs, active, selected }: Props) {
+export function RunsList({ runs, selected }: Props) {
   return (
     <nav className="runs" aria-label="Runs">
-      <span className="eyebrow runs-head">Runs · {active} active</span>
+      <span className="eyebrow runs-head">Runs</span>
       {runs.length > 0 && (
         <ul className="run-list">
           {runs.map((r) => {
