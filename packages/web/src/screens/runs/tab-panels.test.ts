@@ -124,7 +124,13 @@ describe('tab panels', () => {
     expect(waves.map((w) => [w[1], w[2], w[3]!.match(/<tr>/g)?.length])).toEqual(pipeline.log.map((g) => [`Wave ${g.wave}`, g.status, g.rows.length]))
     // Confidence is a quiet tag after the title and model; the status column holds no confidence.
     expect(plan).toMatch(/<span class="code">L1<\/span>[^]*?<span class="muted"> · opus<\/span><span class="chip tag">medium confidence<\/span><\/td><td><\/td><\/tr>/)
-    expect(plan).not.toMatch(/class="figures">[^<]*(high|medium|low)/)
+    // A running slice: its figures follow the title (after the model, before the tag); the rail holds only `running`.
+    const t1 = { id: 't1', session: 's', type: 'pod:engineer', tokens: 392_000, ended: false, sprint: 'ladder', slice: 'T1', startedAt: NOW - 38 * MIN, lastAt: NOW - MIN }
+    const live = chess([], { agents: [t1] })
+    const livePlan = renderToStaticMarkup(createElement(LogTab, { repo: live, run: runOf(live), pipeline: buildPipeline(live, PLAN, NOW)!, now: NOW, actions: [] }))
+    expect(livePlan).toMatch(/<span class="code">T1<\/span>[^]*?<span class="muted"> · opus<\/span><span class="figures"> · \d+ min · 392k tok<\/span><\/td><td><span class="chip s-run">running<\/span><\/td><\/tr>/)
+    // No status cell anywhere holds figures.
+    for (const html of [plan, livePlan]) expect(html).not.toMatch(/<td>(<span class="chip [^"]+">[^<]*<\/span>)?<span class="figures">/)
     // A slice with no figures yet (T1, pending) leaves its figures cell empty, so a phone shows no stray middle dot.
     expect(plan).toMatch(/<span class="code">T1<\/span>[\s\S]*?<\/td><td><\/td><\/tr>/)
 
@@ -143,6 +149,8 @@ describe('tab panels', () => {
     const fix = renderToStaticMarkup(createElement(LogTab, { repo: fixRepo, run: runOf(fixRepo, 'fix-scroll'), fixPipeline: buildFixPipeline(fixRepo, 'fix-scroll', NOW)!, now: NOW, actions: [] }))
     const agents = /<section class="log-group" aria-labelledby="([^"]+)"><div class="log-sprint"><h3 class="log-sprint-name" id="\1">Agents<\/h3><\/div><table class="slice-log agent-log" aria-labelledby="\1"><tbody><tr/.exec(fix)
     expect(agents, 'the Agents block').not.toBeNull()
+    // Its rows too: the label, then the time inline; the rail holds only the agent's state.
+    expect(fix).toMatch(/<tr><td>[^<]*(<a [^>]*>[^<]*<\/a>)?[^<]*<span class="figures"> · [^<]+<\/span><\/td><td><span class="chip [^"]+">[^<]+<\/span><\/td><\/tr>/)
   })
 
   it("the Log never disagrees with the runs list: the current sprint and its in-progress wave take the run's state", () => {
