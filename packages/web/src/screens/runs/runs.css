@@ -699,12 +699,16 @@
   min-width: 560px;
   border-collapse: collapse;
   font-size: var(--size-dense);
+  line-height: 20px;
 }
 
-/* No row dividers: proximity groups the rows. Tight inside a wave group (4 px a side), 24 px above each header. */
+/*
+ * No row dividers: proximity groups the rows. Inside a wave group, 20 px lines with 2 px a side (rows
+ * about 24 px, the header 4 px above its first slice); 24 px above each header.
+ */
 .slice-log th,
 .slice-log td {
-  padding: 4px 10px;
+  padding: 2px 10px;
   text-align: left;
   vertical-align: middle;
 }
@@ -1086,7 +1090,7 @@
   }
 
   .slice-log tr {
-    padding: 3px 0;
+    padding: 2px 0;
   }
 
   .slice-log tr.grp {
