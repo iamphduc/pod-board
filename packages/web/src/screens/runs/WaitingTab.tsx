@@ -11,7 +11,6 @@ import {
   NOTHING_ELSE,
   answerAnchor,
   groupOpen,
-  isClamped,
   keepOpen,
   kindChip,
   mergeAnchor,
@@ -22,6 +21,7 @@ import {
   toggleGroup,
   toggleOpen,
   waitGroups,
+  wouldClamp,
   type ReplySeen,
 } from './waiting-tab.ts'
 import './tabs.css'
@@ -34,12 +34,12 @@ type Props = { repo: BoardRepo; run: RunSummary; items: NextItem[] }
  */
 function EntryToggle({ row, open, onToggle }: { row: WaitingRow; open: boolean; onToggle: () => void }) {
   const body = useRef<HTMLSpanElement>(null)
-  // Measured only while closed (an open body never overflows); kept while open, so Show less stays.
+  // Measured open or closed, and again on each resize: the full text height against two lines.
   const [clamped, setClamped] = useState(false)
   useLayoutEffect(() => {
     const el = body.current
-    if (!el || open) return
-    const measure = () => setClamped(isClamped(el.scrollHeight, el.clientHeight))
+    if (!el) return
+    const measure = () => setClamped(wouldClamp(el.scrollHeight, parseFloat(getComputedStyle(el).lineHeight)))
     measure()
     const watch = new ResizeObserver(measure)
     watch.observe(el)

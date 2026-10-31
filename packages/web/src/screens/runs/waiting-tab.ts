@@ -112,11 +112,18 @@ export const SHOW_LESS = 'Show less'
 
 /**
  * The words under an entry's body: `Show more` while it is cut to two lines, `Show less` while open.
- * `clamped` is whether the closed body overflows; a body that fits gets neither.
+ * `clamped` is wouldClamp: whether the body is over two lines; a body that fits gets neither.
  */
 export const moreLabel = (open: boolean, clamped: boolean): string | undefined => (!clamped ? undefined : open ? SHOW_LESS : SHOW_MORE)
 
-/** Whether a clamped body hides text: its full height is over its box by more than a pixel of rounding. */
-export const isClamped = (scrollHeight: number, clientHeight: number): boolean => scrollHeight - clientHeight > 1
+/** Lines a closed body shows: `.wait-body.clamp` in tabs.css. */
+export const CLAMP_LINES = 2
 
-export const wouldClamp = (_scrollHeight: number, _lineHeight: number): boolean => false
+/**
+ * Whether a body is (or, while open, would be) cut: its full text height is over CLAMP_LINES lines by more
+ * than a pixel of rounding. The same rule open or closed, so a resize updates Show more and Show less alike.
+ */
+export function wouldClamp(scrollHeight: number, lineHeight: number): boolean {
+  if (!(lineHeight > 0)) return false
+  return scrollHeight > CLAMP_LINES * lineHeight + 1
+}
