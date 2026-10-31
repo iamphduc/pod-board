@@ -463,9 +463,13 @@ describe('runs.css log tab', () => {
     }
   })
 
-  it('separates wave groups with space instead', () => {
-    expect(stylesAt(1280).get('.slice-log tr.grp th')?.['padding-top']).toBe('20px')
-    expect(stylesAt(375).get('.slice-log tr.grp')?.['padding-top']).toBe('20px')
+  it('separates wave groups with space instead: tight inside a group, wide between groups', () => {
+    // Inside a group: 4 px above and below each cell (8 px between rows); a phone row 3 px each way.
+    expect(stylesAt(1280).get('.slice-log td')?.['padding']).toBe('4px 10px')
+    expect(stylesAt(375).get('.slice-log tr')?.['padding']).toBe('3px 0')
+    // Between groups: 24 px above each wave header, at least three times the gap inside.
+    expect(stylesAt(1280).get('.slice-log tr.grp th')?.['padding-top']).toBe('24px')
+    expect(stylesAt(375).get('.slice-log tr.grp')?.['padding-top']).toBe('24px')
     // The first group sits close under the tab bar.
     expect(stylesAt(1280).get('.slice-log tr.grp:first-child th')?.['padding-top']).toBe('4px')
   })
