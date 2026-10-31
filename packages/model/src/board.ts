@@ -54,6 +54,10 @@ export type PrStatus = {
   checkedAt: number
   /** The head branch, set when the PR was found by its branch (a fix run's `fix-<slug>`, or a plan's final PR on `<plan-slug>`). */
   branch?: string
+  /** The base branch gh reports (`baseRefName`), when it reports one. */
+  base?: string
+  /** When it merged (ms since epoch), from gh's `mergedAt`; only on a merged PR gh gave a time for. */
+  mergedAt?: number
 }
 
 export type GhStatus = 'ok' | 'missing' | 'logged-out' | 'unknown'

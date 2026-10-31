@@ -403,6 +403,31 @@ describe('buildRepoModel', () => {
     expect(beta?.go).toBe('unknown')
   })
 
+  it('plan facts, research reports and the staging branch', () => {
+    const files: RepoFiles = {
+      'pod-docs/README.md': README,
+      'pod-docs/plans/alpha.md': `${plan('Alpha', [])}\nThe human picked direction B.\n\nSee [it](../research/alpha-notes.md).\n`,
+      'pod-docs/plans/beta.md': plan('Beta', []).replace(' · Grilled-with: grilling', '').replace('## Look', ''),
+      'pod-docs/research/alpha.md': '# Research\n',
+      'pod-docs/research/archive/old.md': '# Old\n',
+      'pod-docs/research/notes.txt': 'x',
+      'pod-docs/decisions.md': '# Decisions\n\n## 2026-10-18 — merge target: staging\n\nLand on `pod-staging`.\n',
+    }
+    const repo = buildRepoModel(files)
+    // Reports directly in pod-docs/research, by slug; nothing deeper, nothing but .md.
+    expect(repo.research).toEqual(['alpha'])
+    expect(repo.staging).toBe('pod-staging')
+    const [alpha, beta] = repo.plans
+    expect(alpha).toMatchObject({ grilledWith: 'grilling', look: { kind: 'set', direction: 'direction B' }, researchLinks: ['alpha-notes'] })
+    expect(beta).not.toHaveProperty('grilledWith')
+    expect(beta).not.toHaveProperty('look')
+    expect(beta).not.toHaveProperty('researchLinks')
+    // No research folder and no decision: an empty list and no staging branch.
+    const bare = buildRepoModel({ 'pod-docs/README.md': README })
+    expect(bare.research).toEqual([])
+    expect(bare).not.toHaveProperty('staging')
+  })
+
   it('tolerates malformed docs', () => {
     const files: RepoFiles = {
       'pod-docs/README.md': README,
@@ -621,7 +646,7 @@ describe('buildRepoModel', () => {
   })
 
   it('public exports', () => {
-    for (const name of ['buildRepoModel', 'docsVersion', 'prRef', 'sliceDeps', 'needsYou', 'planExtras', 'parsePlan', 'parseSprint', 'parseQueue', 'readTable', 'isDone', 'queueLines', 'splitAnswer', 'isAnswerable', 'cleanAnswer', 'withAnswer']) {
+    for (const name of ['buildRepoModel', 'docsVersion', 'prRef', 'sliceDeps', 'needsYou', 'planExtras', 'planFacts', 'stagingBranch', 'buildFlow', 'parsePlan', 'parseSprint', 'parseQueue', 'readTable', 'isDone', 'queueLines', 'splitAnswer', 'isAnswerable', 'cleanAnswer', 'withAnswer']) {
       expect(typeof (model as Record<string, unknown>)[name], name).toBe('function')
     }
     for (const name of ['parseAgentTranscript', 'agentState']) {

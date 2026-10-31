@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { createExec, createGhReader, type ExecResult, type GhExec } from './gh.ts'
 
 const REPO = 'E:\\Projects\\chess-web'
-const PR_FIELDS = 'number,state,url,statusCheckRollup'
+const PR_FIELDS = 'number,state,url,statusCheckRollup,baseRefName,mergedAt'
 
 type Call = { args: string[]; cwd: string }
 
@@ -346,6 +346,27 @@ describe('createGhReader', () => {
       expect((await view(prJson(4, 'CLOSED')))?.state).toBe('closed')
     })
 
+    test('base branch', async () => {
+      const gh = fakeGh()
+      gh.prs.set(80, ok(JSON.stringify({ number: 80, state: 'OPEN', url: 'u', statusCheckRollup: [], baseRefName: 'pod-staging' })))
+      const reader = createGhReader({ exec: gh.exec, now: clock().now })
+      await reader.refresh(REPO, [80])
+      expect(reader.get(REPO, 80)?.base).toBe('pod-staging')
+    })
+
+    test('merge time', async () => {
+      const gh = fakeGh()
+      gh.prs.set(80, ok(JSON.stringify({ number: 80, state: 'MERGED', url: 'u', statusCheckRollup: [], mergedAt: '2026-10-30T10:00:00Z' })))
+      gh.prs.set(81, ok(JSON.stringify({ number: 81, state: 'OPEN', url: 'u', statusCheckRollup: [], mergedAt: null })))
+      gh.prs.set(82, ok(JSON.stringify({ number: 82, state: 'MERGED', url: 'u', statusCheckRollup: [], mergedAt: 'soon' })))
+      const reader = createGhReader({ exec: gh.exec, now: clock().now })
+      await reader.refresh(REPO, [80, 81, 82])
+      expect(reader.get(REPO, 80)?.mergedAt).toBe(Date.UTC(2026, 9, 30, 10))
+      // No time, or one that isn't a date: left out.
+      expect(reader.get(REPO, 81)).not.toHaveProperty('mergedAt')
+      expect(reader.get(REPO, 82)).not.toHaveProperty('mergedAt')
+    })
+
     test('url', async () => {
       expect((await view(prJson(4, 'OPEN')))?.url).toBe('https://github.com/o/r/pull/4')
       const noUrl = await view(JSON.stringify({ number: 4, state: 'OPEN', statusCheckRollup: [] }))
@@ -403,7 +424,7 @@ describe('createGhReader', () => {
 })
 
 describe('PRs found by head branch (fix runs)', () => {
-  const LIST_FIELDS = 'number,state,url,statusCheckRollup,headRefName'
+  const LIST_FIELDS = 'number,state,url,statusCheckRollup,baseRefName,mergedAt,headRefName'
   const item = (n: number, state: string, head = 'fix-scroll') => ({ number: n, state, url: `https://github.com/o/r/pull/${n}`, statusCheckRollup: [], headRefName: head })
 
   /** A fake `gh` that answers `pr list --head <b>` from `lists`. */
@@ -467,6 +488,39 @@ describe('PRs found by head branch (fix runs)', () => {
     c.advance(10 * 60_000)
     expect(await reader.refresh(REPO, [], ['fix-scroll'])).toBe(false)
     expect(gh.lists_()).toBe(2)
+  })
+
+  test('keeps the base branch, so the board can tell a staging merge target', async () => {
+    const gh = listGh()
+    gh.lists.set('alpha', ok(JSON.stringify([{ ...item(80, 'MERGED', 'alpha'), baseRefName: 'pod-staging' }])))
+    gh.lists.set('fix-b', ok(JSON.stringify([{ ...item(81, 'OPEN', 'fix-b'), baseRefName: 42 }])))
+    const reader = createGhReader({ exec: gh.exec, now: clock().now })
+    await reader.refresh(REPO, [], ['alpha', 'fix-b'])
+    expect(reader.getBranch(REPO, 'alpha')?.base).toBe('pod-staging')
+    // A base that isn't a string is left out.
+    expect(reader.getBranch(REPO, 'fix-b')).not.toHaveProperty('base')
+  })
+
+  test('a staging branch is asked about again after a merge, since every plan reuses it', async () => {
+    const gh = listGh()
+    const c = clock()
+    gh.lists.set('pod-staging', ok(JSON.stringify([item(70, 'MERGED', 'pod-staging')])))
+    const reader = createGhReader({ exec: gh.exec, now: c.now })
+    await reader.refresh(REPO, [], [], ['pod-staging'])
+    expect(reader.getBranch(REPO, 'pod-staging')?.number).toBe(70)
+    // Within the cache time: not asked.
+    c.advance(10_000)
+    await reader.refresh(REPO, [], [], ['pod-staging'])
+    expect(gh.lists_()).toBe(1)
+    // After it: asked again, and the next plan's open PR shows.
+    gh.lists.set('pod-staging', ok(JSON.stringify([item(70, 'MERGED', 'pod-staging'), item(91, 'OPEN', 'pod-staging')])))
+    c.advance(30_000)
+    expect(await reader.refresh(REPO, [], [], ['pod-staging'])).toBe(true)
+    expect(reader.getBranch(REPO, 'pod-staging')?.number).toBe(91)
+    expect(gh.lists_()).toBe(2)
+    // A bad branch name is never passed.
+    await reader.refresh(REPO, [], [], ['--web'])
+    expect(gh.calls.some((a) => a.includes('--web'))).toBe(false)
   })
 
   test('a closed PR found by branch is asked about again, so a reopen or a new PR shows', async () => {

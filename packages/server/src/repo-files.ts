@@ -5,13 +5,14 @@ import type { RepoFiles } from '@pod-board/model'
 /** Larger files are skipped: a pod doc is never this big, and the board keeps every doc in memory. */
 export const MAX_DOC_BYTES = 5 * 1024 * 1024
 
-const SINGLE_FILES = ['pod-docs/README.md', 'pod-docs/handoff-queue.md']
-const MD_FOLDERS = ['pod-docs/plans', 'pod-docs/plans/archive', 'pod-docs/sprints', 'pod-docs/sprints/archive']
+const SINGLE_FILES = ['pod-docs/README.md', 'pod-docs/handoff-queue.md', 'pod-docs/decisions.md']
+const MD_FOLDERS = ['pod-docs/plans', 'pod-docs/plans/archive', 'pod-docs/sprints', 'pod-docs/sprints/archive', 'pod-docs/research']
 
 /**
  * The pod docs `buildRepoModel` needs, keyed by repo-relative path with `/`:
- * the docs README, the handoff queue, and the `.md` files directly in the plan
- * and sprint folders and their `archive/`. Nothing else is read, and every
+ * the docs README, the handoff queue, the decisions (for a staging merge target),
+ * the `.md` files directly in the plan and sprint folders and their `archive/`,
+ * and the research reports directly in `pod-docs/research` (for the flow's Research step). Nothing else is read, and every
  * file is opened read-only. A missing repo folder throws; a missing doc or
  * folder is left out, and so is a doc whose real path, after every link on
  * the way (a symlink or junction on the file or a folder above it), is

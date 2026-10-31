@@ -41,9 +41,9 @@ describe('screen 1 view helpers', () => {
   })
 
   it('tab press: toggles, and leaves the engineer view', () => {
-    expect(tabPress(undefined, 'plan', 'pipeline')).toEqual({ save: 'plan', leave: false })
-    expect(tabPress('plan', 'plan', 'pipeline')).toEqual({ save: undefined, leave: false })
-    expect(tabPress('plan', 'log', 'board')).toEqual({ save: 'log', leave: false })
+    expect(tabPress(undefined, 'waiting', 'pipeline')).toEqual({ save: 'waiting', leave: false })
+    expect(tabPress('waiting', 'waiting', 'pipeline')).toEqual({ save: undefined, leave: false })
+    expect(tabPress('waiting', 'log', 'board')).toEqual({ save: 'log', leave: false })
     // The engineer view shows Log: pressing Log closes it and goes back to the run; another tab opens there.
     expect(tabPress('log', 'log', 'agent')).toEqual({ save: undefined, leave: true })
     expect(tabPress('log', 'waiting', 'agent')).toEqual({ save: 'waiting', leave: true })

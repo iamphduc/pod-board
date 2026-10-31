@@ -147,16 +147,31 @@ a:hover {
   --dot: var(--idle);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .chip.s-run::before,
-  .status.s-run::before {
-    animation: status-pulse 1.6s ease-in-out infinite;
+/*
+ * A running dot breathes: its opacity eases down to 0.45 and back over 2 s. Only the dot animates,
+ * never its label or card, and only opacity, so it stays cheap. Screen 1's flow marks use it too.
+ */
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
   }
 }
 
-@keyframes status-pulse {
-  50% {
-    opacity: 0.35;
+.chip.s-run::before,
+.status.s-run::before {
+  animation: breathe 2s ease-in-out infinite;
+}
+
+/* Reduced motion: the dot stays solid. */
+@media (prefers-reduced-motion: reduce) {
+  .chip.s-run::before,
+  .status.s-run::before {
+    animation: none;
   }
 }
 

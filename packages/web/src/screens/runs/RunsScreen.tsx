@@ -1,16 +1,16 @@
 import { useRef, useState } from 'react'
-import { activeRuns, buildFixPipeline, buildPipeline, type Board, type RunSummary } from '@pod-board/model'
+import { activeRuns, buildFixPipeline, buildFlow, buildPipeline, type Board, type RunSummary } from '@pod-board/model'
 import type { StreamState } from '../../board-stream.ts'
 import { hashFor, type View } from '../../selection.ts'
 import { Icon } from '../../theme/icons.tsx'
 import { BoardScreen } from '../board/BoardScreen.tsx'
 import { AddRepoDialog } from './AddRepoDialog.tsx'
 import { BarMenu } from './BarMenu.tsx'
+import { Flow } from './Flow.tsx'
 import { Chip } from './Chip.tsx'
 import { LogTab } from './LogTab.tsx'
 import { NextStepCard } from './NextStepCard.tsx'
 import { nextSteps } from './next-step.ts'
-import { PlanTab } from './PlanTab.tsx'
 import { runHeader } from './plan-view.ts'
 import { switchView } from './resume-flow.ts'
 import { RunHeader } from './RunHeader.tsx'
@@ -43,7 +43,8 @@ function pageStorage(): TabStorage | undefined {
   }
 }
 
-const TAB_LABELS: Record<Tab, string> = { waiting: 'Waiting', plan: 'Plan', log: 'Log' }
+const TAB_LABELS: Record<Tab, string> = { waiting: 'Waiting', log: 'Log' }
+const TABS: Tab[] = ['waiting', 'log']
 
 export function RunsScreen({ board, stream, runs, selected, view, slice, agent, now, storage }: Props) {
   const store = useRef(storage ?? pageStorage())
@@ -57,13 +58,13 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
   const pipeline = repo && !isFix && selected?.plan !== undefined ? buildPipeline(repo, selected.plan, now) : undefined
   const header = runHeader(selected, repo, now)
   const steps = nextSteps(selected, repo, now)
-  const hasPlan = selected?.plan !== undefined
-  const shown = shownTab(stored, { view, hasPlan })
+  const shown = shownTab(stored, { view })
   const notices = banners(board, stream)
   const lost = connectionStatus(stream)
   const autoSwitch = switchView(selected, board)
   const runKey = selected ? hashFor(selected) : 'none'
-  const stages = fixPipeline?.stages ?? pipeline?.stages ?? []
+  // A plan's full flow (Think → You → sprints → Check → Ship); a fix run's Build, Review, Ship.
+  const stages = fixPipeline?.stages ?? (repo && pipeline && selected?.plan !== undefined ? (buildFlow(repo, selected.plan, now) ?? []) : [])
 
   const press = (t: Tab) => {
     const next = tabPress(shown, t, view)
@@ -75,7 +76,6 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
     setPicking(false)
     repoButton.current?.focus()
   }
-  const tabs: Tab[] = hasPlan ? ['waiting', 'plan', 'log'] : ['waiting', 'log']
 
   const menu = (
     <BarMenu
@@ -139,10 +139,26 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
             </>
           ) : (
             <>
-              {header && <RunHeader header={header} actions={menu} />}
+              {header && (
+                <RunHeader
+                  header={header}
+                  actions={
+                    <div className="run-actions">
+                      {pipeline && (
+                        <a className="btn sm quiet board-link" href={hashFor(selected, 'board')} aria-label="Open the wave board">
+                          <span className="board-link-long">Open the wave board</span>
+                          <span className="board-link-short">Wave board</span>
+                        </a>
+                      )}
+                      {menu}
+                    </div>
+                  }
+                />
+              )}
+              <Flow key={`flow:${runKey}`} stages={stages} />
               {steps && <NextStepCard key={runKey} repo={repo} run={selected} card={steps.card} />}
               <div className="tabs" role="group" aria-label="More about this run">
-                {tabs.map((t) => (
+                {TABS.map((t) => (
                   <button key={t} className="tab" type="button" aria-expanded={shown === t} aria-controls={shown === t ? `tab-${t}` : undefined} onClick={() => press(t)}>
                     {TAB_LABELS[t]}
                     {t === 'waiting' && <span className="n">{steps?.rest.length ?? 0}</span>}
@@ -152,7 +168,6 @@ export function RunsScreen({ board, stream, runs, selected, view, slice, agent, 
               {shown && (
                 <div id={`tab-${shown}`} className="tab-slot">
                   {shown === 'waiting' && <WaitingTab key={runKey} repo={repo} run={selected} items={steps?.rest ?? []} />}
-                  {shown === 'plan' && <PlanTab stages={stages} {...(pipeline ? { boardHref: hashFor(selected, 'board') } : {})} />}
                   {shown === 'log' && (
                     <LogTab
                       repo={repo}

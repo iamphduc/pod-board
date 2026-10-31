@@ -3,7 +3,7 @@
 // and the format readers. Pure: it takes the files' text, never reads them.
 // The rules and why are in pod-docs/feature-details/run-model.md.
 
-import { docsVersion, needsYou, planExtras, prRef, sliceDeps, type DocsVersion, type PrRef } from './formats.ts'
+import { docsVersion, needsYou, planExtras, planFacts, prRef, sliceDeps, stagingBranch, type DocsVersion, type PlanFacts, type PrRef } from './formats.ts'
 import { QUEUE_LINE, queueLines, splitAnswer } from './queue-answer.ts'
 import { isDone, parsePlan, parseQueue, parseSprint, readTable, type PlanDoc, type QueueEntry, type Row, type SprintDoc } from './pod-flow/model.ts'
 
@@ -57,12 +57,17 @@ export type PlanModel = {
   currentSprint?: string
   /** Set (true) on a `/pod:autopilot` run: its active sprint doc, or the plan doc while no sprint doc is active, has the `<!-- autopilot-run … -->` line. */
   autopilot?: true
-}
+} & PlanFacts
 
-export type RepoModel = { docs: DocsVersion; plans: PlanModel[]; queue: QueueItem[] }
+/**
+ * `research`: the report slugs in `pod-docs/research` (directly, `.md` only). `staging`: the staging branch
+ * a `merge target: staging` decision names in `pod-docs/decisions.md`. Both optional, so older Boards still read.
+ */
+export type RepoModel = { docs: DocsVersion; plans: PlanModel[]; queue: QueueItem[]; research?: string[]; staging?: string }
 
 const README = 'pod-docs/README.md'
 const QUEUE = 'pod-docs/handoff-queue.md'
+const DECISIONS = 'pod-docs/decisions.md'
 
 /** The run model of one repo. Never throws: a missing or odd file gives unknown, empty, or absent fields. */
 export function buildRepoModel(files: RepoFiles): RepoModel {
@@ -75,7 +80,10 @@ export function buildRepoModel(files: RepoFiles): RepoModel {
   const sprintDocs = readSprints(repo)
   const joined = joinSprints(planDocs, sprintDocs)
   const plans = planDocs.map(({ doc, md }) => buildPlan(doc, md, joined.get(doc.slug) ?? [], queue))
-  return { docs, plans, queue }
+  const out: RepoModel = { docs, plans, queue, research: mdIn(repo, 'pod-docs/research/').map((f) => f.slug) }
+  const staging = stagingBranch(repo.get(DECISIONS))
+  if (staging !== undefined) out.staging = staging
+  return out
 }
 
 /** The queue's entries, each with its line, date, and answer. `parseQueue` and `queueLines` match one for one. */
@@ -172,6 +180,7 @@ function buildPlan(doc: PlanDoc, md: string, files: SprintFile[], queue: QueueIt
     title: doc.title,
     status: doc.status,
     ...planExtras(md),
+    ...planFacts(md),
     sprints,
     queue: queue.filter((e) => (e.plan ? e.plan === doc.slug : e.sprint !== undefined ? slugs.has(e.sprint) : isHandBackOf(e, doc.slug))),
   }

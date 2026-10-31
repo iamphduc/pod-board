@@ -1,7 +1,9 @@
 /*
  * Screen 1: a full-height sidebar on the left (the title, the runs list, and
- * Add repo at the bottom) beside a narrow main column (about 720 px): the run
- * header with the ⋯ menu, the Next step card, and the tabs.
+ * Add repo at the bottom) beside one shared main column as wide as the run flow
+ * (1120 px at most): the run header with the wave board link and the ⋯ menu,
+ * the run's flow, the Next step card, and the tabs, all with the same edges.
+ * Text inside the card and the Waiting rows stops near 72 characters.
  * Tokens and L1's classes only; no colour literals (pwa.test.ts checks).
  * At 820px and below the sidebar stacks above the main column.
  */
@@ -198,13 +200,20 @@
   display: grid;
   align-content: start;
   min-width: 0;
-  max-width: 720px;
+  /* One column for every part, as wide as the run flow needs (five columns). */
+  max-width: 1120px;
   padding: 48px 48px 64px;
   box-sizing: content-box;
   /* Centred in the space beside the sidebar. Auto margins turn off the grid's
      stretch, so the width is set: the cell less the side padding. */
   width: calc(100% - 96px);
   margin-inline: auto;
+}
+
+/* Each part of the column is 720 px at most, centred; the flow, a wide data view, takes the main box's width. */
+/* Every part spans the column, so their left and right edges line up. */
+.main:not(.wide) > * {
+  width: 100%;
 }
 
 /* The wave board takes the whole main width. */
@@ -230,6 +239,22 @@
   min-width: 0;
 }
 
+.run-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.board-link {
+  white-space: nowrap;
+}
+
+/* Phones get the short label (below), so the plan name keeps one line beside the link and the menu. */
+.board-link-short {
+  display: none;
+}
+
 .run-crumb {
   margin: 0 0 6px;
   font-size: var(--size-small);
@@ -243,6 +268,222 @@
   overflow-wrap: anywhere;
 }
 
+/*
+ * The run's flow: a column of step cards per stage, arrows between columns.
+ * Cards keep a plain border; the status colour is on the mark, and on the border
+ * only of a highlighted card (running, needs you, blocked). Waiting cards are dim
+ * by colour, not opacity, so their text stays readable. Below its columns' minimum
+ * width the flow scrolls inside its own box.
+ */
+/* The flow: the fold line (phones only), the columns' scroll box, then the wave board link. */
+.flow-frame {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 32px;
+}
+
+.flow-scroll {
+  /* Holds the cards' absolutely placed screen-reader words, so they scroll with it instead of widening the page. */
+  position: relative;
+  min-width: 0;
+  overflow-x: auto;
+  /* Room for the highlighted border and the focus ring inside the scroll box. */
+  padding: 2px;
+}
+
+/*
+ * The flow is one grid: a heading row, then row i holds every column's i-th card. Columns and their step
+ * lists share the rows (subgrid), so the cards of a row always share one height, and a card whose detail
+ * wraps grows its whole row. Columns grow from 152 px to fill the box; below their minimum the grid
+ * keeps its width and scrolls in .flow-scroll. The lines layer (.flow-lines) spans the whole grid.
+ */
+.flow {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--flow-cols), minmax(152px, 1fr));
+  grid-template-rows: auto repeat(var(--flow-rows), auto);
+  /* The same room both ways: the column gap holds the line across, the row gap the line down. */
+  column-gap: 32px;
+  row-gap: 32px;
+  min-width: calc(var(--flow-cols) * 152px + (var(--flow-cols) - 1) * 32px);
+}
+
+.flow-cols {
+  display: contents;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.flow-col {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: 1 / -1;
+  min-width: 0;
+}
+
+.flow-steps {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: 2 / -1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* The path between the steps: quiet lines, the walked part in --fg, the line into an optional step dashed. */
+.flow-lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.flow-lines path {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.flow-lines path.walked {
+  stroke: var(--fg);
+}
+
+.flow-lines path.dashed {
+  stroke-dasharray: 4 4;
+}
+
+.flow-cap {
+  margin: 0;
+  /* The heading sits 16 px above its first card: it gives back half the row gap. */
+  margin-bottom: -16px;
+  font: 500 var(--size-micro) / 16px var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.flow-step {
+  /* Holds the screen-reader word. */
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-content: start;
+  gap: 2px 8px;
+  /* Room for the title and two detail lines: padding 20 + border 2 + title 20 + gap 2, then 2 lines of 1.4 × 12 px. */
+  min-height: calc(44px + 2.8 * var(--size-micro));
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.flow-mark {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  color: var(--muted);
+}
+
+.flow-label {
+  min-width: 0;
+  font-size: var(--size-dense);
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.flow-detail {
+  grid-column: 2;
+  min-width: 0;
+  font: var(--size-micro) / 1.4 var(--mono);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.flow-step.done .flow-mark svg,
+.flow-fold[data-state="done"] .flow-mark svg {
+  color: var(--ready);
+}
+
+.flow-step.live .flow-mark svg,
+.flow-fold[data-state="live"] .flow-mark svg {
+  color: var(--running);
+}
+
+.flow-step.you .flow-mark svg,
+.flow-fold[data-state="you"] .flow-mark svg {
+  color: var(--needs-you);
+}
+
+.flow-step.blocked .flow-mark svg,
+.flow-fold[data-state="blocked"] .flow-mark svg {
+  color: var(--blocked);
+}
+
+.flow-step.dim .flow-mark svg {
+  color: var(--faint);
+}
+
+.flow-step.dim .flow-label {
+  color: var(--muted);
+}
+
+.flow-step.hi.live {
+  border-color: var(--running);
+}
+
+.flow-step.hi.you {
+  border-color: var(--needs-you);
+}
+
+.flow-step.hi.blocked {
+  border-color: var(--blocked);
+}
+
+/* The running step's dot breathes (base.css's keyframes), in the flow and on the phone's fold line. */
+.flow-step.live .flow-mark svg,
+.flow-fold[data-state="live"] .flow-mark svg {
+  animation: breathe 2s ease-in-out infinite;
+}
+
+/* Reduced motion: the dot stays solid. */
+@media (prefers-reduced-motion: reduce) {
+  .flow-step.live .flow-mark svg,
+  .flow-fold[data-state="live"] .flow-mark svg {
+    animation: none;
+  }
+}
+
+/* The wave board link stays at the left edge while the flow scrolls. */
+
+/* The fold line: phones only (below). Desktop always shows the whole flow. */
+.flow-fold {
+  display: none;
+}
+
+.flow-fold-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.flow-fold-chevron {
+  display: flex;
+  color: var(--muted);
+}
+
+.flow-frame.open .flow-fold-chevron {
+  transform: rotate(180deg);
+}
+
+/* The progress strip: done steps white, the current one dimmed, the rest grey. */
 .run-meta {
   display: flex;
   flex-wrap: wrap;
@@ -255,7 +496,6 @@
   font-size: var(--size-small);
 }
 
-/* The progress strip: done steps white, the current one dimmed, the rest grey. */
 .strip {
   display: flex;
   flex-wrap: wrap;
@@ -293,12 +533,14 @@
 }
 
 .next-title {
+  max-width: 72ch;
   font-size: 20px;
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
 .next-detail {
+  max-width: 72ch;
   margin: 8px 0 0;
   color: var(--muted);
   font-size: var(--size-dense);
@@ -702,6 +944,35 @@
 
 /* Phone: each row stacks, the copy and send buttons under its text, full width. */
 @media (max-width: 480px) {
+  .board-link-long {
+    display: none;
+  }
+
+  .board-link-short {
+    display: inline;
+  }
+
+  .flow-fold {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--fg);
+    font: inherit;
+    font-size: var(--size-dense);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .flow-frame:not(.open) > .flow-scroll {
+    display: none;
+  }
+
   .reply-row,
   .reply-cmd,
   .reply-actions,
@@ -772,6 +1043,11 @@
   }
 
   .run-header {
+    margin-bottom: 12px;
+  }
+
+  /* The folded flow is one line: a tight gap keeps the Next step card's button on a 375 × 667 screen. */
+  .flow-frame {
     margin-bottom: 16px;
   }
 

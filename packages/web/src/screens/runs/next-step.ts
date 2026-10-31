@@ -3,7 +3,7 @@
 // waitingPrs, the reply panel), in the plan's order: blocked → merge → reply → pending → info.
 // Pure; the card and the tab only render these.
 
-import { isAnswerable, waitingPrs, type BoardRepo, type QueueItem, type RunSummary, type WaitingPr } from '@pod-board/model'
+import { haltGate, isAnswerable, waitingPrs, type BoardRepo, type QueueItem, type RunSummary, type WaitingPr } from '@pod-board/model'
 import { waitingEntries, waitingRows, type WaitingRow } from './queue-view.ts'
 import { replyPanel, type ReplyPanelView } from './reply-view.ts'
 import { emptyMessage } from './view.ts'
@@ -21,6 +21,8 @@ export type NextItem = {
   status: NextStatus
   /** One short line. */
   title: string
+  /** A part of `title` shown as a link (an autopilot halt's PR). */
+  titleLink?: { text: string; href: string }
   /** One short line. */
   detail?: string
   /** Queue items: the Waiting on you row. */
@@ -62,10 +64,10 @@ function entryItem(e: QueueItem, row: WaitingRow, key: string, repoId: string): 
   const blocked = e.type === 'BLOCKED'
   if (isAnswerable(e)) {
     return blocked
-      ? { key, tier: 'blocked', status: 'blocked', title: short(row.body), detail: BLOCKED_DETAIL, entry: row, action: answer }
-      : { key, tier: 'pending', status: 'needs-you', title: short(row.body), detail: PENDING_DETAIL, entry: row, action: answer }
+      ? { key, tier: 'blocked', status: 'blocked', ...entryTitle(row.body), detail: BLOCKED_DETAIL, entry: row, action: answer }
+      : { key, tier: 'pending', status: 'needs-you', ...entryTitle(row.body), detail: PENDING_DETAIL, entry: row, action: answer }
   }
-  return { key, tier: 'info', status: blocked ? 'blocked' : 'idle', title: short(row.body), detail: row.yourAnswer ?? row.route, entry: row, action: { kind: 'none' } }
+  return { key, tier: 'info', status: blocked ? 'blocked' : 'idle', ...entryTitle(row.body), detail: row.yourAnswer ?? row.route, entry: row, action: { kind: 'none' } }
 }
 
 function prDetail(pr: WaitingPr): string {
@@ -121,4 +123,51 @@ export function nextSteps(run: RunSummary | undefined, repo: BoardRepo | undefin
   const first = sorted[0]
   if (first && ACTION_TIERS.has(first.tier)) return { card: first, rest: sorted.slice(1) }
   return { card: nothingCard(run, repo), rest: sorted }
+}
+
+export type GateTitle = { title: string; link?: { text: string; href: string } }
+
+const PR_URL = /https?:\/\/\S+?\/pull\/(\d+)/
+const PR_HASH = /#(\d+)\b/
+
+/** The entry's PR: from a pull URL (number and link), else `#N` (number only). */
+function entryPr(body: string): { number: number; href?: string } | undefined {
+  const url = PR_URL.exec(body)
+  if (url) return { number: Number(url[1]), href: url[0] }
+  const hash = PR_HASH.exec(body)
+  return hash ? { number: Number(hash[1]) } : undefined
+}
+
+/**
+ * An autopilot halt (an entry that starts with its gate, the model's `haltGate`) as one plain sentence,
+ * with its PR as a link when the entry gives a pull URL. Undefined when it isn't a halt, or gate 3 or 6
+ * names no PR: the card then shows the entry's own text.
+ */
+export function gateTitle(body: string): GateTitle | undefined {
+  const gate = haltGate(body)
+  if (gate === undefined) return undefined
+  const fixed: Record<number, string> = {
+    1: 'Autopilot stopped: a slice is blocked',
+    2: 'Autopilot stopped: the final review still fails',
+    4: 'Autopilot stopped: the wave check failed',
+    5: 'Autopilot stopped: it hit a safety limit',
+    7: 'Plan complete: review and merge the staging PR',
+  }
+  const plain = fixed[gate]
+  if (plain !== undefined) return { title: plain }
+  const pr = entryPr(body)
+  if (!pr) return undefined
+  const text = `PR #${pr.number}`
+  const link = pr.href === undefined ? {} : { link: { text, href: pr.href } }
+  if (gate === 6) return { title: `Autopilot held ${text} for you to merge`, ...link }
+  // Gate 3: the wave's PR or the final PR, when the entry says which.
+  const kind = /\bfinal\b/i.test(body) ? 'final ' : /\bwave\b/i.test(body) ? 'wave ' : ''
+  return { title: `Autopilot stopped: ${kind}${text} couldn't merge`, ...link }
+}
+
+/** The card's title for an entry: the halt's sentence, else the body cut to one line. */
+function entryTitle(body: string): Pick<NextItem, 'title' | 'titleLink'> {
+  const gate = gateTitle(body)
+  if (!gate) return { title: short(body) }
+  return gate.link ? { title: gate.title, titleLink: gate.link } : { title: gate.title }
 }

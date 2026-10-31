@@ -2,7 +2,7 @@
 
 ## What it is
 
-Screen 2, at `#/<repoId>/<plan>/board`, opened from the Plan tab's `Open the wave board`: the run header and `Back to the run` above one column per wave of the shown sprint, one card per slice with a status dot and word, grey dependency lines with the critical path in `--fg`, and filter chips with counts. `#/…/board/<code>` opens a slice and adds the engineer view below ([engineer-view.md](engineer-view.md)). Logic lives in `packages/web/src/screens/board/board-view.ts`, line placement in `geometry.ts`, routes in `selection.ts`.
+Screen 2, at `#/<repoId>/<plan>/board`, opened from `Open the wave board` in the run header: the run header and `Back to the run` above one column per wave of the shown sprint, one card per slice with a status dot and word, grey dependency lines with the critical path in `--fg`, and filter chips with counts. `#/…/board/<code>` opens a slice and adds the engineer view below ([engineer-view.md](engineer-view.md)). Logic lives in `packages/web/src/screens/board/board-view.ts`, line placement in `geometry.ts`, routes in `selection.ts`.
 
 ## How it works
 
@@ -43,3 +43,5 @@ Screen 2, at `#/<repoId>/<plan>/board`, opened from the Plan tab's `Open the wav
 - 2026-10-21 · merge-actions P1 · the cards of a wave whose PR waits on you read `needs you`, with `PR #N · you merge`.
 - 2026-10-26 · fix-autopilot-view · fixed: an autopilot wave's cards read `needs you · PR #N · you merge`; now they read `running` while autopilot merges, and `needs you · PR #N · autopilot stopped` after a halt. Card minutes leave out idle gaps over 15 minutes.
 - 2026-10-28 · calm-dashboard · look only: plain cards with a status dot and word (no colored edge), critical path in `--fg`, other lines `--border-strong`; opened from the Plan tab with `Back to the run`; final PR #54 passed review at round 1 · [report](../reports/calm-dashboard.html)
+- 2026-10-30 · fix-run-flow round 5 · `geometry.ts` adds `downPath` and `headPath` beside `edgePath`; screen 1's run flow draws its connectors with all three.
+- 2026-10-30 · fix-run-flow round 7 · `geometry.ts` adds `stepPath` and reshapes `backPath` as smooth-step routes for screen 1's flow; the wave board's own `edgePath` curves are unchanged.

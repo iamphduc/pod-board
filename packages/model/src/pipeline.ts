@@ -9,7 +9,8 @@ import { formatTokens, isDone } from './pod-flow/model.ts'
 import type { PlanModel, SliceModel, SprintModel, WaveModel } from './run-model.ts'
 import { agentState, IDLE_GAP_MS, STALE_MS } from './transcript.ts'
 
-export type StepState = 'done' | 'live' | 'wait' | 'you' | 'blocked' | 'unknown'
+/** `skipped`: the plan didn't take this step (no research, no UI); the flow shows it dim. */
+export type StepState = 'done' | 'live' | 'wait' | 'you' | 'blocked' | 'unknown' | 'skipped'
 /** `merge` is set only on a step that shows a PR waiting on you (see `waitingPrs`). */
 export type Step = { key: string; label: string; state: StepState; detail: string; merge?: { number: number } }
 export type Stage = { key: string; caption: string; steps: Step[] }
@@ -61,6 +62,18 @@ const PENDING_GATE =
  * `someday: …`, an agent default, a note that names a gate mid-sentence) don't stop it. Run state
  * still follows `isHalted` (BLOCKED → blocked; a PENDING reads needs-you).
  */
+const GATE_NAMES = ['blocked-concern', 'plan-review-fail', 'auto-merge-fail', 'inter-wave-verify', 'safety-bound', 'escalation-valve', 'plan-complete']
+
+/** The gate (1–7) an autopilot halt entry starts with, by its number or else its name; undefined when it isn't a halt. */
+export function haltGate(body: string): number | undefined {
+  const head = PENDING_GATE.exec(body)?.[0]
+  if (head === undefined) return undefined
+  const n = /gate\s*([1-7])\b/i.exec(head)?.[1]
+  if (n !== undefined) return Number(n)
+  const i = GATE_NAMES.findIndex((name) => head.toLowerCase().endsWith(name))
+  return i < 0 ? undefined : i + 1
+}
+
 export const isAutopilotStopped = (plan: Pick<PlanModel, 'queue'>) =>
   isHalted(plan) ||
   plan.queue.some(

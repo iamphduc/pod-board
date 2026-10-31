@@ -1,9 +1,9 @@
-// The one open tab under the Next step card (Waiting, Plan or Log), remembered per browser, not per run.
+// The one open tab under the Next step card (Waiting or Log), remembered per browser, not per run.
 // Nothing stored means every tab is closed. Pure; the screen passes `localStorage`.
 
 import type { View } from '../../selection.ts'
 
-export type Tab = 'waiting' | 'plan' | 'log'
+export type Tab = 'waiting' | 'log'
 
 /** The part of `Storage` the tab memory needs, so tests can pass a plain object. */
 export type TabStorage = {
@@ -14,7 +14,8 @@ export type TabStorage = {
 
 export const TAB_KEY = 'pod-board-tab'
 
-const TABS: readonly string[] = ['waiting', 'plan', 'log'] satisfies Tab[]
+// A `plan` stored before the flow replaced the Plan tab is unknown now, so it reads as closed.
+const TABS: readonly string[] = ['waiting', 'log'] satisfies Tab[]
 
 const isTab = (value: unknown): value is Tab => typeof value === 'string' && TABS.includes(value)
 
@@ -41,12 +42,7 @@ export function saveTab(storage: TabStorage | null | undefined, tab: Tab | undef
 /** Clicking the open tab closes it; any other click opens the clicked tab. */
 export const toggleTab = (open: Tab | undefined, clicked: Tab): Tab | undefined => (open === clicked ? undefined : clicked)
 
-/**
- * The tab to show. An engineer's view always shows Log (the caller doesn't save it); a plan-less row
- * has no Plan tab, so a stored `plan` shows nothing there.
- */
-export function shownTab(stored: Tab | undefined, at: { view: View; hasPlan: boolean }): Tab | undefined {
-  if (at.view === 'agent') return 'log'
-  if (stored === 'plan' && !at.hasPlan) return undefined
-  return stored
+/** The tab to show: the stored one, except an engineer's view always shows Log (the caller doesn't save it). */
+export function shownTab(stored: Tab | undefined, at: { view: View }): Tab | undefined {
+  return at.view === 'agent' ? 'log' : stored
 }

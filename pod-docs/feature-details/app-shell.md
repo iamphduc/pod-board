@@ -30,7 +30,7 @@ The frame around every screen: the web app at `http://127.0.0.1:<web>/`, the ful
 ## Watch out
 
 - Build to `pod-docs/plans/calm-dashboard.md` `## Look` and its draft, not `docs/design/preview.html`.
-- `tokens.test.ts` fails on a CSS file under `packages/web/src` that sets `color` to `--faint` or a status token (rules targeting an `svg`, such as the Plan tab's ✓, may), uses an old token name (`--panel`, `--line`, `--accent`, `--ok`, `--warn`, `--bad`, `--*-soft`, `--*-ink`, `--display`, `--body`), or drops text below 4.5:1.
+- `tokens.test.ts` fails on a CSS file under `packages/web/src` that sets `color` to `--faint` or a status token (rules targeting an `svg`, such as the flow's status marks, may), uses an old token name (`--panel`, `--line`, `--accent`, `--ok`, `--warn`, `--bad`, `--*-soft`, `--*-ink`, `--display`, `--body`), or drops text below 4.5:1.
 - `controls.test.ts` fails on any color literal in `base.css` (`transparent` and `currentColor` are allowed). Both tests find rules by selector text: write `textarea.input {` exactly and keep it after `.input`.
 - The boot script and the app share `THEME_KEY` and the dark default; change both or neither. `pwa.test.ts` checks the manifest against the dark `--bg`.
 - A render error shows `render failed` in place of the board and recovers on the next changed Board; keep the stream in `App`, above the `ErrorBoundary`.

@@ -2,8 +2,11 @@ import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
 import { Chip } from './Chip.tsx'
 import { formView, type AnswerFlow, type AnswerState } from './answer-flow.ts'
 
-/** The form under its entry: the text, Save answer, and Cancel, with the note on when pod reads it. */
-export function AnswerForm({ state, flow, note }: { state: AnswerState; flow: AnswerFlow; note: string }) {
+/**
+ * The form under its entry: the text, Save answer, and Cancel, with the note on when pod reads it.
+ * `entry`: the entry's full text, shown above the box when the entry itself isn't on screen (the card).
+ */
+export function AnswerForm({ state, flow, note, entry }: { state: AnswerState; flow: AnswerFlow; note: string; entry?: string }) {
   const view = formView(state, note)
   const ref = useRef<HTMLElement>(null)
   const textRef = useRef<HTMLTextAreaElement>(null)
@@ -25,6 +28,7 @@ export function AnswerForm({ state, flow, note }: { state: AnswerState; flow: An
   const onKey = (e: KeyboardEvent) => flow.key(e.key)
   return (
     <section ref={ref} className="inplace answer-form" aria-label="Answer this entry" tabIndex={-1} onKeyDown={onKey}>
+      {entry !== undefined && <p className="answer-entry">{entry}</p>}
       {view.showText && (
         <textarea
           ref={textRef}

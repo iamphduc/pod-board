@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildRepoModel, listRuns, type AgentRun, type BoardRepo, type Claim, type PrStatus, type RunSummary } from '@pod-board/model'
 import { loadFixture } from '../../../../model/test/load-fixture.ts'
-import { nextSteps, type NextItem, type NextSteps } from './next-step.ts'
+import { gateTitle, nextSteps, type NextItem, type NextSteps } from './next-step.ts'
 import { emptyMessage } from './view.ts'
 
 // Boards built from the chess-web fixture: plan sparring-ladder, an autopilot run on wave 3 of sprint ladder
@@ -332,5 +332,57 @@ describe('next step', () => {
       `pending ${entryKey(H1)}`,
     ])
     expect(twice.card.title).toBe("T1 can't reach the rates file.")
+  })
+})
+
+describe('gate titles', () => {
+  const URL = 'https://github.com/iamphduc/pod-trial/pull/9'
+  it('says each autopilot halt in a plain sentence', () => {
+    expect(gateTitle('gate 1 blocked-concern: T1 is blocked, the rates file is missing.')).toEqual({ title: 'Autopilot stopped: a slice is blocked' })
+    expect(gateTitle('gate 2 plan-review-fail: round 2 still fails')).toEqual({ title: 'Autopilot stopped: the final review still fails' })
+    expect(gateTitle(`gate 3 auto-merge-fail: wave PR ${URL} has no passing CI`)).toEqual({
+      title: "Autopilot stopped: wave PR #9 couldn't merge",
+      link: { text: 'PR #9', href: URL },
+    })
+    expect(gateTitle(`gate 3 auto-merge-fail: final PR ${URL} is behind`)).toEqual({
+      title: "Autopilot stopped: final PR #9 couldn't merge",
+      link: { text: 'PR #9', href: URL },
+    })
+    expect(gateTitle('gate 4 inter-wave-verify: the wave 2 check failed')).toEqual({ title: 'Autopilot stopped: the wave check failed' })
+    expect(gateTitle('gate 5 safety-bound: 6 hours')).toEqual({ title: 'Autopilot stopped: it hit a safety limit' })
+    expect(gateTitle(`gate 6 escalation-valve: ${URL} is mergeable`)).toEqual({
+      title: 'Autopilot held PR #9 for you to merge',
+      link: { text: 'PR #9', href: URL },
+    })
+    expect(gateTitle('gate 7 plan-complete: staging PR open')).toEqual({ title: 'Plan complete: review and merge the staging PR' })
+    // By name alone.
+    expect(gateTitle('safety-bound: 6 hours')).toEqual({ title: 'Autopilot stopped: it hit a safety limit' })
+  })
+
+  it('names a PR given as #N without a link, and leaves wave/final out when the entry says neither', () => {
+    expect(gateTitle('gate 3 auto-merge-fail: PR #78 has no passing CI')).toEqual({ title: "Autopilot stopped: PR #78 couldn't merge" })
+    expect(gateTitle('gate 6 escalation-valve: #12 waits')).toEqual({ title: 'Autopilot held PR #12 for you to merge' })
+  })
+
+  it('falls back to the cut text when the gate or its PR cannot be read', () => {
+    // Gates 3 and 6 need their PR.
+    expect(gateTitle('gate 3 auto-merge-fail: CI is red')).toBeUndefined()
+    expect(gateTitle('gate 6 escalation-valve: held')).toBeUndefined()
+    // Not a halt.
+    expect(gateTitle('Pick the step size.')).toBeUndefined()
+    expect(gateTitle('now: gate 3 later')).toBeUndefined()
+  })
+
+  it('the card uses the sentence for a gate entry; other entries keep their text', () => {
+    const halt = `- \`[2026-10-19 · BLOCKED · orchestrator → human · plan: ${PLAN}]\` gate 3 auto-merge-fail: wave PR ${URL} has no passing CI and more words that go on past the cut **Resolution:** pending`
+    const s = steps(chess([onlyQueue(halt)]))
+    expect(s.card.title).toBe("Autopilot stopped: wave PR #9 couldn't merge")
+    expect(s.card.titleLink).toEqual({ text: 'PR #9', href: URL })
+    // The full text stays on the entry, for the Waiting tab and the open Answer form.
+    expect(s.card.entry?.body).toContain('has no passing CI and more words')
+    // A non-gate entry keeps its own text and has no link.
+    const plain = steps(chess([onlyQueue(T1_BLOCKED)]))
+    expect(plain.card.title).toBe("T1 can't reach the rates file.")
+    expect(plain.card).not.toHaveProperty('titleLink')
   })
 })

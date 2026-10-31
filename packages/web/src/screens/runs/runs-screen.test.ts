@@ -93,21 +93,25 @@ describe('runs screen', () => {
     expect(card).toMatch(/id="merge-pr-78"/)
     expect(text(card)).toMatch(/Merge PR #78/)
     expect(text(card)).toMatch(/Needs you/)
-    // The header above it: crumb, name, strip and wave.
+    // The header (with its progress strip and wave), then the flow, then the card.
     expect(html.indexOf('run-header')).toBeGreaterThan(-1)
-    expect(html.indexOf('run-header')).toBeLessThan(html.indexOf('next-step'))
-    expect(text(html)).toMatch(/Wave 3 of 3/)
-    // Tabs follow the card, all closed, with no panel.
+    expect(html.indexOf('run-header')).toBeLessThan(html.indexOf('aria-label="Run flow"'))
+    expect(html.indexOf('aria-label="Run flow"')).toBeLessThan(html.indexOf('next-step'))
+    expect(headerOf(html)).toMatch(/class="strip" role="img" aria-label="\d+ of \d+ steps done"/)
+    expect(text(headerOf(html))).toMatch(/Wave 3 of 3/)
+    // Tabs follow the card, all closed, with no panel. The flow replaced the Plan tab.
     expect(html.indexOf('class="tabs"')).toBeGreaterThan(html.indexOf('next-step'))
     const tabs = tabsOf(html)
-    expect(tabs.map((t) => t.label.replace(/ \d+$/, ''))).toEqual(['Waiting', 'Plan', 'Log'])
+    expect(tabs.map((t) => t.label.replace(/ \d+$/, ''))).toEqual(['Waiting', 'Log'])
     expect(tabs.every((t) => t.expanded === 'false')).toBe(true)
     expect(html).not.toMatch(/tab-panel/)
     // No `live` chip anywhere, and no top bar.
     expect(text(html)).not.toMatch(/\blive\b/i)
     expect(html).not.toMatch(/class="bar"/)
     // The old views are gone.
-    expect(text(html)).not.toMatch(/Wave board|Waiting on you|Add a repo/)
+    // (The header's short wave board link says "Wave board"; the old Wave board tab is gone from the tabs.)
+    expect(text(html)).not.toMatch(/Waiting on you|Add a repo/)
+    expect(tabsOf(html).some((t) => /Wave board/.test(t.label))).toBe(false)
   })
 
   it('shows the connection status only while lost', () => {
@@ -136,28 +140,28 @@ describe('runs screen', () => {
   })
 
   it('remembered tab', () => {
-    // A stored plan tab opens the Plan panel, with the wave board link.
+    // A `plan` stored before the Plan tab went away opens nothing.
     const plan = render({ repo: chess([onlyQueue()]), tab: 'plan' })
-    expect(tabsOf(plan.html).find((t) => t.label === 'Plan')?.expanded).toBe('true')
-    expect(plan.html).toMatch(/plan-tab/)
-    expect(plan.html).toContain(`href="${hashFor(plan.run, 'board')}"`)
+    expect(tabsOf(plan.html).map((t) => t.label.replace(/ \d+$/, ''))).toEqual(['Waiting', 'Log'])
+    expect(tabsOf(plan.html).every((t) => t.expanded === 'false')).toBe(true)
+    expect(plan.html).not.toMatch(/tab-slot|tab-panel/)
     // A stored waiting tab opens the Waiting panel.
     expect(render({ repo: chess([onlyQueue()]), tab: 'waiting' }).html).toMatch(/waiting-tab/)
 
-    // A plan-less row: no Plan tab, and the stored plan shows nothing.
+    // A plan-less row: the same two tabs, no flow, and the stored plan shows nothing.
     const row: RunSummary = { repoId: 'chess', repo: 'chess-web', where: 'no active plan', state: 'idle' }
     const bare = render({ repo: chess(), run: row, tab: 'plan' })
     expect(tabsOf(bare.html).map((t) => t.label.replace(/ \d+$/, ''))).toEqual(['Waiting', 'Log'])
     expect(bare.html).not.toMatch(/tab-panel/)
+    expect(bare.html).not.toMatch(/aria-label="Run flow"/)
 
     // The agent view shows Log, whatever is stored.
     const name = 'fix-scroll'
     const claim: Claim = { portBase: 3100, repoPath: '/c', plan: name }
-    const fix = render({ repo: chess([], { claims: [claim] }), plan: name, view: 'agent', agent: 'f1', tab: null })
+    const fix = render({ repo: chess([], { claims: [claim] }), plan: name, view: 'agent', agent: 'f1', tab: 'plan' })
     expect(tabsOf(fix.html).find((t) => t.label === 'Log')?.expanded).toBe('true')
     expect(fix.html).toMatch(/log-tab/)
-    // A fix run has steps, so its Plan tab stays; it has no wave board link.
-    expect(tabsOf(fix.html).map((t) => t.label.replace(/ \d+$/, ''))).toEqual(['Waiting', 'Plan', 'Log'])
+    expect(tabsOf(fix.html).map((t) => t.label.replace(/ \d+$/, ''))).toEqual(['Waiting', 'Log'])
   })
 
   it('wave board view', () => {
@@ -168,6 +172,112 @@ describe('runs screen', () => {
     expect(html).not.toMatch(/next-step/)
     expect(html).not.toMatch(/class="tabs"/)
     expect(html).not.toMatch(/tab-panel/)
+  })
+})
+
+/** The flow's own markup: its columns' captions, and each step card's class and text. */
+function flowOf(html: string): { markup: string; captions: string[]; cards: { cls: string; markup: string; text: string }[] } {
+  const m = /<section[^>]*aria-label="Run flow"[\s\S]*?<\/section>/.exec(html)
+  expect(m, 'the flow').not.toBeNull()
+  const markup = m![0]
+  const captions = [...markup.matchAll(/<h2 class="flow-cap">([\s\S]*?)<\/h2>/g)].map((x) => text(x[1]!).trim())
+  const cards = [...markup.matchAll(/<li class="(flow-step[^"]*)"[^>]*>([\s\S]*?)<\/li>/g)].map((x) => ({
+    cls: x[1]!,
+    markup: x[2]!,
+    text: text(x[2]!).replace(/\s+/g, ' ').trim(),
+  }))
+  return { markup, captions, cards }
+}
+
+describe('run flow', () => {
+  it('shows the plan as columns of step cards with arrows between them', () => {
+    // /pod:code run, T1 pushed and PR #78 open: wave 3 is handed back to you.
+    const { html, run } = render({ repo: chess([onlyQueue(), manual, t1Pushed], { prs: [gh(78, 'open')] }) })
+    const flow = flowOf(html)
+    expect(flow.captions).toEqual(['Think', 'You', 'Sprint 1 of 1', 'Check', 'Ship'])
+    // No arrow icons: an SVG layer draws the path between the cards (filled in from the page's layout).
+    expect(flow.markup).not.toMatch(/flow-arrow/)
+    expect(flow.markup).toMatch(/<svg class="flow-lines" aria-hidden="true"/)
+    // A grid: one row of headings, then row i holds every column's i-th card (3 at most here: the sprint's waves).
+    expect(flow.markup).toMatch(/<div class="flow" style="--flow-cols:5;--flow-rows:3">/)
+    const labels = ['Research', 'Plan interview', 'Look picked', 'Replied go', 'Wave 1', 'Wave 2', 'Wave 3', 'Final review', 'Fix pass', 'Final PR']
+    expect(flow.cards).toHaveLength(labels.length)
+    flow.cards.forEach((c, i) => expect(c.text.startsWith(labels[i]!), c.text).toBe(true))
+    // Each card: its label, its muted detail line, an SVG mark, and its state word for screen readers.
+    expect(flow.cards[6]!.markup).toMatch(/<span class="flow-detail">PR #78 · you merge<\/span>/)
+    for (const c of flow.cards) {
+      expect(c.markup, c.text).toMatch(/<span class="flow-mark"[^>]*><svg/)
+      expect(c.markup, c.text).toMatch(/<span class="sr-only">/)
+    }
+    expect(text(flow.markup)).not.toMatch(/[✓●○→•]/)
+    // The step that needs you has the highlighted border; waiting ones are dim; done ones neither.
+    const wave3 = flow.cards[6]!
+    expect(wave3.cls).toMatch(/\byou\b/)
+    expect(wave3.cls).toMatch(/\bhi\b/)
+    expect(wave3.text).toMatch(/needs you/)
+    const review = flow.cards[7]!
+    expect(review.cls).toMatch(/\bdim\b/)
+    expect(review.cls).not.toMatch(/\bhi\b/)
+    // Plan interview is done: neither. Research (no report in the fixture) is skipped: dim.
+    expect(flow.cards[1]!.cls).not.toMatch(/\b(hi|dim)\b/)
+    expect(flow.cards[0]!.cls).toMatch(/\bskipped\b.*\bdim\b/)
+    // No Merge in the flow: the Next step card holds the one Merge for this PR.
+    expect(flow.markup).not.toMatch(/>Merge<|merge-pr-/)
+    expect(count(flow.markup, /<button/)).toBe(1)
+    expect(count(html, /id="merge-pr-78"/)).toBe(1)
+    // The fold line for phones: the current step, with its mark, closed at start.
+    expect(flow.markup).toMatch(/<button[^>]*class="flow-fold"[^>]*aria-expanded="false"[^>]*>[\s\S]*?<svg[\s\S]*?Wave 3 · PR #78 · you merge[\s\S]*?<\/button>/)
+    expect(flow.markup).not.toMatch(/class="flow-frame open"/)
+    // The wave board link sits in the run header, before the ⋯ menu; not in the flow.
+    expect(flow.markup).not.toMatch(/Open the wave board/)
+    const header = headerOf(html)
+    const link = new RegExp(`<a[^>]*class="btn sm quiet board-link"[^>]*href="${hashFor(run, 'board').replace(/[/#]/g, (c) => `\\${c}`)}"[^>]*>([\\s\\S]*?)</a>`).exec(header)
+    expect(link, 'the board link').not.toBeNull()
+    // The full label on desktop; a short one on phones, so the plan name keeps one line beside the menu.
+    expect(link![0]).toMatch(/aria-label="Open the wave board"/)
+    expect(link![1]).toBe('<span class="board-link-long">Open the wave board</span><span class="board-link-short">Wave board</span>')
+    expect(header.indexOf('board-link')).toBeLessThan(header.indexOf('aria-label="Menu"'))
+  })
+
+  it('an autopilot run has no Go card, and its live wave is highlighted', () => {
+    const flow = flowOf(render({ repo: chess([onlyQueue()]) }).html)
+    expect(flow.captions).toEqual(['Think', 'You', 'Sprint 1 of 1', 'Check', 'Ship'])
+    expect(flow.cards.some((c) => c.text.startsWith('Replied go'))).toBe(false)
+    const wave3 = flow.cards.find((c) => c.text.startsWith('Wave 3'))!
+    expect(wave3.cls).toMatch(/\blive\b/)
+    expect(wave3.cls).toMatch(/\bhi\b/)
+    expect(wave3.text).toMatch(/running/)
+  })
+
+  it('a fix run shows Build, Review and Ship, with no wave board link', () => {
+    const name = 'fix-scroll'
+    const claim: Claim = { portBase: 3100, repoPath: '/c', plan: name }
+    const { html } = render({ repo: chess([], { claims: [claim] }), plan: name })
+    const flow = flowOf(html)
+    expect(flow.captions).toEqual(['Build', 'Review', 'Ship'])
+    expect(flow.markup).not.toMatch(/flow-arrow/)
+    expect(flow.markup).toMatch(/<div class="flow" style="--flow-cols:3;--flow-rows:2">/)
+    expect(flow.markup).not.toMatch(/Open the wave board/)
+    expect(headerOf(html)).not.toMatch(/Open the wave board/)
+    // A fix run folds too: its first waiting step.
+    expect(flow.markup).toMatch(/class="flow-fold"[\s\S]*?Engineer · not started/)
+    expect(html.indexOf('aria-label="Run flow"')).toBeLessThan(html.indexOf('next-step'))
+  })
+
+  it('stays off the wave board view', () => {
+    const { html } = render({ repo: chess(), view: 'board' })
+    expect(html).not.toMatch(/aria-label="Run flow"/)
+    // The board view has Back to the run, not a link to itself.
+    expect(headerOf(html)).not.toMatch(/Open the wave board/)
+  })
+
+  it('an autopilot gate halt reads as a plain sentence with its PR as a link', () => {
+    const url = 'https://github.com/iamphduc/pod-trial/pull/9'
+    const halt = entry('BLOCKED', 'orchestrator → human', `plan: ${PLAN}`, `gate 3 auto-merge-fail: wave PR ${url} has no passing CI`)
+    const { html } = render({ repo: chess([onlyQueue(halt)]) })
+    const card = cardOf(html)
+    expect(card).toMatch(new RegExp(`<h2[^>]*class="next-title"[^>]*>Autopilot stopped: wave <a href="${url.replace(/[/.]/g, (c) => `\\${c}`)}">PR #9</a> couldn&#x27;t merge</h2>`))
+    expect(text(card)).not.toMatch(/auto-merge-fail/)
   })
 })
 
@@ -234,5 +344,17 @@ describe('sidebar', () => {
     expect(text(html)).toMatch(/Add repo/)
     expect(text(html)).not.toMatch(/in the bar/)
     expect(sideOf(html)).toMatch(ADD)
+  })
+})
+
+describe('sibling keys', () => {
+  // React keeps a stale child when two siblings share a key: switching runs left the last run's flow on screen.
+  it('the flow and the Next step card never share a key', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync(new URL('./RunsScreen.tsx', import.meta.url), 'utf8')
+    const keyOf = (tag: string) => new RegExp(`<${tag} key=\{([^}]+\}?)\}`).exec(src)?.[1]
+    expect(keyOf('Flow')).toBeDefined()
+    expect(keyOf('NextStepCard')).toBeDefined()
+    expect(keyOf('Flow')).not.toBe(keyOf('NextStepCard'))
   })
 })

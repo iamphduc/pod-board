@@ -100,9 +100,9 @@ describe('runs.css layout', () => {
     }
   })
 
-  it('the main column is about 720 px on desktop', () => {
-    const main = stylesAt(1280).get('.main')
-    expect(main?.['max-width']).toBe('720px')
+  it('the main column is one shared column, about 1120 px at most, on desktop', () => {
+    expect(stylesAt(1280).get('.main')?.['max-width']).toBe('1120px')
+    expect(stylesAt(1280).get('.main:not(.wide) > *')?.['max-width']).toBeUndefined()
     expect(stylesAt(1280).get('.screen-body')?.['grid-template-columns']).not.toMatch(/^(1fr|minmax\(0,\s*1fr\))$/)
   })
 })
@@ -143,12 +143,97 @@ describe('runs.css sidebar', () => {
 
 describe('runs.css main column and run cards', () => {
   it('centres the 720 px column beside the sidebar', () => {
-    const main = stylesAt(1280).get('.main')
-    expect(main?.['max-width']).toBe('720px')
+    const styles = stylesAt(1280)
+    const main = styles.get('.main')
     expect(main?.['margin-inline']).toBe('auto')
     expect(main?.['box-sizing']).toBe('content-box')
+    // Every part spans the one column, so all their left and right edges line up.
+    const part = styles.get('.main:not(.wide) > *')
+    expect(part?.['width']).toBe('100%')
+    expect(part?.['max-width']).toBeUndefined()
+    expect(part?.['justify-self']).toBeUndefined()
+    // Text inside the card and the Waiting rows stops near 72 characters.
+    for (const sel of ['.next-title', '.next-detail']) expect(styles.get(sel)?.['max-width'], sel).toBe('72ch')
     // The wave board keeps the full width.
-    expect(stylesAt(1280).get('.main.wide')?.['max-width']).toBe('none')
+    expect(styles.get('.main.wide')?.['max-width']).toBe('none')
+  })
+
+  it('lets the flow use more width than the column, centred, scrolling inside its own box', () => {
+    const styles = stylesAt(1280)
+    const px = (v: string | undefined) => Number(/^(\d+)px$/.exec(v ?? '')?.[1] ?? NaN)
+    const mainCap = px(styles.get('.main')?.['max-width'])
+    // The flow spans the shared column like every other part; the column is the flow's width.
+    expect(styles.get('.main:not(.wide) > .flow-frame')).toBeUndefined()
+    expect(mainCap).toBe(1120)
+    // Its columns share the column equally and shrink to 152 px before the box scrolls.
+    expect(styles.get('.flow')?.['grid-template-columns']).toBe('repeat(var(--flow-cols), minmax(152px, 1fr))')
+    // The columns scroll in their own box inside the flow, so the fold line and the board link stay put.
+    const frame = styles.get('.flow-scroll')
+    expect(frame?.['overflow-x']).toBe('auto')
+    expect(frame?.['min-width']).toBe('0')
+    // On a phone it still scrolls inside its box.
+    expect(stylesAt(375).get('.flow-scroll')?.['overflow-x']).toBe('auto')
+    // The cards' screen-reader words are absolutely placed: the box must hold them, or they widen the page.
+    expect(frame?.['position']).toBe('relative')
+  })
+
+  const STATUS = /var\(--(blocked|needs-you|running|ready|idle)\)/
+
+  it('gives cards a plain border and colours only the highlighted one', () => {
+    const styles = stylesAt(1280)
+    expect(styles.get('.flow-step')?.['border']).toBe('1px solid var(--border)')
+    expect(styles.get('.flow-step.hi.live')?.['border-color']).toBe('var(--running)')
+    expect(styles.get('.flow-step.hi.you')?.['border-color']).toBe('var(--needs-you)')
+    expect(styles.get('.flow-step.hi.blocked')?.['border-color']).toBe('var(--blocked)')
+    // No coloured card edges: a status colour on a border or background only on a highlighted card.
+    for (const r of runsRules().filter((x) => x.selectors.some((sel) => sel.includes('flow')))) {
+      const d = decls(r.body)
+      for (const prop of Object.keys(d)) {
+        if (!/^(border|background|box-shadow)/.test(prop) || !STATUS.test(d[prop]!)) continue
+        for (const sel of r.selectors) expect(sel, `${sel} ${prop}`).toMatch(/^\.flow-step\.hi\./)
+      }
+    }
+  })
+
+  it('folds the flow to one line on phones, and never on desktop', () => {
+    const desk = stylesAt(1280)
+    const phone = stylesAt(375)
+    // The fold button: hidden on desktop, a 44 px line on phones.
+    expect(desk.get('.flow-fold')?.['display']).toBe('none')
+    expect(phone.get('.flow-fold')?.['display']).toBe('flex')
+    expect(phone.get('.flow-fold')?.['min-height']).toBe('44px')
+    // Folded (no .open): the columns and the board link hide on phones only.
+    for (const sel of ['.flow-frame:not(.open) > .flow-scroll']) {
+      expect(phone.get(sel)?.['display'], sel).toBe('none')
+      expect(desk.get(sel)?.['display'], sel).toBeUndefined()
+    }
+  })
+
+  it('keeps the folded flow tight on phones, so the Next step card and its button fit 375 × 667', () => {
+    const px = (v: string | undefined) => Number(/^(\d+)px$/.exec(v ?? '')?.[1] ?? NaN)
+    const phone = stylesAt(375)
+    expect(px(phone.get('.flow-frame')?.['margin-bottom'])).toBeLessThanOrEqual(16)
+    expect(px(phone.get('.run-header')?.['margin-bottom'])).toBeLessThanOrEqual(12)
+  })
+
+  it('shortens the wave board link on phones', () => {
+    expect(stylesAt(1280).get('.board-link-short')?.['display']).toBe('none')
+    expect(stylesAt(1280).get('.board-link-long')?.['display']).toBeUndefined()
+    expect(stylesAt(375).get('.board-link-short')?.['display']).toBe('inline')
+    expect(stylesAt(375).get('.board-link-long')?.['display']).toBe('none')
+  })
+
+  it('draws the progress strip under the plan name', () => {
+    const styles = stylesAt(1280)
+    expect(styles.get('.strip')?.['display']).toBe('flex')
+    expect(styles.get('.strip i')?.['height']).toBe('4px')
+    expect(styles.get('.strip i.done')?.['background']).toBe('var(--fg)')
+  })
+
+  it('dims waiting cards by colour, not opacity, so their text stays readable', () => {
+    const dim = stylesAt(1280).get('.flow-step.dim')
+    expect(dim?.['opacity']).toBeUndefined()
+    expect(stylesAt(1280).get('.flow-step.dim .flow-label')?.['color']).toBe('var(--muted)')
   })
 
   it('shows each run as its own card with a gap, not one box with dividers', () => {
@@ -265,3 +350,102 @@ describe('runs.css Add repo size', () => {
     expect(add?.['width']).toBe('100%')
   })
 })
+
+describe('tabs.css text caps', () => {
+  const tabsRules = () => rules(stripComments(readFileSync(join(here, 'tabs.css'), 'utf8')))
+  const tabsStyle = (sel: string) => Object.assign({}, ...tabsRules().filter((r) => !r.media && r.selectors.includes(sel)).map((r) => decls(r.body)))
+
+  it('caps the Waiting rows and the answer entry near 72 characters', () => {
+    for (const sel of ['.wait-body', '.wait-title', '.wait-detail', '.wait-answer', '.answer-entry']) expect(tabsStyle(sel)['max-width'], sel).toBe('72ch')
+  })
+
+  it('keeps the hover rule to its own colour', () => {
+    const hover = tabsRules().filter((r) => r.selectors.includes('.wait-toggle:hover .wait-body'))
+    expect(hover).toHaveLength(1)
+    expect(hover[0]!.selectors).toEqual(['.wait-toggle:hover .wait-body'])
+    expect(decls(hover[0]!.body)).not.toHaveProperty('max-width')
+  })
+})
+
+describe('runs.css flow rows and lines', () => {
+  it('lays the flow out in rows, so cards in a row share one height', () => {
+    const styles = stylesAt(1440)
+    const flow = styles.get('.flow')
+    expect(flow?.['display']).toBe('grid')
+    expect(flow?.['position']).toBe('relative')
+    expect(flow?.['grid-template-columns']).toBe('repeat(var(--flow-cols), minmax(152px, 1fr))')
+    expect(flow?.['grid-template-rows']).toBe('auto repeat(var(--flow-rows), auto)')
+    expect(flow?.['min-width']).toBe('calc(var(--flow-cols) * 152px + (var(--flow-cols) - 1) * 32px)')
+    // The same room between cards both ways, so every connector and its arrowhead has space.
+    expect(flow?.['row-gap']).toBe('32px')
+    expect(flow?.['column-gap']).toBe('32px')
+    // The heading sits 16 px above its first card: it gives back half the row gap.
+    expect(styles.get('.flow-cap')?.['margin-bottom']).toBe('-16px')
+    // Columns and their step lists share the flow's rows.
+    expect(styles.get('.flow-col')?.['grid-template-rows']).toBe('subgrid')
+    expect(styles.get('.flow-steps')?.['grid-template-rows']).toBe('subgrid')
+    expect(styles.get('.flow-cols')?.['display']).toBe('contents')
+    // Room for the title and two detail lines; never cut: no clamp, nothing hidden.
+    const step = styles.get('.flow-step')
+    expect(step?.['min-height']).toMatch(/^calc\(/)
+    expect(step?.['position']).toBe('relative')
+    expect(step?.['align-self'] ?? 'stretch').toBe('stretch')
+    for (const sel of ['.flow-step', '.flow-detail']) {
+      const d = styles.get(sel) ?? {}
+      expect(d['overflow'], sel).toBeUndefined()
+      expect(d['-webkit-line-clamp'], sel).toBeUndefined()
+      expect(d['line-clamp'], sel).toBeUndefined()
+    }
+    // No arrow rules left.
+    expect(runsRules().some((r) => r.selectors.some((x) => x.includes('flow-arrow')))).toBe(false)
+  })
+
+  it('draws quiet lines, the walked part in --fg, the optional one dashed', () => {
+    const styles = stylesAt(1440)
+    const lines = styles.get('.flow-lines')
+    expect(lines?.['position']).toBe('absolute')
+    expect(lines?.['pointer-events']).toBe('none')
+    expect(styles.get('.flow-lines path')?.['stroke']).toBe('var(--border-strong)')
+    expect(styles.get('.flow-lines path')?.['fill']).toBe('none')
+    expect(styles.get('.flow-lines path.walked')?.['stroke']).toBe('var(--fg)')
+    expect(styles.get('.flow-lines path.dashed')?.['stroke-dasharray']).toMatch(/^\d+ \d+$/)
+  })
+})
+
+describe('breathing running dot', () => {
+  const runsCss = () => stripComments(readFileSync(join(here, 'runs.css'), 'utf8'))
+  const baseCss = () => stripComments(readFileSync(join(here, '../../theme/base.css'), 'utf8'))
+  const LIVE_MARKS = ['.flow-step.live .flow-mark svg', '.flow-fold[data-state="live"] .flow-mark svg']
+  const RUN_DOTS = ['.chip.s-run::before', '.status.s-run::before']
+  const REDUCE = /prefers-reduced-motion:\s*reduce/
+
+  it('has one breathe keyframe: opacity only, easing down to 0.45 and back', () => {
+    const m = /@keyframes\s+breathe\s*\{([\s\S]*?)\}\s*\}/.exec(baseCss())
+    expect(m, 'the breathe keyframes in base.css').not.toBeNull()
+    const props = [...m![1]!.matchAll(/([a-z-]+)\s*:/g)].map((x) => x[1])
+    expect(new Set(props)).toEqual(new Set(['opacity']))
+    expect(m![1]).toMatch(/opacity:\s*0\.45/)
+    // The old pulses are gone.
+    expect(runsCss()).not.toMatch(/flow-pulse/)
+    expect(baseCss()).not.toMatch(/status-pulse/)
+  })
+
+  it('animates only the running mark in the flow and the fold line, never the card or its text', () => {
+    const animated = runsRules().filter((r) => !r.media && 'animation' in decls(r.body))
+    expect(animated.flatMap((r) => r.selectors).sort()).toEqual([...LIVE_MARKS].sort())
+    for (const r of animated) expect(decls(r.body)['animation']).toBe('breathe 2s ease-in-out infinite')
+  })
+
+  it('breathes the sidebar and card running dots the same way', () => {
+    const animated = rules(baseCss()).filter((r) => !r.media && 'animation' in decls(r.body))
+    expect(animated.flatMap((r) => r.selectors).sort()).toEqual([...RUN_DOTS].sort())
+    for (const r of animated) expect(decls(r.body)['animation']).toBe('breathe 2s ease-in-out infinite')
+  })
+
+  it('stays solid when the reader asks for reduced motion', () => {
+    const off = (list: Rule[]) => list.filter((r) => r.media && REDUCE.test(r.media) && decls(r.body)['animation'] === 'none').flatMap((r) => r.selectors)
+    expect(off(runsRules()).sort()).toEqual([...LIVE_MARKS].sort())
+    expect(off(rules(baseCss())).sort()).toEqual([...RUN_DOTS].sort())
+  })
+})
+
