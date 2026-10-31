@@ -6,6 +6,7 @@ import type { MergeState } from './merge-flow.ts'
 import type { NextItem } from './next-step.ts'
 import type { RunTarget } from './resume-flow.ts'
 import { formAnchor, type WaitingRow } from './queue-view.ts'
+import type { Chip } from './view.ts'
 
 export const NOTHING_ELSE = 'Nothing else waits on you.'
 
@@ -57,3 +58,8 @@ export function replySeen(items: NextItem[]): ReplySeen | undefined {
 /** The reply row to keep mounted after its item left (its panel then shows only the last result), else undefined. */
 export const replyGhost = (items: NextItem[], last: ReplySeen | undefined): ReplySeen | undefined =>
   last && !items.some((i) => i.key === last.key) ? last : undefined
+
+export type WaitGroup = { key: string; label?: string; items: NextItem[]; startsOpen: boolean }
+export const kindChip = (_row: WaitingRow): Chip => ({ cls: 's-idle', label: '' })
+export const waitGroups = (_items: NextItem[]): WaitGroup[] => []
+export const groupOpen = (_g: WaitGroup, _flipped: ReadonlySet<string>, _anchors: readonly (string | undefined)[]): boolean => true

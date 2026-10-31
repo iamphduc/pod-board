@@ -89,6 +89,15 @@ describe('waiting on you', () => {
     expect(new Set(twice.map((r) => r.key)).size).toBe(2)
   })
 
+  it('rows carry the kind and show the body without it', () => {
+    const KINDED = '- [2026-10-23 · PENDING · reviewer → human · plan: alpha] **decision (wording):** pick the `port` label. **Resolution:** pending'
+    const rows = waitingRows(repo(['# Q', KINDED, ALPHA_PENDING].join('\n')), run())
+    // The kind is read from the plain body; the full body stays for the card and the answer form.
+    expect(rows[0]).toMatchObject({ kind: 'decision', kindLabel: 'decision (wording)', text: 'pick the port label.', body: 'decision (wording): pick the port label.' })
+    // No kind word: kind other, the text is the whole body.
+    expect(rows[1]).toMatchObject({ kind: 'other', kindLabel: 'other', text: 'Pick a port for the dev server.', body: 'Pick a port for the dev server.' })
+  })
+
   it('the form says to answer here, then Continue', () => {
     expect(ANSWER_NOTE).toBe('Answer here, then press Continue. pod reads it when the run continues.')
     expect(ANSWER_NOTE).not.toMatch(/chat/i)

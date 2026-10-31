@@ -314,6 +314,37 @@ describe('next step', () => {
     expect(order(s)).toEqual([`pending ${entryKey(UNJOINED)}`])
   })
 
+  it('pending entries sort by kind: now, decision, before, other, someday', () => {
+    const p = (date: string, body: string) => entry('PENDING', 'reviewer → human', `plan: ${PLAN}`, body).replace('2026-10-19', date)
+    const SOMEDAY_OLD = p('2026-10-19', 'someday: trim the cache.')
+    const DECISION = p('2026-10-30', 'decision: pick the port.')
+    const OTHER = p('2026-10-20', 'Check the npm cache.')
+    const BEFORE = p('2026-10-21', 'before hosting: add TLS.')
+    const SOMEDAY_NEW = p('2026-10-22', 'someday (pod side): a field in pod.')
+    const NOW_ = p('2026-10-23', 'now (product choice): the title line.')
+    const DECISION_2 = p('2026-10-24', 'decision (wording): the card text.')
+    const repo = chess([onlyQueue(SOMEDAY_OLD, DECISION, OTHER, BEFORE, T1_BLOCKED, SOMEDAY_NEW, NOW_, DECISION_2)])
+    // The tier order stays (blocked first); inside pending, by kind, file order within a kind.
+    expect(order(steps(repo))).toEqual([
+      `blocked ${entryKey(T1_BLOCKED)}`,
+      `pending ${entryKey(NOW_)}`,
+      `pending ${entryKey(DECISION)}`,
+      `pending ${entryKey(DECISION_2)}`,
+      `pending ${entryKey(BEFORE)}`,
+      `pending ${entryKey(OTHER)}`,
+      `pending ${entryKey(SOMEDAY_OLD)}`,
+      `pending ${entryKey(SOMEDAY_NEW)}`,
+    ])
+    // With no BLOCKED, the card is the first entry by kind, not the oldest in the file.
+    const noBlock = steps(chess([onlyQueue(SOMEDAY_OLD, DECISION, NOW_)]))
+    expect(noBlock.card.key).toBe(entryKey(NOW_))
+    // The card keeps the whole body, kind word included, as its title.
+    expect(noBlock.card.title).toBe('now (product choice): the title line.')
+    // Answered entries are info, not pending: they stay after every pending kind.
+    const answered = `${SOMEDAY_OLD.replace('trim', 'cut')} **Answer (human):** later`
+    expect(order(steps(chess([onlyQueue(answered, SOMEDAY_NEW)])))).toEqual([`pending ${entryKey(SOMEDAY_NEW)}`, `info ${entryKey(answered)}`])
+  })
+
   it('stable keys', () => {
     // Two Boards with the same items: the same keys.
     const a = steps(chess([manual, t1Pushed, addQueue(T1_BLOCKED)], { prs: [gh(78, 'open')] }))

@@ -449,3 +449,37 @@ describe('breathing running dot', () => {
   })
 })
 
+
+describe('runs.css waiting rows', () => {
+  const ROW = '.waiting-tab .wait-row'
+  const ACTIONS = `${ROW} > .inplace-actions`
+  const HEAD = `${ROW} > .wait-toggle`
+
+  it('puts Answer at the right end of the row, top-aligned with the meta line, on desktop', () => {
+    for (const width of [1280, 821]) {
+      const s = stylesAt(width)
+      expect(s.get(ROW)?.['grid-template-columns'], `row at ${width} px`).toMatch(/^minmax\(0,\s*1fr\)\s+auto$/)
+      expect(s.get(ACTIONS)?.['grid-column'], `actions at ${width} px`).toBe('2')
+      expect(s.get(ACTIONS)?.['grid-row'], `actions at ${width} px`).toBe('1')
+      expect(s.get(ACTIONS)?.['align-self'], `actions at ${width} px`).toBe('start')
+      expect(s.get(HEAD)?.['grid-column'], `entry at ${width} px`).toBe('1')
+      expect(s.get(HEAD)?.['grid-row'], `entry at ${width} px`).toBe('1')
+      // The open form, your answer, and a reply panel take the row's full text width under it.
+      expect(s.get(`${ROW} > *`)?.['grid-column']).toBe('1 / -1')
+    }
+  })
+
+  it('puts Answer back under the text at 820 px and below', () => {
+    for (const width of [820, 375]) {
+      const s = stylesAt(width)
+      expect(s.get(ACTIONS)?.['grid-column'], `actions at ${width} px`).toBe('1 / -1')
+      expect(s.get(ACTIONS)?.['grid-row'], `actions at ${width} px`).toBe('auto')
+      expect(s.get(HEAD)?.['grid-column'], `entry at ${width} px`).toBe('1 / -1')
+      expect(s.get(HEAD)?.['grid-row'], `entry at ${width} px`).toBe('auto')
+    }
+  })
+
+  it('the kind dot never breathes: a decision is not running', () => {
+    expect(stylesAt(1280).get('.waiting-tab .wait-meta .wait-kind::before')?.['animation']).toBe('none')
+  })
+})

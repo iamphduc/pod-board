@@ -4,6 +4,7 @@
 
 import { isAnswerable, type BoardRepo, type QueueItem, type RunSummary } from '@pod-board/model'
 import type { AnswerState } from './answer-flow.ts'
+import type { EntryKind } from './entry-kind.ts'
 import type { Chip, ChipClass } from './view.ts'
 
 /** A plan run's note: its Continue resumes /pod:code, which reads the answer. */
@@ -26,6 +27,11 @@ export type WaitingRow = {
   route: string
   /** The body as plain text: no bold, code ticks, or link syntax. */
   body: string
+  /** The kind its body starts with (entry-kind.ts), and the words the row shows for it. */
+  kind: EntryKind
+  kindLabel: string
+  /** `body` without its kind prefix: what the row shows. */
+  text: string
   /** Shows the Answer button. */
   answerable: boolean
   /** `Your answer: <answer>` on an answered entry. */
@@ -65,6 +71,9 @@ export function waitingRows(repo: BoardRepo | undefined, selected: RunSummary | 
       chip: typeChip(e.type),
       route: e.route.trim(),
       body: plain(e.body),
+      kind: 'other',
+      kindLabel: 'other',
+      text: plain(e.body),
       answerable: isAnswerable(e),
     }
     if (e.date !== undefined) row.date = e.date
