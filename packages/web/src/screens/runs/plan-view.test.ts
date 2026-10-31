@@ -277,6 +277,24 @@ describe('flow edges', () => {
     ])
   })
 
+  it('a sprint slugged like a flow step stays a plain sprint card: the detour still runs Final review → Fix pass → Final PR', () => {
+    const cols = flowColumns([
+      stage('sprint', 'Sprint 2 of 2', [step('review', 'done', 'review'), step('fix', 'done', 'fix'), step('ladder/wave-1', 'live', 'Wave 1')]),
+      stage('check', 'Check', [step('review', 'wait', 'Final review'), step('fix', 'wait', 'Fix pass')]),
+      stage('ship', 'Ship', [step('final-pr', 'wait', 'Final PR')]),
+    ])
+    // Only the Check column's Fix pass is optional, not a sprint named `fix`.
+    expect(cols.flatMap((c) => c.steps).filter((s) => s.optional).map((s) => s.key)).toEqual(['check:fix'])
+    expect(edges2(cols)).toEqual([
+      'sprint:review>sprint:fix down W',
+      'sprint:fix>sprint:ladder/wave-1 down W',
+      'sprint:ladder/wave-1>check:review across',
+      'check:review>ship:final-pr across',
+      'check:review>check:fix down D',
+      'check:fix>ship:final-pr across D',
+    ])
+  })
+
   it('with no optional step: one path, walked up to the first waiting step, or all of it when done', () => {
     const cols = (states: Step['state'][]) => flowColumns([stage('s', 'S', states.map((st, i) => step(`s${i}`, st)))])
     expect(flowEdges(cols(['done', 'wait', 'wait'])).map((e) => e.walked)).toEqual([true, false])
