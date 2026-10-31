@@ -299,12 +299,13 @@ function waveState(ctx: Ctx, s: SprintModel, w: WaveModel): StepState {
   const asks = ctx.plan.queue.some((e) => e.needsYou && e.slice !== undefined && open.has(e.slice) && (e.sprint === undefined || e.sprint === s.slug))
   if (asks || waveWaitingPr(ctx.repo, ctx.plan, s, w, ctx.now) !== undefined) return 'you'
   if (!isWaveLive(ctx, s, w)) return 'wait'
-  // The wave in progress: running only while one of its own engineers runs; otherwise the run's state.
+  // The wave in progress: running while one of its own engineers runs; otherwise the run's state
+  // (running, as when autopilot merges its PR; blocked; needs you; or waiting when the run is idle).
   return waveAgents(ctx, s, w).some((x) => x.live) ? 'live' : IN_PROGRESS_STEP[ctx.state]
 }
 
 /** The flow's wave in progress with no engineer of its own at work, by the run's state. */
-const IN_PROGRESS_STEP: Record<PlanState, StepState> = { blocked: 'blocked', 'needs-you': 'you', running: 'wait', idle: 'wait' }
+const IN_PROGRESS_STEP: Record<PlanState, StepState> = { blocked: 'blocked', 'needs-you': 'you', running: 'live', idle: 'wait' }
 
 /** The current wave of the current sprint, a pushed slice, or one of the wave's engineers running. */
 function isWaveLive(ctx: Ctx, s: SprintModel, w: WaveModel): boolean {
@@ -421,11 +422,11 @@ function logStatus(ctx: Ctx, s: SprintModel, w: WaveModel): string {
   if (open !== undefined) return `PR #${open} open`
   if (!isWaveLive(ctx, s, w)) return 'planned'
   // An engineer at work on this wave is a fact about it: running. Otherwise the wave in progress says
-  // what the run does (blocked, needs you), or waiting, as the flow's wave card does.
+  // what the run does (running, blocked, needs you, or waiting when idle), as the flow's wave card does.
   return waveAgents(ctx, s, w).some((x) => x.live) ? 'running' : IN_PROGRESS[ctx.state]
 }
 
-const IN_PROGRESS: Record<PlanState, string> = { blocked: 'blocked', 'needs-you': 'needs you', running: 'waiting', idle: 'waiting' }
+const IN_PROGRESS: Record<PlanState, string> = { blocked: 'blocked', 'needs-you': 'needs you', running: 'running', idle: 'waiting' }
 
 const NO_CONFIDENCE = new Set(['', '—', '-'])
 
