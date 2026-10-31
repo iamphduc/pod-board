@@ -18,8 +18,8 @@
 
 ## Spacing
 
-- Use a 4/8 px scale for every gap, padding, and margin.
+- Use multiples of 4 px for gaps, padding, and margins; 2 px is allowed only for cell padding inside tight rows.
 - Keep inside space at or below outside space: rows in a group sit closer than the groups do.
 - In a padded box, make horizontal padding larger than vertical (about 12 px by 16 px). Line height already adds vertical air.
-- Put status values in a fixed-width, left-aligned column, so their dots line up on one rail.
-- Show attributes such as confidence or model as tags or inline text after the title, never in the status column.
+- Put status values in a fixed-width, left-aligned column, so their dots line up on one rail. The column holds the status only (dot and word), so it never wraps.
+- Show attributes and figures (confidence, model, minutes, tokens) as tags or inline text after the title, never in the status column.
