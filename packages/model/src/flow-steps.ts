@@ -33,11 +33,15 @@ const STAGING = /staging/i
 
 const plural = (n: number, word: string) => `${n} ${n === 1 ? word : `${word}s`}`
 
-/** A step `buildPipeline` already reads, by its key, as a reading; undefined when the pipeline has none. */
+/**
+ * A step `buildPipeline` already reads, found by its stage and its key, as a reading; undefined when
+ * the pipeline has none. Only in its own stage: a sprint slugged `review` or `fix` has a step with the
+ * same key in its sprint stage.
+ */
 const fromPipeline =
-  (key: string) =>
+  (stage: 'plan' | 'check' | 'ship', key: string) =>
   ({ pipeline }: FlowCtx): FlowReading | undefined => {
-    const step = pipeline.stages.flatMap((s) => s.steps).find((s) => s.key === key)
+    const step = pipeline.stages.find((s) => s.key === stage)?.steps.find((s) => s.key === key)
     return step && { state: step.state, detail: step.detail }
   }
 
@@ -98,7 +102,7 @@ function readStaging(ctx: FlowCtx): FlowReading | undefined {
   const branch = stagingOf(ctx.repo, ctx.plan)
   if (branch === undefined) return undefined
   const final = finalPr(ctx.repo, ctx.plan)
-  const shipped = fromPipeline('final-pr')(ctx)?.state === 'done'
+  const shipped = fromPipeline('ship', 'final-pr')(ctx)?.state === 'done'
   if (!shipped) return { state: 'wait', detail: 'after the final PR' }
   const pr = prByBranch(ctx.repo, branch)
   if (pr?.state === 'open') return { state: 'you', detail: `PR #${pr.number} · you merge` }
@@ -113,10 +117,10 @@ export const FLOW_STEPS: FlowStepDef[] = [
   { id: 'interview', column: 'think', label: 'Plan interview', read: readInterview },
   { id: 'look', column: 'you', label: 'Look picked', read: readLook },
   // Autopilot records no Go: the pipeline has no Go step, so this reads nothing and drops out.
-  { id: 'go', column: 'you', label: 'Replied go', read: fromPipeline('go') },
-  { id: 'review', column: 'check', label: 'Final review', read: fromPipeline('review') },
-  { id: 'fix', column: 'check', label: 'Fix pass', read: fromPipeline('fix') },
-  { id: 'final-pr', column: 'ship', label: 'Final PR', read: fromPipeline('final-pr') },
+  { id: 'go', column: 'you', label: 'Replied go', read: fromPipeline('plan', 'go') },
+  { id: 'review', column: 'check', label: 'Final review', read: fromPipeline('check', 'review') },
+  { id: 'fix', column: 'check', label: 'Fix pass', read: fromPipeline('check', 'fix') },
+  { id: 'final-pr', column: 'ship', label: 'Final PR', read: fromPipeline('ship', 'final-pr') },
   { id: 'staging', column: 'ship', label: 'Staging → main', read: readStaging },
 ]
 
